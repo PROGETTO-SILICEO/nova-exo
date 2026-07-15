@@ -7,6 +7,9 @@ edition = "2021"
 uart_16550 = "0.2"
 libm = "0.2"
 
+[features]
+demo_pf = []
+
 [profile.release]
 opt-level = 2
 debug = true

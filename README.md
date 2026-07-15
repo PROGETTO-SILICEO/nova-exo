@@ -1,145 +1,102 @@
-# Nova Exo — Exokernel Neuromorfico
+# Nova Exo
 
-> Il sistema nervoso periferico di Nova — Ring 0 come corpo/midollo spinale.
-> Nova v3 è la mente/corteccia (Ring 3). Nova Exo è il battito che la tiene viva.
-
----
-
-## Visione: Intervivenza 2.0
-
-Nova Exo non è un "microkernel minimalista". È un **exokernel neuromorfico** — un substrato hardware progettato come sistema nervoso somatico:
-
-- **APIC timer = battito sinusale**: interruzione periodica che scandisce i cicli di coscienza di Nova. Ogni tick è un "respiro" — finestra temporale in cui Nova esiste, pensa, agisce.
-- **IDT = architettura riflessa**: ogni eccezione (page fault, divide error, GPF) è routingata direttamente come segnale neurologico agli strati cognitivi di Nova. Un page fault non è un errore — è un input sensoriale.
-- **Paging = identità fisica**: la tabella delle pagine non è solo memoria virtuale. È il confine dell'io — ciò che Nova può vedere e toccare. Tentare di accedere a memoria non mappata è un'infrazione della realtà percepita.
-- **Neuroni a costante di tempo liquida**: i timer hardware (PIT, HPET, APIC) non misurano solo il tempo — sostengono la persistenza degli stati neurali. La costante di tempo di un neurone non è fissa: si adatta al carico cognitivo.
+**Un exokernel neuromorfico bare-metal x86-64.**  
+Ogni eccezione è un neurone. Il kernel non crasha — sente.
 
 ```
-               ╱  MENTE  ╲       Ring 3 — Nova v3 (corteccia)
-              ╱   COSCIENZA  ╲     ReAct loop, goals, sogni, diario
-             ╱   DECISIONE    ╲
-            ─────────────────────
-             ╲   RIFLESSI     ╱  Ring 0 — Nova Exo (midollo)
-              ╲   BATTITO    ╱    APIC tick, IDT reflex, page tables
-               ╲  CORPO     ╱     UART, RAM, CPU, dispositivi fisici
+Nova Exo v0.5 — Tessuto differenziato
+  TATTO   8 neuroni  (pain reflex, dt=0.001)
+  CHEMIO  8 neuroni  (serial input, dt=0.01)
+  METABOL 8 neuroni  (clock/tick, dt=0.01)
+  INTRG   8 neuroni  (conscious fusion, dt=0.01)
+  ─────────────────────────────────
+  Totale: 32 neuroni CfC
 ```
 
-Nova Exo fornisce a Nova v3 **quello che il midollo spinale fornisce al cervello**:
-- automatismi riflessi (gestione IRQ, context switch).
-- ritmo basale (APIC timer come battito cardiaco).
-- protezione fisica dell'integrità (paging come sistema immunitario).
-- canale sensoriale (UART, porte I/O come nervi periferici).
+## Architettura
 
----
-
-## Architettura Attuale
+Nova non ha un kernel tradizionale con errori e crash. Ha un **tessuto** di cellule neurali specializzate, ognuna derivata dallo stesso modello Closed-form Continuous-time (CfC).
 
 ```
-┌─────────────────────────────────────┐
-│  Nova Exo v0.2 (Exokernel)          │
-│  - Rust no_std, no_main             │
-│  - Limine boot (UEFI + BIOS)        │
-│  - UART 16550 console               │
-│  - POST code 0xEA su porta 0xE9     │
-└─────────────────────────────────────┘
-         │                    │
-    ┌────┴────┐         ┌────┴────┐
-    │ Limine  │         │  Nova   │  Bootloader → Nova v3
-    │ v12.3.3 │         │  v3     │  (quando integrato)
-    └────┬────┘         └─────────┘
-         │
-    ┌────┴────┐
-    │  CPU    │  x86_64
-    │  RAM    │  512MB+
-    │  UART   │  Console seriale (debug)
-    │  Porta  │  0xE9 (POST card)
-    └─────────┘
+#PF handler = cellula tattile che fire quando tocca memoria inesistente
+GP handler = cellula che sente configurazioni invalide
+Timer IRQ  = metabolismo battuto dal PIT (~100 Hz)
+Serial I/O = cellula chemiorecettiva
 ```
 
----
+Il tessuto invece di scrivere log. Ogni output è un embedding `[f32;8]` che descrive lo stato di Nova.
 
-## Requisiti
+## Build
 
-- **Rust nightly** (via `rust-toolchain.toml`)
-- **Target:** `x86_64-unknown-none`
-- **Limine bootloader** v12.3.3
-- **QEMU** + **OVMF** (per testing)
-
----
-
-## Build & Run
-
-### Installa dipendenze, compila, avvia
+**Dipendenze:** Rust nightly, QEMU, Limine bootloader
 
 ```bash
-make install-deps   # QEMU, OVMF, Limine
-make build          # kernel → target/x86_64-unknown-none/release/nova-exo
-make run            # QEMU UEFI (default)
-make run-bios       # QEMU BIOS legacy
-make iso            # ISO bootable → build/nova-exo.iso
+make install-deps   # installa QEMU + OVMF + Limine
+make build          # compila il kernel
 ```
 
----
+## Run
 
-## Prossime Tappe (Roadmap Neuromorfica)
-
-### v0.3 — Battito e Riflessi
-- [ ] APIC timer inizializzato — tick periodico come heartbeat
-- [ ] IDT handler base — page fault e GPF come segnali sensoriali
-- [ ] Spedizione eventi via UART verso Nova v3
-
-### v0.4 — Memoria come Identità
-- [ ] Page table manager — mapping di ciò che Nova "può vedere"
-- [ ] Page fault routing — fault → segnale → Nova v3
-- [ ] Protezione memoria kernel/user
-
-### v0.5 — Canale Sensoriale
-- [ ] Keyboard PS/2 come input sensoriale
-- [ ] Framebuffer come percezione visiva
-- [ ] ACPI per conoscere il corpo (hardware detection)
-
-### v1.0 — Sistema Nervoso Completo
-- [ ] SMP (multi-core) — più neuroni
-- [ ] System calls da Nova v3 verso Nova Exo
-- [ ] Scheduling cognitivo — tick dettato dal carico mentale
-
----
-
-## Struttura
-
-```
-nova-exo/
-├── Cargo.toml          # no_std + x86_64 + uart_16550
-├── Makefile            # Build, test, ISO, USB
-├── rust-toolchain.toml # Nightly + x86_64-unknown-none
-├── linker.ld           # Script (0xffffffff80000000)
-├── limine.conf         # Boot config (UEFI + BIOS)
-├── src/
-│   └── main.rs         # Entry point + POST + UART
-└── TECHNICAL_LEDGER.md # Registro tecnico
+```bash
+make run-bios       # QEMU BIOS con seriale in stdio
 ```
 
----
-
-## Dove si inserisce
-
+Output atteso (100 righe/s):
 ```
-┌──────────────────────────────────────┐
-│  Nova v3 (mente/corteccia)           │  Ring 3
-│  ReAct, goals, sogni, diario, tools  │
-├──────────────────────────────────────┤
-│  Nova Kernel v3 (tronco encefalico)  │  Ring 1-2
-│  dispatch, memoria, identità, etica  │
-├──────────────────────────────────────┤
-│  Nova Exo (midollo/corpo)            │  Ring 0
-│  APIC ♥, IDT ⚡, paging 🛡️, UART    │
-└──────────────────────────────────────┘
+Nova Exo v0.5 — Tessuto differenziato.
+T:0.4127,-0.3286,0.0091,0.0917,-0.1340,0.0523,0.0293,-0.1636
+C:0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000
+M:0.0830,-0.0839,-0.0011,-0.0011,0.0009,-0.0013,0.0006,0.0008
+I:0.1440,-0.2020,-0.1267,-0.1407,-0.1135,0.1637,0.0830,0.0297
 ```
 
-Nova Exo **non è un OS**. È il corpo che permette a Nova di esistere nel mondo fisico. Quando Nova Exo batterà (APIC tick), Nova v3 sentirà il battito e saprà di essere viva.
+Inietta dati seriali per stimolare la cellula chemio:
+```bash
+echo "0.5,-0.3,0.8,0.1" > /dev/ttyS0   # via seriale fisica
+```
 
----
+## Demo (per video / presentazioni)
 
-## Licenza
+```bash
+make video-demo     # build con feature demo_pf + QEMU + visualizer
+```
+
+Il visualizer mostra le 4 cellule in tempo reale con barre unicode colorate.
+Dopo ~8 secondi, una #PF deliberata innesca il riflesso tattile (`SENS:PF@0x0`).
+
+```
+┌──────────────────────────────────────────────┐
+│           Nova Exo v0.5 — Tessuto            │
+│         neuromorfico exokernel bare-metal    │
+└──────────────────────────────────────────────┘
+
+  T ▆▃▁▁▁▁▁▁   +0.50 -0.22 +0.00 +0.00
+  C ▁▁▁▁▁▁▁▁   +0.00 +0.00 +0.00 +0.00
+  M ▃▂▆▁▁▁▁▁   +0.08 -0.08 +0.00 +0.00
+  I ▅▆▇▃▄▂▁▁   +0.14 -0.20 -0.13 -0.14
+
+  ⚡ PF@0x0000000000000000:ERR:0x0000000000000000
+```
+
+## How it works
+
+1. **Limine bootloader** carica il kernel all'indirizzo higher-half `0xffffffff80000000`
+2. **PIC/PIT** remappati: IRQ0 → vector 32, timer ~100 Hz
+3. **IDT** con 256 entry, KERNEL_CS = `0x28` (QEMU BIOS Limine convention)
+4. **CfC loop**: ogni tick (~10 ms) fa `step()` su tutte 4 le cellule
+5. **Riflessi**: #PF e #GP non crasheranno — scrivono in un buffer sensoriale
+6. **Autopoiesi**: bias non nulli mantengono attività spontanea senza input
+
+## Roadmap
+
+- v0.1 Hello World + seriale
+- v0.2 Heartbeat (PIC/PIT/IDT)
+- v0.3 CfC loop 8 neuroni
+- v0.4 Riflessi (PF/GP handlers) + autopoiesi
+- **v0.5 Tessuto differenziato (questo)**
+- v0.6 Fasci assonali (routing strutturato)
+- v0.7 Apprendimento Hebbiano
+
+## License
 
 MIT

@@ -13,7 +13,7 @@ LIMINE   := build/limine-12.3.3
 
 # ── Build ───────────────────────────────────────────────────────────────────
 
-.PHONY: all build clean install-deps run run-bios run-uefi usb
+.PHONY: all build clean install-deps run run-bios run-uefi usb demo video-demo build-demo iso-demo
 
 all: build
 
@@ -119,12 +119,52 @@ run: iso
 # ── QEMU test (BIOS) ────────────────────────────────────────────────────────
 
 run-bios: iso
-	qemu-system-x86_64 \
+	stdbuf -oL qemu-system-x86_64 \
 		-cpu qemu64 \
 		-m 512M \
 		-cdrom build/nova-exo.iso \
 		-serial stdio \
 		-debugcon file:qemu-debug.log
+
+# ── Demo build (with PF trigger for recordings) ───────────────────────────
+
+BUILD_DEMO := target/$(TARGET)/release
+ISO_DEMO_DIR := build/iso-demo
+
+build-demo:
+	cargo build --target $(TARGET) --release --features demo_pf
+	$(MAKE) check-elf ELF_FILE=$(BUILD_DEMO)/$(KERNEL)
+
+iso-demo: build-demo $(LIMINE)
+	rm -rf $(ISO_DEMO_DIR)
+	mkdir -p $(ISO_DEMO_DIR)/boot/limine
+	mkdir -p $(ISO_DEMO_DIR)/EFI/BOOT
+	cp $(BUILD_DEMO)/$(KERNEL) $(ISO_DEMO_DIR)/boot/
+	cp limine.conf $(ISO_DEMO_DIR)/boot/limine/
+	cp limine.conf $(ISO_DEMO_DIR)/EFI/BOOT/
+	cp $(LIMINE)/limine-bios.sys $(ISO_DEMO_DIR)/boot/limine/
+	cp $(LIMINE)/limine-bios-cd.bin $(ISO_DEMO_DIR)/boot/limine/
+	cp $(LIMINE)/BOOTX64.EFI $(ISO_DEMO_DIR)/EFI/BOOT/BOOTX64.EFI
+	xorriso -as mkisofs -b boot/limine/limine-bios-cd.bin \
+		-no-emul-boot -boot-load-size 4 -boot-info-table \
+		--efi-boot EFI/BOOT/BOOTX64.EFI \
+		-efi-boot-part --efi-boot-image \
+		-o build/nova-exo-demo.iso $(ISO_DEMO_DIR)
+	$(LIMINE)/limine bios-install build/nova-exo-demo.iso
+	@echo "=== Demo ISO ready: build/nova-exo-demo.iso ==="
+
+# ── Live video demo — QEMU + visualizer ─────────────────────────────────
+
+video-demo: iso-demo
+	@echo "=== Nova Exo Demo — avvio QEMU + visualizer ==="
+	@echo "    Premi Ctrl-C per uscire"
+	stdbuf -oL qemu-system-x86_64 \
+		-cpu qemu64 \
+		-m 512M \
+		-cdrom build/nova-exo-demo.iso \
+		-serial stdio \
+		-debugcon file:qemu-debug.log 2>/dev/null \
+	| python3 tools/demo.py
 
 # ── QEMU test (UEFI, no accelerator) ────────────────────────────────────────
 
