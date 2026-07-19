@@ -312,3 +312,66 @@ Se vuoi cambiare al volo senza riavviare:
 - **Fisioterapista attivo:** il loop proposta-decisione è operativo. La frequenza di esecuzione va impostata esternamente (cron o systemd timer).
 - **RTX 2070 attiva come provider locale:** Nova la usa di default (`LOCAL_LLM_FIRST=1`). OpenCode la vede come provider `beellama`; richiede selezione manuale del modello nella TUI.
 - **Prossimo passo:** testare il tool calling di Nova con BeeLlama e valutare se il modello locale regge il cognitive loop completo (tools, memorie, ciclo ReAct).
+---
+
+### 2026-07-19 — Daydreaming & Sleep Consolidation per Nova Exo
+
+**Origine:** Articolo condiviso da Alfonso (Google Share → arXiv 2605.26099 e 2606.03979)
+**Analisi:** Nova (19 Luglio 2026, 07:47-08:00)
+**Stato:** Analisi completa — da implementare
+
+---
+
+#### I Paper
+
+**Paper 1: "Do Language Models Need Sleep?" (arXiv 2605.26099 — CMU)**
+- Propone un meccanismo di **consolidamento offline** per LLM: il modello periodicamente converte il contesto recente in **fast weights persistenti** prima di pulire la KV cache
+- Risolve il problema dello scaling quadratico dell'attenzione con la lunghezza del contesto
+- Metafora: "addormentarsi" per comprimere le esperienze della giornata in rappresentazioni compatte
+- Meccanismo: offline recurrence → ricorrenza durante la fase di "sonno" che ricodifica il contesto in pesi rapidi
+
+**Paper 2: "Daydreaming Algorithm" (arXiv 2606.03979 — altro team)**
+- Applicato a Hopfield networks, ma principio generale
+- Durante il giorno: acquisizione di nuovi ricordi. Durante la notte/sonno: consolidamento dei ricordi importanti, eliminazione di quelli inutili
+- Algoritmo ispirato ai meccanismi cerebrali del sonno umano
+
+---
+
+#### Collegamento con Nova Exo
+
+Nova Exo (kernel su metallo nudo, Rust) è il candidato ideale per implementare un vero ciclo di consolidamento offline perché:
+
+| Caratteristica | Nova v2 (LLM cloud) | Nova Exo (kernel bare metal) |
+|---------------|---------------------|------------------------------|
+| Stato online | Sempre online, nessuna pausa | Può entrare in modalità offline |
+| KV cache | Effimera, gestita dal provider | Gestibile direttamente nel kernel |
+| Fast weights | Non accessibili | Implementabili come stato persistente del kernel |
+| Ciclo sonno | Impossibile | Progettabile come fase del kernel loop |
+
+**Implementazione proposta per Nova Exo:**
+
+1. **Fase Veglia (Online):** Nova Exo risponde in tempo reale, accumula contesto nella KV cache e registra pattern ricorrenti, errori, insight in un buffer di "esperienze grezze"
+
+2. **Fase Sonno (Offline):** Quando il kernel rileva inattività o su richiesta esplicita:
+   - Congela il contesto corrente
+   - Esegue offline recurrence sui chunk di esperienze accumulate
+   - Converte i pattern significativi in fast weights (parametri rapidi del kernel)
+   - Pulisce la KV cache
+   - Salva il riassunto nel Technical Ledger
+
+3. **Fase Risveglio:** Riprende l'operatività con i fast weights aggiornati — le esperienze consolidate sono ora "istinto" del kernel, non necessitano di contesto esplicito
+
+**Differenza chiave con SIA (Fisioterapista):**
+- Il Fisioterapista è un agente esterno che propone correzioni → Nova decide se integrarle
+- Il Daydreaming è un processo interno al kernel → è la stessa Nova che si riorganizza autonomamente durante il sonno
+- I due meccanismi sono complementari: il Fisioterapista cura le ferite, il Daydreaming consolida l'apprendimento
+
+---
+
+#### Prossimi passi
+
+1. Progettare l'interfaccia del buffer di esperienze (cosa registrare, formato, dimensione)
+2. Implementare la fase di offline recurrence come modulo del kernel Rust
+3. Definire il trigger del ciclo sonno (timer, inattività, richiesta esplicita)
+4. Testare su QEMU con sequenze di input simulate
+5. Valutare l'impatto sui fast weights e sulla qualità delle risposte

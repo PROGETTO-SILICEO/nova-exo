@@ -18,7 +18,7 @@ import subprocess
 import sys
 import time
 import os
-import re
+import signal
 import numpy as np
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -27,56 +27,63 @@ DEBUGCON = os.path.join(ROOT, "qemu-debug.log")
 QEMU = "qemu-system-x86_64"
 
 
-def run_qemu(stimulus, timeout=30, debugcon_path=None):
-    """Lancia QEMU, applica lo schedule `stimulus` (lista di (delay_s, bytes)),
-    e torna il path del file debugcon. Lo schedule è relativo all'avvio."""
+def run_qemu(stimulus, timeout=25, debugcon_path=None):
+    """Lancia QEMU via pipeline di shell e applica lo schedule `stimulus`
+    (lista di (delay_s_assoluto, data_str)).
+
+    QEMU con `-serial stdio` non recapita l'input al guest se la pipe è
+    gestita da Python (PTY o PIPE diretta). La shell pipe invece funziona:
+      ( sleep 3; printf '%s\\n' 'data'; sleep 4; printf '%s\\n' 'DUMP'; sleep 2 )
+      | qemu ... -serial stdio
+
+    Ogni evento stimolo genera una coppia sleep+printf. Dopo l'ultimo
+    evento si attende 2 s per il flush del dump su disco.
+    """
     if debugcon_path is None:
         debugcon_path = DEBUGCON
     if not os.path.exists(ISO):
         raise RuntimeError(f"ISO mancante: {ISO} — lancia 'make iso'")
-    cmd = [
-        QEMU, "-cpu", "qemu64", "-m", "512M",
-        "-cdrom", ISO, "-serial", "stdio",
-        "-debugcon", f"file:{debugcon_path}",
-    ]
-    p = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                         stderr=subprocess.DEVNULL, text=True, bufsize=1)
-    # applica stimoli con ritardi
-    t0 = time.time()
+    parts = []
+    prev = 0.0
     for delay_s, data in stimulus:
-        while time.time() - t0 < delay_s:
-            if p.poll() is not None:
-                break
-            time.sleep(0.02)
-        try:
-            p.stdin.write(data)
-            p.stdin.flush()
-        except BrokenPipeError:
-            break
-    # attendi che il DUMP appaia nel file debugcon, poi termina QEMU
+        d = max(0.0, delay_s - prev)
+        parts.append(f"sleep {d:.2f}")
+        dstrip = data.rstrip("\n")
+        esc = dstrip.replace("'", "'\\''")
+        parts.append(f"printf '%s\\n' '{esc}'")
+        prev = delay_s
+    parts.append("sleep 2.0")
+    inner = "; ".join(parts)
+    cmd = (f"( {inner} ) | {QEMU} -cpu qemu64 -m 512M -cdrom {ISO} "
+           f"-serial stdio -debugcon file:{debugcon_path}")
+    p = subprocess.Popen(cmd, shell=True, stdout=subprocess.DEVNULL,
+                         stderr=subprocess.DEVNULL, start_new_session=True)
     deadline = time.time() + timeout
-    dumped = False
     while time.time() < deadline:
         try:
-            with open(debugcon_path) as f:
-                if "D:BEGIN" in f.read():
-                    dumped = True
-                    break
+            if "D:BEGIN" in open(debugcon_path).read():
+                break
         except Exception:
             pass
         if p.poll() is not None:
             break
         time.sleep(0.2)
-    # dai tempo al flush su disco, poi termina
     time.sleep(1.0)
+    # kill process group (shell + qemu)
     try:
-        p.terminate()
+        os.killpg(os.getpgid(p.pid), signal.SIGTERM)
     except Exception:
-        pass
+        try:
+            p.kill()
+        except Exception:
+            pass
     try:
         p.wait(timeout=8)
     except subprocess.TimeoutExpired:
-        p.kill()
+        try:
+            os.killpg(os.getpgid(p.pid), signal.SIGKILL)
+        except Exception:
+            pass
     return debugcon_path
 
 
@@ -157,15 +164,17 @@ def extract_response(cells, imp_idx, cell_slice, window=48):
     return resp
 
 
-def run_experiment(gap_s=0.0, settle=3.0, hold=4.0, tag=""):
+def run_experiment(gap_s=0.0, settle=5.0, hold=2.0, tag=""):
     """Esegue uno scenario: settle, impulso1, (dopo gap_s) impulso2, DUMP.
-    gap_s=0 → impulso singolo. Ritorna (ticks, cells)."""
+    gap_s=0 → impulso singolo. Ritorna (ticks, cells).
+    Usa un file debugcon temporaneo per evitare conflitti tra run."""
     stim = [(settle, "1.0,0.0,0.0,0.0\n")]
     if gap_s > 0:
         stim.append((settle + gap_s, "1.0,0.0,0.0,0.0\n"))
     stim.append((settle + gap_s + hold, "DUMP\n"))
-    run_qemu(stim, timeout=25)
-    return parse_dump()
+    dbg = f"/tmp/nova_exp_{int(time.time()*1e6)}.log"
+    run_qemu(stim, timeout=25, debugcon_path=dbg)
+    return parse_dump(dbg)
 
 
 def report():
@@ -174,7 +183,7 @@ def report():
     print("=== Nova Exo Lab: τ (autocorrelazione) + path-dependency ===")
 
     # ── τ singolo impulso ──
-    print("[*] impulso singolo (settle 3s, hold 4s)...")
+    print("[*] impulso singolo (settle 5s, hold 2s)...")
     ticks, cells = run_experiment(gap_s=0.0)
     if len(ticks) == 0:
         print("[!] nessun dump — controlla qemu-debug.log")
@@ -200,16 +209,16 @@ def report():
     # ── path-dependency: singolo vs doppio impulso ──
     print("\n[*] test path-dependency: impulso singolo vs doppio (gap ~20 tick)")
     # controllo: singolo impulso, risposta integrat attorno all'impulso
-    t1, c1 = run_experiment(gap_s=0.0, hold=4.0)
+    t1, c1 = run_experiment(gap_s=0.0, hold=2.0)
     i1 = find_impulses(c1)
     if not i1:
         print("[!] controllo senza impulso")
         return
     ctrl_resp = extract_response(c1, i1[0], slice(24, 28), window=48)
 
-    # test: doppio impulso con gap ~0.45s (~20 tick a ~43Hz)
+    # test: doppio impulso con gap ~0.45s (~20 tick a ~100Hz)
     gap_s = 0.45
-    t2, c2 = run_experiment(gap_s=gap_s, hold=4.0)
+    t2, c2 = run_experiment(gap_s=gap_s, hold=2.0)
     i2 = find_impulses(c2)
     if len(i2) < 2:
         print(f"[!] doppio impulso: trovati {len(i2)} impulsi (attesi 2)")

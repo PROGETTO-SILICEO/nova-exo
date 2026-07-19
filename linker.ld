@@ -1,7 +1,7 @@
 ENTRY(_start)
 
 PHDRS {
-    limine  PT_LOAD;
+    limine  PT_LOAD FLAGS(6);
     text    PT_LOAD;
     rodata  PT_LOAD;
     data    PT_LOAD;

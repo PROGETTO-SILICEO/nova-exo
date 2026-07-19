@@ -1,0 +1,27 @@
+{
+  "exo_version": "Nova Exo v0.11",
+  "exo_branch": "sedimentazione",
+  "last_tick": 952,
+  "total_lines": 14336,
+  "attractor": {
+    "events": 2375,
+    "sim_mean": 0.9797,
+    "sim_min": 0.8657,
+    "sim_max": 1.0
+  },
+  "memory": {
+    "unique_patterns": 2,
+    "familiarity_mean": 0.9797
+  },
+  "sedimentation": true,
+  "pd_index": 1.905,
+  "tau_spectrum": {
+    "beta": 0.7,
+    "tau0": 146,
+    "tau_local_range": [
+      22,
+      101
+    ]
+  },
+  "last_updated": "2026-07-16T13:01:22Z"
+}

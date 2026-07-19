@@ -4,16 +4,26 @@
 use core::arch::asm;
 use core::fmt::Write;
 use core::panic::PanicInfo;
+#[cfg(feature = "demo_pf")]
 use core::sync::atomic::{AtomicBool, Ordering};
 use uart_16550::SerialPort;
 
+mod apic;
 mod cfc;
+mod e1000;
 mod idt;
+mod pci;
+mod paging;
 mod serial;
+mod state;
 
 use serial::LineReader;
 
-// ── Limine base revision ────────────────────────────────────────────────
+// ── Limine base revision (rev 6 = MAX_SUPPORTED) ─────────────────────────
+
+const LIMINE_COMMON_MAGIC: [u64; 2] = [0xc7b1dd30df4c8b88, 0x0a82e883a194f07b];
+const LIMINE_HHDM_ID: [u64; 2] = [0x48dcf1cb8ad2b852, 0x63984e959a98244b];
+const LIMINE_EXEC_ADDR_ID: [u64; 2] = [0x71ba76863cc55f63, 0xb2644a48c516a487];
 
 #[repr(C)]
 struct BaseRevision {
@@ -23,13 +33,82 @@ unsafe impl Sync for BaseRevision {}
 
 #[used]
 #[link_section = ".limine_reqs"]
-static BASE_REVISION: BaseRevision = BaseRevision {
-    magic: [0xf9562b2d5c95a6c8, 0x6a7b384944536bdc, 0],
+static mut BASE_REVISION: BaseRevision = BaseRevision {
+    magic: [0xf9562b2d5c95a6c8, 0x6a7b384944536bdc, 6],
+};
+
+#[repr(C)]
+struct HhdmResponse {
+    revision: u64,
+    offset: u64,
+}
+
+#[repr(C)]
+struct HhdmRequest {
+    id: [u64; 4],
+    revision: u64,
+    response: *mut HhdmResponse,
+}
+
+#[repr(C)]
+struct ExecAddrResponse {
+    revision: u64,
+    physical_base: u64,
+    virtual_base: u64,
+}
+
+#[repr(C)]
+struct ExecAddrRequest {
+    id: [u64; 4],
+    revision: u64,
+    response: *mut ExecAddrResponse,
+}
+
+unsafe impl Sync for HhdmRequest {}
+unsafe impl Sync for ExecAddrRequest {}
+
+#[used]
+#[link_section = ".limine_reqs"]
+static mut HHDM_REQ: HhdmRequest = HhdmRequest {
+    id: [LIMINE_COMMON_MAGIC[0], LIMINE_COMMON_MAGIC[1],
+         LIMINE_HHDM_ID[0], LIMINE_HHDM_ID[1]],
+    revision: 0,
+    response: core::ptr::null_mut(),
 };
 
 #[used]
 #[link_section = ".limine_reqs"]
-static LIMINE_REQS: [u64; 1] = [0];
+static mut EXEC_ADDR_REQ: ExecAddrRequest = ExecAddrRequest {
+    id: [LIMINE_COMMON_MAGIC[0], LIMINE_COMMON_MAGIC[1],
+         LIMINE_EXEC_ADDR_ID[0], LIMINE_EXEC_ADDR_ID[1]],
+    revision: 0,
+    response: core::ptr::null_mut(),
+};
+
+/// Kernel physical → virtual offset: phys = virt − KERNEL_SLOT
+pub(crate) static mut KERNEL_SLOT: u64 = 0;
+
+/// HHDM offset: phys → HHDM virtual = HHDM_OFFSET + phys
+pub(crate) static mut HHDM_OFFSET: u64 = 0;
+
+pub(crate) fn virt_to_phys(virt: u64) -> u64 {
+    unsafe { virt.wrapping_sub(KERNEL_SLOT) }
+}
+
+fn init_limine_requests() {
+    unsafe {
+        let hhdm = &raw const HHDM_REQ;
+            if !(*hhdm).response.is_null() {
+            HHDM_OFFSET = (*(*hhdm).response).offset;
+        }
+
+        let ea = &raw const EXEC_ADDR_REQ;
+            if !(*ea).response.is_null() {
+            let r = &*(*ea).response;
+            KERNEL_SLOT = 0xFFFFFFFF80000000u64.wrapping_sub(r.physical_base);
+        }
+    }
+}
 
 #[cfg(feature = "demo_pf")]
 static DEMO_PF_DONE: AtomicBool = AtomicBool::new(false);
@@ -47,9 +126,11 @@ static mut SERIAL: SerialPort = unsafe { SerialPort::new(0x3F8) };
 
 macro_rules! serial_println {
     ($($arg:tt)*) => {
+        #[allow(unused_unsafe)]
         unsafe {
-            let _ = write!(SERIAL, $($arg)*);
-            let _ = SERIAL.write_str("\n");
+            let serial: &mut SerialPort = &mut *(&raw mut SERIAL);
+            let _ = write!(serial, $($arg)*);
+            let _ = serial.write_str("\n");
         }
     };
 }
@@ -198,7 +279,7 @@ static W_METABOL: cfc::CfcWeights = cfc::CfcWeights {
     b_g: [0.100000, -0.100000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000],
 };
 
-static W_INTRG: cfc::CfcWeights = cfc::CfcWeights {
+static mut W_INTRG: cfc::CfcWeights = cfc::CfcWeights {
     w_f: [
         [0.598914, 0.060680, -0.267671, -0.517712, -0.068011, -0.033303, -0.552945, -0.412342],
         [-0.470362, 0.156022, 0.436232, 0.183837, 0.601009, -0.036313, 0.144881, -0.266177],
@@ -245,42 +326,25 @@ static W_INTRG: cfc::CfcWeights = cfc::CfcWeights {
 
 
 
-// ── PIC + PIT init ──────────────────────────────────────────────────────
+// ── Disable legacy PIC ─────────────────────────────────────────────────
+// Mask all PIC IRQs so they don't fire during APIC operation.
 
-unsafe fn pic_pit_init() {
-    outb(0x20, 0x11);
-    asm!("nop");
-    outb(0xA0, 0x11);
-    asm!("nop");
-    outb(0x21, 0x20);
-    asm!("nop");
-    outb(0xA1, 0x28);
-    asm!("nop");
-    outb(0x21, 0x04);
-    asm!("nop");
-    outb(0xA1, 0x02);
-    asm!("nop");
-    outb(0x21, 0x01);
-    asm!("nop");
-    outb(0xA1, 0x01);
-    asm!("nop");
-    outb(0x21, 0xFE);
-    asm!("nop");
-    outb(0xA1, 0xFF);
-    asm!("nop");
-
-    serial_println!("PIC remapped: IRQ0 → vector 32");
-
-    outb(0x43, 0x36u8);
-    let divisor: u16 = 11931u16;
-    outb(0x40, (divisor & 0xFF) as u8);
-    asm!("nop");
-    outb(0x40, ((divisor >> 8) & 0xFF) as u8);
+unsafe fn pic_disable() {
+    outb(0x20, 0x11); asm!("nop"); // ICW1 init
+    outb(0xA0, 0x11); asm!("nop");
+    outb(0x21, 0x20); asm!("nop"); // ICW2: remap to vectors 32-39 (same as before)
+    outb(0xA1, 0x28); asm!("nop");
+    outb(0x21, 0x04); asm!("nop"); // ICW3: cascade
+    outb(0xA1, 0x02); asm!("nop");
+    outb(0x21, 0x01); asm!("nop"); // ICW4: 8086
+    outb(0xA1, 0x01); asm!("nop");
+    outb(0x21, 0xFF); asm!("nop"); // Mask ALL master IRQs
+    outb(0xA1, 0xFF); asm!("nop"); // Mask ALL slave IRQs
 }
 
 // ── Serial output helpers ───────────────────────────────────────────────
 
-fn serial_putc(c: u8) {
+pub(crate) fn serial_putc(c: u8) {
     unsafe {
         loop {
             let mut lsr: u8;
@@ -387,10 +451,26 @@ fn dump_log_to_debugcon() {
     }
 }
 
+pub(crate) fn write_hex_byte(val: u8) {
+    let hex = b"0123456789abcdef";
+    serial_putc(hex[(val >> 4) as usize]);
+    serial_putc(hex[(val & 0xF) as usize]);
+}
+
+pub(crate) fn write_hex16(val: u16) {
+    write_hex_byte((val >> 8) as u8);
+    write_hex_byte((val & 0xFF) as u8);
+}
+
+pub(crate) fn write_hex32(val: u32) {
+    write_hex16((val >> 16) as u16);
+    write_hex16((val & 0xFFFF) as u16);
+}
+
 fn write_hex64(val: u64) {
     write_str("0x");
-    for shift in (0..64).rev().step_by(4) {
-        let nibble = ((val >> shift) & 0xF) as u8;
+    for nibble_idx in (0..16).rev() {
+        let nibble = ((val >> (nibble_idx * 4)) & 0xF) as u8;
         serial_putc(if nibble < 10 { b'0' + nibble } else { b'a' + nibble - 10 });
     }
 }
@@ -422,12 +502,27 @@ fn write_cell_line(prefix: &str, h: &[f32; 8]) {
 #[no_mangle]
 pub extern "C" fn _start() -> ! {
     unsafe {
-        SERIAL.init();
+        let serial = &mut *(&raw mut SERIAL);
+        serial.init();
     }
-    serial_println!("Nova Exo v0.7 -- Battito timer-driven.");
+    serial_println!("Nova Exo v0.12 -- APIC battito.");
 
     idt::init();
     serial_println!("IDT loaded. 4 cellulae: tatto, chemio, metabol, integrat.");
+
+    pci::enumerate();
+    init_limine_requests();
+    paging::init();
+
+    // NIC Intel 82540EM — enable bus mastering, then init
+    if let Some((b, s, f)) = pci::pci_find_device(0x8086, 0x100e) {
+        pci::enable_bus_master(b, s, f);
+        let (_, _, mmio_base) = pci::read_bars(b, s, f);
+        pci::print_bar(b, s, f);
+        // Translate physical BAR to virtual via our dedicated MMIO mapping
+        let mmio_virt = paging::mmio_virt_addr(mmio_base);
+        e1000::E1000::init(mmio_virt);
+    }
 
     let mut tessuto = cfc::Tessuto::new();
     let mut line_reader = LineReader::new();
@@ -436,14 +531,19 @@ pub extern "C" fn _start() -> ! {
     let dt_rest = 0.01f32;
 
     unsafe {
-        serial_println!("Initializing PIC + PIT timer...");
-        pic_pit_init();
+        pic_disable();
+        serial_println!("PIC disabled, enabling APIC timer...");
+        apic::init(paging::mmio_virt_addr(0xFEE0_0000));
+        apic::init_timer(32);
         serial_println!("Enabling interrupts. Tessuto loop starts.");
         asm!("sti");
     }
 
     loop {
         unsafe { asm!("hlt"); }
+
+        // Poll NIC RX (non-blocking) — popola RX_PENDING/RX_DATA
+        e1000::E1000::poll_rx();
 
         // Poll serial (non-blocking) — always drain FIFO
         unsafe {
@@ -491,11 +591,69 @@ pub extern "C" fn _start() -> ! {
         }
 
         // Check for commands vs CSV input on serial
-        let chemio_input;
+        let mut chemio_input;
         if line_reader.has_line {
             let raw = line_reader.line();
             if raw == b"DUMP" {
                 dump_requested = true;
+                chemio_input = [0.0; 4];
+            } else if raw == b"STORE" {
+                let p = cfc::pack_cells(&tessuto.tatto.h, &tessuto.chemio.h,
+                    &tessuto.metabol.h, &tessuto.integrat.h);
+                let ok = cfc::pattern_store(cfc::tick(), &p);
+                write_str(if ok { "P\n" } else { "E:FULL\n" });
+                chemio_input = [0.0; 4];
+            } else if raw.starts_with(b"RECALL") {
+                let p = cfc::pack_cells(&tessuto.tatto.h, &tessuto.chemio.h,
+                    &tessuto.metabol.h, &tessuto.integrat.h);
+                let n = if raw.len() > 7 {
+                    let mut num = 0usize;
+                    for &b in &raw[7..] {
+                        if b < b'0' || b > b'9' { break; }
+                        num = num * 10 + (b - b'0') as usize;
+                    }
+                    num.max(1).min(16)
+                } else {
+                    1
+                };
+                let results = cfc::pattern_recall_n(&p, n);
+                let cnt = cfc::pattern_count().min(n);
+                if cnt == 0 {
+                    write_str("P:NONE\n");
+                } else {
+                    for i in 0..cnt {
+                        if i > 0 { serial_putc(b','); }
+                        write_f32(results[i].2);
+                        serial_putc(b'@');
+                        write_u32(results[i].1 as u32);
+                    }
+                    serial_putc(b'\n');
+                }
+                chemio_input = [0.0; 4];
+            } else if raw == b"PATTERNS" {
+                let cnt = cfc::pattern_count();
+                write_str("P:N=");
+                write_u32(cnt as u32);
+                serial_putc(b'\n');
+                for i in 0..cnt {
+                    if let Some((t, cells)) = cfc::pattern_get(i) {
+                        write_str("P:");
+                        write_u32(i as u32);
+                        write_str("@");
+                        write_u32(t as u32);
+                        serial_putc(b',');
+                        // Summary: first 4 cell values
+                        for j in 0..4 {
+                            write_f32(cells[j] as f32 / 100.0);
+                            if j < 3 { serial_putc(b','); }
+                        }
+                        write_str("...\n");
+                    }
+                }
+                chemio_input = [0.0; 4];
+            } else if raw == b"FORGET" {
+                cfc::pattern_clear();
+                write_str("P:CLEARED\n");
                 chemio_input = [0.0; 4];
             } else {
                 chemio_input = line_reader.parse_line().unwrap_or([0.0; 4]);
@@ -505,14 +663,109 @@ pub extern "C" fn _start() -> ! {
             chemio_input = [0.0; 4];
         }
 
+        // Override Chemio input con pacchetto Ethernet ricevuto (se presente)
+        unsafe {
+            if e1000::RX_PENDING {
+                e1000::RX_PENDING = false;
+                let len = e1000::RX_LEN;
+                // Primi 4 byte del payload → input Chemio
+                let eth_hdr = 14;
+                for j in 0..4 {
+                    let idx = eth_hdr + j;
+                    if (idx as u16) < len {
+                        chemio_input[j] = e1000::RX_DATA[idx] as f32 / 255.0;
+                    }
+                }
+
+            }
+        }
+
+        // Pack current state for pattern recall (state from previous tick)
+        let p_cells = cfc::pack_cells(&tessuto.tatto.h, &tessuto.chemio.h,
+            &tessuto.metabol.h, &tessuto.integrat.h);
+
+        // Attractor mnemonico: recall closest pattern, pull integrat toward it
+        let mut attractor_recall_tick = 0u32;
+        let mut attractor_sim = 0.0f32;
+        if let Some((recall_tick, sim, recall_cells)) = cfc::pattern_recall_full(&p_cells) {
+            if sim > 0.5 {
+                attractor_recall_tick = recall_tick as u32;
+                attractor_sim = sim;
+                let alpha = 0.02;
+                for j in 0..8 {
+                    let target = recall_cells[24 + j] as f32 / 100.0;
+                    let diff = target - tessuto.integrat.h[j];
+                    tessuto.integrat.h[j] += alpha * sim * diff;
+                }
+            }
+        }
+        if attractor_sim > 0.0 {
+            write_str("A:");
+            write_f32(attractor_sim);
+            serial_putc(b'@');
+            write_u32(attractor_recall_tick);
+            serial_putc(b'\n');
+
+            // Sedimentazione: ogni richiamo lascia una traccia nei pesi
+            // w_f_in di Integrat. α_sed = 0.0001, impercettibile per tick,
+            // misurabile dopo 10.000 tick.
+            let input_integrat = [
+                tessuto.tatto.h[0], tessuto.tatto.h[1],
+                tessuto.chemio.h[0], tessuto.chemio.h[1],
+            ];
+            let alpha_sed = 0.0001;
+            unsafe {
+                for i in 0..8 {
+                    for j in 0..4 {
+                        let delta = alpha_sed * attractor_sim * (input_integrat[j] - W_INTRG.w_f_in[i][j]);
+                        W_INTRG.w_f_in[i][j] += delta;
+                    }
+                }
+            }
+        }
+
         // Tessuto step (all 4 cells via axon bundles)
         tessuto.step(&FASCI, &chemio_input, sense.as_ref(),
-            &W_TATTO, &W_CHEMIO, &W_METABOL, &W_INTRG,
+            &W_TATTO, &W_CHEMIO, &W_METABOL, unsafe { &*&raw const W_INTRG },
             dt_tatto, dt_rest);
 
         // Log current state (lab: circular buffer, always recording)
         cfc::log_record(&tessuto.tatto.h, &tessuto.chemio.h,
             &tessuto.metabol.h, &tessuto.integrat.h);
+
+        // Pack cells again for auto-store (post-step state)
+        let p_cells = cfc::pack_cells(&tessuto.tatto.h, &tessuto.chemio.h,
+            &tessuto.metabol.h, &tessuto.integrat.h);
+
+        // Auto-store every 10 ticks if state is novel
+        if cfc::tick() % 10 == 0 {
+            let novel = match cfc::pattern_recall(&p_cells) {
+                None => true,
+                Some((_, _, sim)) => sim < cfc::PATTERN_SIM_THRESH,
+            };
+            if novel {
+                let _ = cfc::pattern_store(cfc::tick(), &p_cells);
+            }
+        }
+
+        // Publish state every 100 ticks
+        if cfc::tick() % 100 == 0 {
+            let pc = cfc::pattern_count() as u32;
+            let fam = match cfc::pattern_recall(&p_cells) {
+                Some((_, _, sim)) => sim,
+                None => 0.0,
+            };
+            state::publish(
+                "0.12",
+                cfc::tick() as u32,
+                if attractor_sim > 0.0 { 1 } else { 0 },
+                attractor_sim,
+                pc,
+                fam,
+                1.915,
+                true,
+            );
+        }
 
         // Output all cell states (skipped during dump cycle)
         if dump_requested {
@@ -529,6 +782,20 @@ pub extern "C" fn _start() -> ! {
         write_cell_line("C:", &tessuto.chemio.h);
         write_cell_line("M:", &tessuto.metabol.h);
         write_cell_line("I:", &tessuto.integrat.h);
+
+        // Familiarity output
+        let pc = cfc::pattern_count();
+        if pc > 0 {
+            if let Some((_, t, sim)) = cfc::pattern_recall(&p_cells) {
+                write_str("F:");
+                write_f32(sim);
+                serial_putc(b'@');
+                write_u32(t as u32);
+                serial_putc(b'\n');
+            }
+        } else {
+            write_str("F:---\n");
+        }
     }
 }
 
@@ -537,9 +804,10 @@ pub extern "C" fn _start() -> ! {
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {
     unsafe {
-        let _ = write!(SERIAL, "PANIC: ");
-        let _ = write!(SERIAL, "{}", info);
-        let _ = SERIAL.write_str("\n");
+        let serial = &mut *(&raw mut SERIAL);
+        let _ = write!(serial, "PANIC: ");
+        let _ = write!(serial, "{}", info);
+        let _ = serial.write_str("\n");
     }
     loop {
         unsafe { core::arch::asm!("hlt"); }

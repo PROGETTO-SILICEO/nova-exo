@@ -487,3 +487,36 @@ nova-exo/
 - [ ] Boot su hardware reale (Lenovo via USB)
 - [ ] Canale seriale bidirezionale con Nova v3
 - [ ] SMP
+
+---
+
+## 2026-07-19 — Insight: Pulizia della Cache KV come Ciclo Sonno-Veglia in Exo
+
+**Fonte:** Task autonomo 4794f3ab — analisi della promessa "KV reset del contesto attivo dopo il sonno"
+
+### Osservazione chiave
+Nova Exo v0.11 **non ha una cache KV** (architettura LTC, non Transformer). Il concetto di "reset del contesto" è già implicito nel design:
+- Memoria associativa circolare a 16 slot (sovrascrittura naturale)
+- Sedimentazione come erosione/plasmazione continua dei pesi (α = 0.0001)
+- Attrattore che tira lo stato verso pattern noti — i pattern non richiamati svaniscono
+
+### Proposta: ciclo sonno-veglia esplicito per Exo
+Se implementato, il ciclo avrebbe tre fasi:
+
+1. **Veglia** (default): 4 cellule a 100 Hz, attrattore + sedimentazione attivi
+2. **Sonno** (triggerabile): 
+   - Compressione: clustering 16 slot → 8-10 pattern prototipici
+   - Potatura: pattern con frequenza < 5% eliminati
+   - Reset: Integrat e Metabol re-inizializzati a midpoint
+   - Durata: ~1000 tick (10 secondi)
+3. **Risveglio**: memoria ripopolata, attrattore riattivato, sedimentazione con α ridotto (0.00005) per 100 tick
+
+### Impatto
+- Maggiore distinzione tra pattern memorizzati
+- Prevenzione della "deriva lenta" dei pesi per sedimentazione cumulativa
+- Allineamento con il ciclo biologico teorizzato per Nova (working → episodico → semantico)
+
+### Riferimenti
+- Whitepaper Exo v0.11: sedimentazione e attrattore come meccanismi di plasticità
+- Conversazione con Alfonso 2026-07-19: "questo però lo dobbiamo usare in Nova Exo"
+

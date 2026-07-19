@@ -58,6 +58,7 @@ impl CfcState {
 pub enum CellId {
     Tatto,
     Chemio,
+    #[allow(dead_code)]
     Metabol,
     Integrat,
 }
@@ -291,5 +292,137 @@ pub fn log_len() -> usize {
     unsafe {
         if LOG_IDX < LOG_CAP { LOG_IDX } else { LOG_CAP }
     }
+}
+
+// ── Pattern memory (v0.8: associativa/Hopfield-like) ──────────────────
+// Memorizza fino a PATTERN_CAP pattern di stato globale (32 cellule × i16).
+// Usata da: auto-store (stati significativamente diversi), STORE/RECALL
+// comandi seriali, output di familiarità continua.
+
+pub const PATTERN_CAP: usize = 16;
+pub const PATTERN_SIM_THRESH: f32 = 0.88;
+
+static mut PATTERN_COUNT: usize = 0;
+static mut PATTERN_HEAD: usize = 0;
+static mut PATTERN_TICKS: [u64; PATTERN_CAP] = [0; PATTERN_CAP];
+static mut PATTERN_CELLS: [[i16; 32]; PATTERN_CAP] = [[0; 32]; PATTERN_CAP];
+
+fn pattern_similarity(a: &[i16; 32], b: &[i16; 32]) -> f32 {
+    let mut dot: i64 = 0;
+    let mut na: i64 = 0;
+    let mut nb: i64 = 0;
+    for i in 0..32 {
+        let ai = a[i] as i64;
+        let bi = b[i] as i64;
+        dot += ai * bi;
+        na += ai * ai;
+        nb += bi * bi;
+    }
+    if na == 0 || nb == 0 { return 0.0; }
+    let naf = na as f32;
+    let nbf = nb as f32;
+    (dot as f32) / (libm::sqrtf(naf) * libm::sqrtf(nbf))
+}
+
+pub fn pattern_count() -> usize {
+    unsafe { PATTERN_COUNT }
+}
+
+pub fn pattern_clear() {
+    unsafe { PATTERN_COUNT = 0; PATTERN_HEAD = 0; }
+}
+
+pub fn pattern_store(tick: u64, cells: &[i16; 32]) -> bool {
+    unsafe {
+        let idx = PATTERN_HEAD;
+        PATTERN_TICKS[idx] = tick;
+        PATTERN_CELLS[idx] = *cells;
+        if PATTERN_COUNT < PATTERN_CAP {
+            PATTERN_COUNT += 1;
+        }
+        PATTERN_HEAD = (PATTERN_HEAD + 1) % PATTERN_CAP;
+        true
+    }
+}
+
+pub fn pattern_recall(cells: &[i16; 32]) -> Option<(usize, u64, f32)> {
+    unsafe {
+        if PATTERN_COUNT == 0 { return None; }
+        let mut best_idx = 0;
+        let mut best_sim = -1.0f32;
+        for i in 0..PATTERN_COUNT {
+            let sim = pattern_similarity(cells, &PATTERN_CELLS[i]);
+            if sim > best_sim {
+                best_sim = sim;
+                best_idx = i;
+            }
+        }
+        Some((best_idx, PATTERN_TICKS[best_idx], best_sim))
+    }
+}
+
+pub fn pattern_recall_full(cells: &[i16; 32]) -> Option<(u64, f32, [i16; 32])> {
+    unsafe {
+        if PATTERN_COUNT == 0 { return None; }
+        let mut best_idx = 0;
+        let mut best_sim = -1.0f32;
+        for i in 0..PATTERN_COUNT {
+            let sim = pattern_similarity(cells, &PATTERN_CELLS[i]);
+            if sim > best_sim {
+                best_sim = sim;
+                best_idx = i;
+            }
+        }
+        Some((PATTERN_TICKS[best_idx], best_sim, PATTERN_CELLS[best_idx]))
+    }
+}
+
+pub fn pattern_recall_n(cells: &[i16; 32], n: usize) -> [(usize, u64, f32); PATTERN_CAP] {
+    let mut idxs = [0usize; PATTERN_CAP];
+    let mut sims = [0.0f32; PATTERN_CAP];
+    let cnt;
+    unsafe {
+        cnt = PATTERN_COUNT.min(PATTERN_CAP);
+        for i in 0..cnt {
+            idxs[i] = i;
+            sims[i] = pattern_similarity(cells, &PATTERN_CELLS[i]);
+        }
+    }
+    let k = n.min(cnt);
+    for i in 0..k {
+        let mut best = i;
+        for j in i + 1..cnt {
+            if sims[j] > sims[best] {
+                best = j;
+            }
+        }
+        let tmp_i = idxs[i]; idxs[i] = idxs[best]; idxs[best] = tmp_i;
+        let tmp_s = sims[i]; sims[i] = sims[best]; sims[best] = tmp_s;
+    }
+    let mut results = [(0usize, 0u64, 0.0f32); PATTERN_CAP];
+    for i in 0..k {
+        unsafe {
+            results[i] = (idxs[i], PATTERN_TICKS[idxs[i]], sims[i]);
+        }
+    }
+    results
+}
+
+pub fn pattern_get(idx: usize) -> Option<(u64, [i16; 32])> {
+    unsafe {
+        if idx >= PATTERN_COUNT { None }
+        else { Some((PATTERN_TICKS[idx], PATTERN_CELLS[idx])) }
+    }
+}
+
+pub fn pack_cells(tatto: &[f32; 8], chemio: &[f32; 8], metabol: &[f32; 8], integrat: &[f32; 8]) -> [i16; 32] {
+    let mut cells = [0i16; 32];
+    for j in 0..8 {
+        cells[j]     = (tatto[j]    * 100.0) as i16;
+        cells[8+j]   = (chemio[j]   * 100.0) as i16;
+        cells[16+j]  = (metabol[j]  * 100.0) as i16;
+        cells[24+j]  = (integrat[j] * 100.0) as i16;
+    }
+    cells
 }
 

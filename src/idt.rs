@@ -146,9 +146,7 @@ pub unsafe extern "C" fn handler_timer() {
 #[no_mangle]
 extern "C" fn timer_handler_rust(_vector: u64, _error: u64) {
     crate::cfc::inc_tick();
-    unsafe {
-        asm!("out dx, al", in("dx") 0x20u16, in("al") 0x20u8);
-    }
+    crate::apic::eoi();
 }
 
 #[no_mangle]
