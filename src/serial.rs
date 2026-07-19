@@ -58,7 +58,7 @@ impl LineReader {
 
 // ── Float parser (no_std) ────────────────────────────────────────────────
 
-fn parse_f32(s: &[u8]) -> Option<f32> {
+pub(crate) fn parse_f32(s: &[u8]) -> Option<f32> {
     if s.is_empty() {
         return None;
     }

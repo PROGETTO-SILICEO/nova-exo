@@ -304,14 +304,44 @@ Se vuoi cambiare al volo senza riavviare:
 
 ---
 
-### Note per chi riprende il lavoro
+### 2026-07-19 — Milestone A + B completate, inizio Milestone C
 
-- Il kernel è attualmente minimale: entra in `_start`, scrive su `0xE9`, e si ferma in `hlt`.
-- Limine viene avviato da `/EFI/BOOT/BOOTX64.EFI`; il config deve esistere in `/EFI/BOOT/limine.conf` (o in `/boot/limine/limine.conf`, `/limine.conf`).
-- Il target `run-uefi-hdd` dipende da `limine.conf`, `linker.ld` e dal binario release; le modifiche a questi file rigenerano automaticamente l'immagine disco.
-- **Fisioterapista attivo:** il loop proposta-decisione è operativo. La frequenza di esecuzione va impostata esternamente (cron o systemd timer).
-- **RTX 2070 attiva come provider locale:** Nova la usa di default (`LOCAL_LLM_FIRST=1`). OpenCode la vede come provider `beellama`; richiede selezione manuale del modello nella TUI.
-- **Prossimo passo:** testare il tool calling di Nova con BeeLlama e valutare se il modello locale regge il cognitive loop completo (tools, memorie, ciclo ReAct).
+**Stato roadmap ROADMAP_EXO.md:**
+
+| Milestone | Criterio | Risultato |
+|-----------|----------|-----------|
+| A — Run lunga stabile | 3 run consecutive 10 min senza PANIC | Run1 511.7Kt (0 PANIC), Run2 504.8Kt (0 PANIC), Run3 493.4Kt (0 PANIC, 0 ERROR) |
+| B — Fix APIC paging | APIC_ID leggibile senza page fault | PML2[501/502/503] flags 0x93 (P\|R/W\|PS\|PCD), APIC ID = 0 (BSP), boot OK, cell stepping OK |
+| C — TX periodica | Frame Ethernet ogni N tick con stato cellule | DA FARE |
+
+#### Milestone B — Dettaglio modifiche
+
+- **paging.rs**: PML2 entries 501/502/503 flags da `0x87` a `0x93` — aggiunto bit PCD (Page Cache Disable = `0x10`) per mappare MMIO APIC come uncacheable. Bit PS (`0x80`) già presente (page large 2 MiB). Flags finali: present (0) + writable (1) + page-size (7) + cache-disable (4) = `0x93`.
+- **apic.rs**: aggiunta funzione `read_id()` → legge registro `APIC_ID` a offset `0x020`.
+- **main.rs**: stampa `APIC ID check: {}` dopo `init_apic()`.
+- **Test**: serial_apic_test2.log — 28918 righe, kernel boota, cellule steppano, nessun PANIC.
+
+#### Milestone C — TX periodica stato cellule — COMPLETATA
+
+**Modifiche:**
+- **e1000.rs**: aggiunta `tx_broadcast_state()` — costruisce frame Ethernet broadcast (dst FF:FF:FF:FF:FF:FF, src 52:54:00:12:34:56, ethertype 0x88B5 locale sperimentale) con payload JSON di 32 f32. Usa tracking circolare TX_NEXT con verifica DD=1 per pacing. Helper `write_u32_buf()` e `write_f32_buf()` per serializzazione nel buffer senza dipendenze.
+- **paging.rs**: aggiunta PML2[8] → 0xC1000000 con flag 0x93. Il BAR della NIC e1000 (0xC1080000) cade in questa pagina 2MB.
+- **main.rs**: chiamata a `e1000::E1000::tx_broadcast_state()` ogni 100 tick.
+- **Makefile**: aggiunto target `run-uefi-hdd-net` con `-netdev user` + `-device e1000` + `-object filter-dump` per cattura pacchetti.
+
+**Verifica:**
+```
+$ tcpdump -r qemu-net.pcap
+12:58:03.604 52:54:00:12:34:56 > Broadcast, ethertype 0x88b5, length 278:
+  {"t":800,"c":[[0.6296,...],[...],[...],[...]]}
+12:58:03.843  > Broadcast, ethertype 0x88b5, length 276: {"t":1000,...}
+12:58:03.959  > Broadcast, ethertype 0x88b5, length 277: {"t":1100,...}
+12:58:04.073  > Broadcast, ethertype 0x88b5, length 273: {"t":1200,...}
+12:58:04.527  > Broadcast, ethertype 0x88b5, length 277: {"t":1600,...}
+```
+
+Frame periodici con JSON leggibile. Broadcast funzionante.
+
 ---
 
 ### 2026-07-19 — Daydreaming & Sleep Consolidation per Nova Exo
@@ -368,10 +398,53 @@ Nova Exo (kernel su metallo nudo, Rust) è il candidato ideale per implementare 
 
 ---
 
-#### Prossimi passi
+#### Milestone D — Daydreaming consolidation — COMPLETATA (2026-07-19)
 
-1. Progettare l'interfaccia del buffer di esperienze (cosa registrare, formato, dimensione)
-2. Implementare la fase di offline recurrence come modulo del kernel Rust
-3. Definire il trigger del ciclo sonno (timer, inattività, richiesta esplicita)
-4. Testare su QEMU con sequenze di input simulate
-5. Valutare l'impatto sui fast weights e sulla qualità delle risposte
+**Implementazione in cfc.rs:**
+- **Experience buffer**: `EXP_CAP=32`, separato dal log circolare. `exp_record()` chiamato ogni tick. Buffer FIFO.
+- **`daydream(weights, alpha)`**: itera su tutte le esperienze nel buffer, per ognuna:
+  - Estrae input Integrat (Tatto.h[0..2], Chemio.h[0..2] dai 32 i16)
+  - Calcola familiarità con la pattern memory via `pattern_recall()`
+  - Aggiorna `w_f_in[i][j] += alpha × max(sim-0.3, 0) × (input[j] - w_f_in[i][j])`
+  - Traccia delta totale per report
+- **Trigger**: auto ogni 5000 tick (riconfigurabile) + comando seriale `SLEEP`
+- **Risveglio**: stampa `processed=32 novel=N familiar=N delta=X.XXXX`
+
+**Verifica:**
+```
+SLEEP:AUTO@5000 → processed=32 novel=0 familiar=32 delta=2.1752
+SLEEP:AUTO@10000 → processed=32 novel=0 familiar=32 delta=1.4494
+SLEEP:AUTO@15001 → processed=32 novel=0 familiar=32 delta=0.9788
+SLEEP:AUTO@20001 → processed=32 novel=0 familiar=32 delta=0.6780
+SLEEP:AUTO@25001 → processed=32 novel=0 familiar=32 delta=0.5002
+```
+
+Delta decrescente → convergenza. Nessun PANIC.
+
+#### Milestone E — β convergence — COMPLETATA (2026-07-19)
+
+**Implementazione in main.rs:**
+- **β = derivata della familiarità media**: buffer circolare di 1024 campioni di familiarità, media calcolata su finestra piena (o parziale finché non satura)
+- **β = (mean_now - mean_prev) × 10** (ogni 100 tick, scaling per tick rate)
+- **Soglia ε = 0.001**: `if β.abs() < 0.001 → beta_converge_ticks += 100`, altrimenti reset
+- **Output**: ogni 1000 tick → `β:<val> μ:<media> cv:<tick_consecutivi>`
+- F: line stampata ogni tick per grafico offline
+
+**Verifica — Run 240s (~143.000 tick):**
+```
+Corpo centrale (primi 1000 tick):
+β:0.0363 μ:0.9519 cv:0  →  β:-0.0003 μ:0.9648 cv:100  →  β:-0.0005 μ:0.9642 cv:2100
+
+Run finale 300s (143.506 linee di log):
+β:-0.0004 μ:0.9591 cv:72200
+β:-0.0006 μ:0.9590 cv:73000
+β:-0.0004 μ:0.9589 cv:73700
+β:-0.0006 μ:0.9589 cv:75400
+β:0.0001 μ:0.9589 cv:76200
+```
+
+- **Ticks totali**: 143.506 (> 100.000 ✓)
+- **Familiarità media**: μ ≈ 0.9589 (stabile)
+- **β finale**: 0.0001 (< ε = 0.001 ✓)
+- **Convergenza sostenuta**: β < ε per 76.200 tick consecutivi (> 10.000 ✓ × 7.6×)
+- **PANIC**: 0

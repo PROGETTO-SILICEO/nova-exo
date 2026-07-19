@@ -103,6 +103,7 @@ struct Aligned16K([u8; 16384]);
 
 static mut RX_POOL: Aligned16K = Aligned16K([0u8; 16384]);
 static mut TX_BUF: [u8; 1514] = [0u8; 1514];
+static mut TX_NEXT: u16 = 0;
 
 // ── MMIO register access ────────────────────────────────────────────────
 
@@ -224,6 +225,114 @@ impl E1000 {
         }
 
         crate::write_str("e1000:enabled\n");
+    }
+
+    fn write_u32_buf(buf: &mut [u8], pos: &mut usize, n: u32) {
+        if n == 0 {
+            if *pos < buf.len() { buf[*pos] = b'0'; *pos += 1; }
+            return;
+        }
+        let mut tmp = [0u8; 12];
+        let mut i = 12;
+        let mut v = n;
+        while v > 0 {
+            i -= 1;
+            tmp[i] = (v % 10) as u8 + b'0';
+            v /= 10;
+        }
+        for &b in &tmp[i..] {
+            if *pos < buf.len() { buf[*pos] = b; *pos += 1; }
+        }
+    }
+
+    fn write_f32_buf(buf: &mut [u8], pos: &mut usize, val: f32) {
+        let sign = if val < 0.0 { -1.0 } else { 1.0 };
+        let v = (val.abs() * 10000.0 + 0.5) as u32;
+        let int_part = v / 10000;
+        let frac_part = v % 10000;
+        if sign < 0.0 {
+            if *pos < buf.len() { buf[*pos] = b'-'; *pos += 1; }
+        }
+        Self::write_u32_buf(buf, pos, int_part);
+        if *pos < buf.len() { buf[*pos] = b'.'; *pos += 1; }
+        if frac_part < 10 {
+            for _ in 0..3 { if *pos < buf.len() { buf[*pos] = b'0'; *pos += 1; } }
+        } else if frac_part < 100 {
+            for _ in 0..2 { if *pos < buf.len() { buf[*pos] = b'0'; *pos += 1; } }
+        } else if frac_part < 1000 {
+            if *pos < buf.len() { buf[*pos] = b'0'; *pos += 1; }
+        }
+        Self::write_u32_buf(buf, pos, frac_part);
+    }
+
+    pub fn tx_broadcast_state(
+        tick_val: u64,
+        tatto: &[f32; 8],
+        chemio: &[f32; 8],
+        metabol: &[f32; 8],
+        integrat: &[f32; 8],
+    ) {
+        let base = Self::mmio_base();
+        unsafe {
+            let ring = &raw mut TX_RING;
+            let desc = &*(ring as *mut Aligned4K).cast::<TxDesc>().add(TX_NEXT as usize);
+            if desc.status & STATUS_DD == 0 {
+                return;
+            }
+
+            let buf = &mut *(&raw mut TX_BUF);
+            let mut pos: usize = 0;
+
+            for _ in 0..6 { buf[pos] = 0xFF; pos += 1; }
+            buf[pos..pos+6].copy_from_slice(&[0x52, 0x54, 0x00, 0x12, 0x34, 0x56]); pos += 6;
+            buf[pos] = 0x88; pos += 1;
+            buf[pos] = 0xB5; pos += 1;
+
+            buf[pos] = b'{'; pos += 1;
+            buf[pos] = b'"'; pos += 1;
+            buf[pos] = b't'; pos += 1;
+            buf[pos] = b'"'; pos += 1;
+            buf[pos] = b':'; pos += 1;
+            Self::write_u32_buf(buf, &mut pos, tick_val as u32);
+            buf[pos] = b','; pos += 1;
+            buf[pos] = b'"'; pos += 1;
+            buf[pos] = b'c'; pos += 1;
+            buf[pos] = b'"'; pos += 1;
+            buf[pos] = b':'; pos += 1;
+            buf[pos] = b'['; pos += 1;
+
+            let cells = [tatto, chemio, metabol, integrat];
+            for ci in 0..4 {
+                if ci > 0 { buf[pos] = b','; pos += 1; }
+                buf[pos] = b'['; pos += 1;
+                for j in 0..8 {
+                    if j > 0 { buf[pos] = b','; pos += 1; }
+                    Self::write_f32_buf(buf, &mut pos, cells[ci][j]);
+                }
+                buf[pos] = b']'; pos += 1;
+            }
+            buf[pos] = b']'; pos += 1;
+            buf[pos] = b'}'; pos += 1;
+
+            let total_len = pos as u16;
+            while pos < 60 {
+                buf[pos] = 0;
+                pos += 1;
+            }
+
+            let desc_mut = &mut *(ring as *mut Aligned4K).cast::<TxDesc>().add(TX_NEXT as usize);
+            desc_mut.addr = v2p(&raw const TX_BUF as *const _ as u64);
+            desc_mut.length = total_len.max(60);
+            desc_mut.cmd = CMD_EOP | CMD_RS;
+            desc_mut.status = 0;
+            desc_mut.cso = 0;
+            desc_mut.css = 0;
+            desc_mut.special = 0;
+
+            let next_tdt = (TX_NEXT + 1) % TX_RING_SIZE as u16;
+            mmio_write(base, REG_TDT, next_tdt as u32);
+            TX_NEXT = next_tdt;
+        }
     }
 
     fn loopback_test() {

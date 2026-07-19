@@ -527,6 +527,12 @@ pub extern "C" fn _start() -> ! {
     let mut tessuto = cfc::Tessuto::new();
     let mut line_reader = LineReader::new();
     let mut dump_requested = false;
+    let mut sleep_pending = false;
+    let mut sleep_auto_trigger = 5000u64;
+    let mut prev_fam_mean = 0.0f32;
+    let mut beta_converge_ticks = 0u32;
+    let mut fam_samples: [f32; 1024] = [0.0; 1024];
+    let mut fam_idx: usize = 0;
     let dt_tatto = 0.001f32;
     let dt_rest = 0.01f32;
 
@@ -534,6 +540,8 @@ pub extern "C" fn _start() -> ! {
         pic_disable();
         serial_println!("PIC disabled, enabling APIC timer...");
         apic::init(paging::mmio_virt_addr(0xFEE0_0000));
+        let apic_id = apic::read_id();
+        serial_println!("APIC ID check: {}", apic_id);
         apic::init_timer(32);
         serial_println!("Enabling interrupts. Tessuto loop starts.");
         asm!("sti");
@@ -594,7 +602,11 @@ pub extern "C" fn _start() -> ! {
         let mut chemio_input;
         if line_reader.has_line {
             let raw = line_reader.line();
-            if raw == b"DUMP" {
+            write_str("RX:"); for &b in raw { serial_putc(b); } serial_putc(b'\n');
+            if raw == b"SLEEP" {
+                sleep_pending = true;
+                chemio_input = [0.0; 4];
+            } else if raw == b"DUMP" {
                 dump_requested = true;
                 chemio_input = [0.0; 4];
             } else if raw == b"STORE" {
@@ -654,6 +666,62 @@ pub extern "C" fn _start() -> ! {
             } else if raw == b"FORGET" {
                 cfc::pattern_clear();
                 write_str("P:CLEARED\n");
+                chemio_input = [0.0; 4];
+            } else if raw.starts_with(b"SET_WEIGHT ") {
+                let args = &raw[11..];
+                let mut pos = 0;
+                while pos < args.len() && args[pos] == b' ' { pos += 1; }
+                let matrix = if args[pos..].starts_with(b"IN") { 0usize }
+                    else if args[pos..].starts_with(b"F") { 1usize }
+                    else { 2usize };
+                while pos < args.len() && args[pos] != b' ' { pos += 1; }
+                while pos < args.len() && args[pos] == b' ' { pos += 1; }
+                let mut i_val = 0usize;
+                while pos < args.len() && args[pos].is_ascii_digit() {
+                    i_val = i_val * 10 + (args[pos] - b'0') as usize;
+                    pos += 1;
+                }
+                while pos < args.len() && args[pos] == b' ' { pos += 1; }
+                let mut j_val = 0usize;
+                while pos < args.len() && args[pos].is_ascii_digit() {
+                    j_val = j_val * 10 + (args[pos] - b'0') as usize;
+                    pos += 1;
+                }
+                while pos < args.len() && args[pos] == b' ' { pos += 1; }
+                let val = serial::parse_f32(&args[pos..]).unwrap_or(0.0);
+                unsafe {
+                    if matrix == 0 && i_val < 8 && j_val < 4 {
+                        W_INTRG.w_f_in[i_val][j_val] = val;
+                        write_str("W:IN ");
+                    } else if matrix == 1 && i_val < 8 && j_val < 8 {
+                        W_INTRG.w_f[i_val][j_val] = val;
+                        write_str("W:F ");
+                    } else {
+                        write_str("E:SET_WEIGHT\n");
+                    }
+                    if matrix < 2 {
+                        write_u32(i_val as u32); serial_putc(b',');
+                        write_u32(j_val as u32); serial_putc(b'=');
+                        write_f32(val); serial_putc(b'\n');
+                    }
+                }
+                chemio_input = [0.0; 4];
+            } else if raw.starts_with(b"INJECT_SENSE ") {
+                let args = &raw[13..];
+                let mut addr: u64 = 0;
+                for &b in args {
+                    let d = match b {
+                        b'0'..=b'9' => b - b'0',
+                        b'a'..=b'f' => b - b'a' + 10,
+                        b'A'..=b'F' => b - b'A' + 10,
+                        _ => break,
+                    };
+                    addr = addr * 16 + d as u64;
+                }
+                cfc::sense_pf(addr, 0);
+                write_str("SENS:INJECT@");
+                write_hex64(addr);
+                serial_putc(b'\n');
                 chemio_input = [0.0; 4];
             } else {
                 chemio_input = line_reader.parse_line().unwrap_or([0.0; 4]);
@@ -724,14 +792,42 @@ pub extern "C" fn _start() -> ! {
             }
         }
 
+        // Daydreaming: auto-trigger after N ticks
+        if !sleep_pending && cfc::tick() >= sleep_auto_trigger {
+            sleep_pending = true;
+            write_str("SLEEP:AUTO@");
+            write_u32(cfc::tick() as u32);
+            write_str("\n");
+            sleep_auto_trigger = cfc::tick() + 5000;
+        }
+
+        // Daydreaming: SLEEP command → consolidate experiences
+        if sleep_pending {
+            sleep_pending = false;
+            write_str("SLEEP:BEGIN\n");
+            let report = cfc::daydream(unsafe { &mut *(&raw mut W_INTRG) }, 0.01);
+            write_str("SLEEP:processed=");
+            write_u32(report.processed);
+            write_str(" novel=");
+            write_u32(report.novel);
+            write_str(" familiar=");
+            write_u32(report.familiar);
+            write_str(" delta=");
+            write_f32(report.total_delta);
+            write_str("\nSLEEP:END\n");
+        }
+
         // Tessuto step (all 4 cells via axon bundles)
         tessuto.step(&FASCI, &chemio_input, sense.as_ref(),
             &W_TATTO, &W_CHEMIO, &W_METABOL, unsafe { &*&raw const W_INTRG },
             dt_tatto, dt_rest);
 
-        // Log current state (lab: circular buffer, always recording)
+        // Log current state + experience buffer for daydreaming
         cfc::log_record(&tessuto.tatto.h, &tessuto.chemio.h,
             &tessuto.metabol.h, &tessuto.integrat.h);
+        let packed = cfc::pack_cells(&tessuto.tatto.h, &tessuto.chemio.h,
+            &tessuto.metabol.h, &tessuto.integrat.h);
+        cfc::exp_record(&packed);
 
         // Pack cells again for auto-store (post-step state)
         let p_cells = cfc::pack_cells(&tessuto.tatto.h, &tessuto.chemio.h,
@@ -750,6 +846,13 @@ pub extern "C" fn _start() -> ! {
 
         // Publish state every 100 ticks
         if cfc::tick() % 100 == 0 {
+            e1000::E1000::tx_broadcast_state(
+                cfc::tick(),
+                &tessuto.tatto.h,
+                &tessuto.chemio.h,
+                &tessuto.metabol.h,
+                &tessuto.integrat.h,
+            );
             let pc = cfc::pattern_count() as u32;
             let fam = match cfc::pattern_recall(&p_cells) {
                 Some((_, _, sim)) => sim,
@@ -795,6 +898,38 @@ pub extern "C" fn _start() -> ! {
             }
         } else {
             write_str("F:---\n");
+        }
+
+        // β convergence: derivative of mean familiarity
+        let fam_now = if let Some((_, _, sim)) = cfc::pattern_recall(&p_cells) {
+            sim
+        } else { 0.0 };
+        if cfc::tick() % 100 == 0 {
+            let pc = cfc::pattern_count();
+            if pc > 0 {
+                fam_samples[fam_idx % 1024] = fam_now;
+                fam_idx = fam_idx.wrapping_add(1);
+                let win = fam_idx.min(1024);
+                let mut sum = 0.0f32;
+                for i in 0..win { sum += fam_samples[i]; }
+                let mean = sum / win as f32;
+                let beta = (mean - prev_fam_mean) * 10.0;
+                prev_fam_mean = mean;
+                if beta.abs() < 0.001 {
+                    beta_converge_ticks += 100;
+                } else {
+                    beta_converge_ticks = 0;
+                }
+                if cfc::tick() % 1000 == 0 {
+                    write_str("β:");
+                    write_f32(beta);
+                    write_str(" μ:");
+                    write_f32(mean);
+                    write_str(" cv:");
+                    write_u32(beta_converge_ticks);
+                    serial_putc(b'\n');
+                }
+            }
         }
     }
 }

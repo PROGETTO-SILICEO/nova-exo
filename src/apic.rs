@@ -56,3 +56,7 @@ pub fn init_timer(vector: u8) {
     write_reg(APIC_LVT_TIMER, (1 << 17) | vector as u32);
     write_reg(APIC_TIMER_INIT_COUNT, 62_500);
 }
+
+pub fn read_id() -> u32 {
+    read_reg(APIC_ID)
+}

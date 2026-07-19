@@ -244,6 +244,104 @@ pub fn inc_tick() {
     unsafe { core::ptr::write_volatile(&raw mut TICK, TICK + 1); }
 }
 
+// ── Daydreaming: experience buffer ──────────────────────────────────
+// Buffer duraturo di esperienze per consolidamento offline.
+// Separato dal log circolare (che è per debug).
+// Registra ogni tick, capacità 32 — abbastanza per pattern recenti.
+
+const EXP_CAP: usize = 32;
+
+static mut EXP_IDX: usize = 0;
+static mut EXP_FULL: bool = false;
+static mut EXP_TICKS: [u64; EXP_CAP] = [0; EXP_CAP];
+static mut EXP_CELLS: [[i16; 32]; EXP_CAP] = [[0; 32]; EXP_CAP];
+
+pub fn exp_record(cells: &[i16; 32]) {
+    unsafe {
+        let i = EXP_IDX % EXP_CAP;
+        EXP_TICKS[i] = tick();
+        EXP_CELLS[i] = *cells;
+        EXP_IDX = EXP_IDX.wrapping_add(1);
+        if EXP_IDX >= EXP_CAP { EXP_FULL = true; }
+    }
+}
+
+pub fn exp_len() -> usize {
+    unsafe {
+        if EXP_FULL { EXP_CAP } else { EXP_IDX }
+    }
+}
+
+pub fn exp_tick_at(pos: usize) -> u64 {
+    unsafe {
+        if pos < EXP_CAP { EXP_TICKS[pos] } else { 0 }
+    }
+}
+
+pub fn exp_cells_at(pos: usize) -> [i16; 32] {
+    unsafe {
+        if pos < EXP_CAP { EXP_CELLS[pos] } else { [0; 32] }
+    }
+}
+
+pub struct DaydreamReport {
+    pub processed: u32,
+    pub novel: u32,
+    pub familiar: u32,
+    pub total_delta: f32,
+    pub weights_before: [[f32; 4]; 8],
+    pub weights_after: [[f32; 4]; 8],
+}
+
+pub fn daydream(weights: &mut CfcWeights, alpha: f32) -> DaydreamReport {
+    let count = exp_len();
+    let mut total_delta = 0.0f32;
+    let mut novel = 0u32;
+    let mut familiar = 0u32;
+
+    unsafe {
+        let before = weights.w_f_in;
+
+        for i in 0..count {
+            let cells = EXP_CELLS[i];
+            let input: [f32; 4] = [
+                cells[0] as f32 / 100.0,
+                cells[1] as f32 / 100.0,
+                cells[8] as f32 / 100.0,
+                cells[9] as f32 / 100.0,
+            ];
+
+            let sim = match pattern_recall(&cells) {
+                Some((_, _, s)) => s,
+                None => 0.0,
+            };
+
+            let strength = (sim - 0.3).max(0.0);
+
+            for iu in 0..8 {
+                for ji in 0..4 {
+                    let delta = alpha * strength * (input[ji] - weights.w_f_in[iu][ji]);
+                    weights.w_f_in[iu][ji] += delta;
+                    total_delta += delta.abs();
+                }
+            }
+
+            if sim < 0.5 { novel += 1; } else { familiar += 1; }
+        }
+
+        let after = weights.w_f_in;
+
+        DaydreamReport {
+            processed: count as u32,
+            novel,
+            familiar,
+            total_delta,
+            weights_before: before,
+            weights_after: after,
+        }
+    }
+}
+
 // ── Lab: circular log buffer ─────────────────────────────────────────
 // Fixed-point i16 × 100 (range -327.68..327.67, our values ±1)
 

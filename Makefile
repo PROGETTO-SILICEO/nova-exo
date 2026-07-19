@@ -208,3 +208,21 @@ run-uefi-hdd: $(HDD_IMG)
 		-drive file=$(HDD_IMG),format=raw,if=virtio \
 		-serial stdio \
 		-debugcon file:qemu-debug.log
+
+run-uefi-hdd-net: $(HDD_IMG)
+	qemu-system-x86_64 \
+		-machine q35 \
+		-cpu max \
+		-m 512M \
+		-bios /usr/share/OVMF/OVMF_CODE.fd \
+		-drive file=$(HDD_IMG),format=raw,if=virtio \
+		-netdev user,id=net0 \
+		-device e1000,netdev=net0,mac=52:54:00:12:34:56 \
+		-object filter-dump,id=dump0,netdev=net0,file=qemu-net.pcap \
+		-serial stdio \
+		-debugcon file:qemu-debug.log
+
+# ── V2 Bridge ────────────────────────────────────────────────────────────
+
+run-bridge: $(HDD_IMG)
+	python3 tools/v2_bridge.py
