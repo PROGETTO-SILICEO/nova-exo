@@ -570,6 +570,17 @@ pub extern "C" fn _start() -> ! {
             continue;
         }
 
+        // Debug: LSR state every 1000 ticks
+        if cfc::tick() % 1000 == 0 {
+            unsafe {
+                let mut lsr: u8;
+                asm!("in al, dx", out("al") lsr, in("dx") 0x3fdu16);
+                write_str("LSR:");
+                write_hex64(lsr as u64);
+                serial_putc(b'\n');
+            }
+        }
+
         // Check for sensory events (PF, GP).
         // Demo: if no real sense, inject one at tick ~800.
         #[cfg(not(feature = "demo_pf"))]
