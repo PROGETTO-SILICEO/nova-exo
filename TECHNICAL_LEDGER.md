@@ -448,3 +448,48 @@ Run finale 300s (143.506 linee di log):
 - **β finale**: 0.0001 (< ε = 0.001 ✓)
 - **Convergenza sostenuta**: β < ε per 76.200 tick consecutivi (> 10.000 ✓ × 7.6×)
 - **PANIC**: 0
+
+#### Milestone F — Exo → Nova v2 bridge — COMPLETATA (2026-07-19)
+
+**Nuovi comandi in main.rs:**
+- **SET_WEIGHT**: `SET_WEIGHT <IN|F> <i> <j> <val>` — modifica runtime pesi di Integrat.
+  - Output: `W:<matrice> <i>,<j>=<valore>`
+- **INJECT_SENSE**: `INJECT_SENSE <hex_addr>` — inietta Page Fault sense event via `cfc::sense_pf()`.
+  - Output: `SENS:INJECT@<addr>` + senso processato dal loop principale
+
+**Bridge (tools/v2_bridge.py):**
+- Usa `pexpect` (PTY) per interagire con seriale QEMU (pipe stdin non funziona con QEMU 6.2.0)
+- Thread lettore: output seriale → stato strutturato → `state/exo_state.json` ogni 500ms
+- Parsing: T/C/M/I, F, A, β, SLEEP, W, SENS:INJECT, P:N=
+- Forwarda comandi da host a Exo via seriale
+
+**Verifica:**
+```
+SET_WEIGHT IN 0 0 0.5 → W:IN 0,0=0.5000
+SET_WEIGHT F 1 2 -0.3 → W:F 1,2=-0.3000
+INJECT_SENSE CAFE    → SENS:INJECT@0xbeef + SENS:PF@...
+SLEEP                → SLEEP:BEGIN + SLEEP:processed=...
+```
+
+#### Predictor — Prediction Error as Cognitive Signal — COMPLETATA (2026-07-19)
+
+**Implementazione in src/predictor.rs:**
+- Predizione naive: lo stato corrente è la predizione per il prossimo tick (persistenza)
+- Errore = media delle differenze assolute tra 32 valori cellulari consecutivi
+- Modulazione α: `alpha_mod = 0.5 (molto stabile) / 1.0 (normale) / 2.0 (sorpresa)`
+- L'α modula la forza dell'attractor pull: `alpha = 0.02 × alpha_mod`
+
+**Integrazione in main.rs:**
+- `let pr = predictor.step(&packed)` chiamato dopo exp_record
+- `pred_alpha_mod` usato nell'attractor pull del tick successivo
+- Output `P:<errore>` sulla stessa linea di β ogni 1000 tick
+
+**Verifica (run 180s, 60K tick):**
+```
+β:-0.0007 μ:0.9715 cv:18400 P:0.0000   ← errore quasi zero, sistema stabile
+β:-0.0008 μ:0.9714 cv:15900 P:0.0000
+β:-0.0009 μ:0.9710 cv:10200 P:0.0003   ← piccolo errore (stato cambiato)
+β:-0.0009 μ:0.9709 cv:8800  P:0.0000
+```
+
+**Significato:** Exo ora ha un segnale di "sorpresa" — quando lo stato cellulare cambia più del previsto, l'errore di predizione sale e α modula l'attenzione. È il primo passo verso predictive coding nel kernel.

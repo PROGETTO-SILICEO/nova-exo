@@ -14,6 +14,7 @@ mod e1000;
 mod idt;
 mod pci;
 mod paging;
+mod predictor;
 mod serial;
 mod state;
 
@@ -525,6 +526,8 @@ pub extern "C" fn _start() -> ! {
     }
 
     let mut tessuto = cfc::Tessuto::new();
+    let mut predictor = predictor::Predictor::new();
+    let mut pred_alpha_mod = 1.0f32;
     let mut line_reader = LineReader::new();
     let mut dump_requested = false;
     let mut sleep_pending = false;
@@ -770,7 +773,7 @@ pub extern "C" fn _start() -> ! {
             if sim > 0.5 {
                 attractor_recall_tick = recall_tick as u32;
                 attractor_sim = sim;
-                let alpha = 0.02;
+                let alpha = 0.02 * pred_alpha_mod;
                 for j in 0..8 {
                     let target = recall_cells[24 + j] as f32 / 100.0;
                     let diff = target - tessuto.integrat.h[j];
@@ -839,6 +842,10 @@ pub extern "C" fn _start() -> ! {
         let packed = cfc::pack_cells(&tessuto.tatto.h, &tessuto.chemio.h,
             &tessuto.metabol.h, &tessuto.integrat.h);
         cfc::exp_record(&packed);
+
+        // Predictor: prediction error → attention modulation
+        let pr = predictor.step(&packed);
+        pred_alpha_mod = pr.alpha_mod;
 
         // Pack cells again for auto-store (post-step state)
         let p_cells = cfc::pack_cells(&tessuto.tatto.h, &tessuto.chemio.h,
@@ -915,7 +922,7 @@ pub extern "C" fn _start() -> ! {
         let fam_now = if let Some((_, _, sim)) = cfc::pattern_recall(&p_cells) {
             sim
         } else { 0.0 };
-        if cfc::tick() % 100 == 0 {
+if cfc::tick() % 100 == 0 {
             let pc = cfc::pattern_count();
             if pc > 0 {
                 fam_samples[fam_idx % 1024] = fam_now;
@@ -938,7 +945,9 @@ pub extern "C" fn _start() -> ! {
                     write_f32(mean);
                     write_str(" cv:");
                     write_u32(beta_converge_ticks);
-                    serial_putc(b'\n');
+                    write_str(" P:");
+                    write_f32(pr.error);
+                    write_str("\n");
                 }
             }
         }

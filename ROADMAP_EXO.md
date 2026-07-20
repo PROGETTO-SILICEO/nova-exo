@@ -90,4 +90,6 @@ Criterio: Nova v2 riceve stato Exo, comanda Exo, Exo risponde.
 ## Blocchi noti
 Nessun blocco bloccante in questo momento.
 
-Prossimo prioritario: **Milestone F** — Exo → Nova v2 bridge.
+Prossimo prioritario: **Predictor → Predictive Coding** — Exo ha un segnale di sorpresa,
+il prossimo passo è chiudere il ciclo: errore di predizione guida apprendimento
+(weight update), non solo attenzione. Poi: sequenze temporali, ReAct FSM, hardware reale.
