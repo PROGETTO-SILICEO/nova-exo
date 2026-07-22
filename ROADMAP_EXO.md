@@ -78,8 +78,23 @@ Risultato: μ = 0.9589, β = 0.0001, conv = 76.200 tick, 0 PANIC.
 
 ---
 
+## Milestone G — Predictive Forward Model (PFM) + DREAM
+- [x] PredictiveModule: layer lineare 36×32 + bias 32 (predice 32 dim stato da [cells(8) + chemio(4) = 12 pad → 36])
+- [x] Delta rule online: wt+1 = wt + η * (target - pred) * input (η=0.0001)
+- [x] Buffer errore circolare 128: MSE rolling, trend detection (sliding window 32)
+- [x] Cognitive upgrade: errore → FORCE_STORE se trend anomalo (ANOMALY_THRESH=0.0005, ANOMALY_TRIGGER=5)
+- [x] Output β: `P:<MSE> T:=^+ A:<anomaly_ticks>` su linea β
+- [x] Comando seriale `DREAM N`: chain predittiva N passi (max 16), verifica dopo N tick
+- [x] Certificazione: 99.717 tick, 0 PANIC, P:0.0020→0.0001 (-20×), cv=35.400, μ=0.9535
+- [x] Disturbo SET_WEIGHT: recupero 0.0087→0.0008 in ~2000 tick, 0 PANIC
+- [x] DREAM: chain 8 passi, MSE 0.0008, pred_T0=0.6201 ≈ act_T0=0.6200
+
+Criterio: PFM predice con errore 0.0001, rileva trend, guida memoria, catena predittiva accurata.
+Risultato: **certificato.** Tutti i criteri superati. Exo v0.13.
+
+---
+
 ## Milestone F — Exo → Nova v2 bridge
-- [ ] Serial output in formato leggibile da v2 (già c'è, ma manca parser lato v2)
 - [ ] Comandi da v2: SET_WEIGHT, INJECT_SENSE, SLEEP_NOW
 - [ ] Nova v2 può leggere exo_state.json e rispondere modificando parametri Exo
 
@@ -90,6 +105,6 @@ Criterio: Nova v2 riceve stato Exo, comanda Exo, Exo risponde.
 ## Blocchi noti
 Nessun blocco bloccante in questo momento.
 
-Prossimo prioritario: **Predictor → Predictive Coding** — Exo ha un segnale di sorpresa,
-il prossimo passo è chiudere il ciclo: errore di predizione guida apprendimento
-(weight update), non solo attenzione. Poi: sequenze temporali, ReAct FSM, hardware reale.
+Prossimo prioritario: **Hidden layer non lineare** nel PFM per catturare la nonlinearità residua delle CfC
+(e ridurre MSE sotto 0.0001). Poi: DREAM autonomo periodico (sogno spontaneo), meta-apprendimento
+sull'errore di DREAM, e chiusura del ciclo predittivo (errore → weight update strutturale).

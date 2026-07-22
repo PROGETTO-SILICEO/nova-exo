@@ -526,7 +526,7 @@ pub extern "C" fn _start() -> ! {
     }
 
     let mut tessuto = cfc::Tessuto::new();
-    let mut predictor = predictor::Predictor::new();
+    let mut predictor = predictor::PredictiveModule::new();
     let mut pred_alpha_mod = 1.0f32;
     let mut line_reader = LineReader::new();
     let mut dump_requested = false;
@@ -536,6 +536,10 @@ pub extern "C" fn _start() -> ! {
     let mut beta_converge_ticks = 0u32;
     let mut fam_samples: [f32; 1024] = [0.0; 1024];
     let mut fam_idx: usize = 0;
+    let mut dream_chain: [[f32; 32]; 16] = [[0.0; 32]; 16];
+    let mut dream_steps: usize = 0;
+    let mut dream_tick: u64 = 0;
+    let mut dream_pending: bool = false;
     let dt_tatto = 0.001f32;
     let dt_rest = 0.01f32;
 
@@ -613,7 +617,7 @@ pub extern "C" fn _start() -> ! {
         }
 
         // Check for commands vs CSV input on serial
-        let mut chemio_input;
+        let mut chemio_input = [0.0; 4];
         if line_reader.has_line {
             let raw = line_reader.line();
             write_str("RX:"); for &b in raw { serial_putc(b); } serial_putc(b'\n');
@@ -622,6 +626,37 @@ pub extern "C" fn _start() -> ! {
                 chemio_input = [0.0; 4];
             } else if raw == b"DUMP" {
                 dump_requested = true;
+                chemio_input = [0.0; 4];
+            } else if raw.starts_with(b"DREAM") {
+                let steps = if raw.len() > 5 {
+                    let mut n = 0usize;
+                    for &b in &raw[5..] {
+                        if b == b' ' { continue; }
+                        if b < b'0' || b > b'9' { break; }
+                        n = n * 10 + (b - b'0') as usize;
+                    }
+                    n.max(1).min(16)
+                } else { 16 };
+                let p = cfc::pack_cells(&tessuto.tatto.h, &tessuto.chemio.h,
+                    &tessuto.metabol.h, &tessuto.integrat.h);
+                let dc = predictor.dream(&p, &chemio_input, steps);
+                dream_chain = dc;
+                dream_steps = steps;
+                dream_tick = cfc::tick();
+                dream_pending = true;
+                write_str("DREAM:BEGIN steps=");
+                write_u32(steps as u32);
+                write_str("\n");
+                for k in 0..steps.min(4) {
+                    write_str("D:");
+                    write_u32(k as u32);
+                    write_str(" T0="); write_f32(dc[k][0]);
+                    write_str(" T1="); write_f32(dc[k][1]);
+                    write_str(" C0="); write_f32(dc[k][8]);
+                    write_str(" C1="); write_f32(dc[k][9]);
+                    write_str("\n");
+                }
+                write_str("DREAM:END\n");
                 chemio_input = [0.0; 4];
             } else if raw == b"STORE" {
                 let p = cfc::pack_cells(&tessuto.tatto.h, &tessuto.chemio.h,
@@ -843,9 +878,19 @@ pub extern "C" fn _start() -> ! {
             &tessuto.metabol.h, &tessuto.integrat.h);
         cfc::exp_record(&packed);
 
-        // Predictor: prediction error → attention modulation
-        let pr = predictor.step(&packed);
+        // PFM: predice S(t+dt) da S(t)+I(t), errore MSE → attention modulation
+        let pr = predictor.step(&p_cells, &chemio_input, &packed);
         pred_alpha_mod = pr.alpha_mod;
+        if pr.force_store && cfc::tick() % 10 != 0 {
+            let novel = match cfc::pattern_recall(&packed) {
+                None => true,
+                Some((_, _, sim)) => sim < cfc::PATTERN_SIM_THRESH,
+            };
+            if novel {
+                write_str("M:FORCE_STORE\n");
+                let _ = cfc::pattern_store(cfc::tick(), &packed);
+            }
+        }
 
         // Pack cells again for auto-store (post-step state)
         let p_cells = cfc::pack_cells(&tessuto.tatto.h, &tessuto.chemio.h,
@@ -860,6 +905,30 @@ pub extern "C" fn _start() -> ! {
             if novel {
                 let _ = cfc::pattern_store(cfc::tick(), &p_cells);
             }
+        }
+
+        // Dream verification: compare predicted chain with actual state
+        if dream_pending && cfc::tick() >= dream_tick + dream_steps as u64 {
+            dream_pending = false;
+            let actual: [f32; 32] = {
+                let mut a = [0.0f32; 32];
+                for i in 0..32 { a[i] = p_cells[i] as f32 / 100.0; }
+                a
+            };
+            let predicted = dream_chain[dream_steps - 1];
+            let mut err_sum = 0.0f32;
+            for i in 0..32 {
+                let d = predicted[i] - actual[i];
+                err_sum += d * d;
+            }
+            let mse = err_sum / 32.0;
+            write_str("DREAM:VERIFY mse=");
+            write_f32(mse);
+            write_str(" steps=");
+            write_u32(dream_steps as u32);
+            write_str(" pred_T0="); write_f32(predicted[0]);
+            write_str(" act_T0="); write_f32(actual[0]);
+            write_str("\n");
         }
 
         // Publish state every 100 ticks
@@ -947,6 +1016,17 @@ if cfc::tick() % 100 == 0 {
                     write_u32(beta_converge_ticks);
                     write_str(" P:");
                     write_f32(pr.error);
+                    let trend_c = match pr.trend {
+                        predictor::Trend::Stable => '=',
+                        predictor::Trend::Rising => '+',
+                        predictor::Trend::Falling => '-',
+                    };
+                    write_str(" T:");
+                    serial_putc(trend_c as u8);
+                    if pr.anomaly_ticks > 0 {
+                        write_str(" A:");
+                        write_u32(pr.anomaly_ticks as u32);
+                    }
                     write_str("\n");
                 }
             }
