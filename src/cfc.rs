@@ -1,32 +1,88 @@
 // ── Weights ──────────────────────────────────────────────────────────────
 
+pub const NEURONS_PER_CELL: usize = 16;
+pub const TOTAL_NEURONS: usize = 4 * NEURONS_PER_CELL;
+
 pub struct CfcWeights {
-    pub w_f: [[f32; 8]; 8],
-    pub w_f_in: [[f32; 4]; 8],
-    pub b_f: [f32; 8],
-    pub w_g: [[f32; 8]; 8],
-    pub w_g_in: [[f32; 4]; 8],
-    pub b_g: [f32; 8],
+    pub w_f: [[f32; NEURONS_PER_CELL]; NEURONS_PER_CELL],
+    pub w_f_in: [[f32; 4]; NEURONS_PER_CELL],
+    pub b_f: [f32; NEURONS_PER_CELL],
+    pub w_g: [[f32; NEURONS_PER_CELL]; NEURONS_PER_CELL],
+    pub w_g_in: [[f32; 4]; NEURONS_PER_CELL],
+    pub b_g: [f32; NEURONS_PER_CELL],
+}
+
+impl CfcWeights {
+    /// Generate Xavier-like weights for `NEURONS_PER_CELL` neurons.
+    /// Deterministic: same seed → same weights.
+    pub fn new_xavier(seed: u64) -> Self {
+        // Simple LCG (Numerical Recipes) for determinism on bare metal
+        let mut rng = Lcg::new(seed);
+
+        let mut w_f = [[0.0f32; NEURONS_PER_CELL]; NEURONS_PER_CELL];
+        let mut w_f_in = [[0.0f32; 4]; NEURONS_PER_CELL];
+        let mut w_g = [[0.0f32; NEURONS_PER_CELL]; NEURONS_PER_CELL];
+        let mut w_g_in = [[0.0f32; 4]; NEURONS_PER_CELL];
+
+        // Xavier: fan_in = NEURONS_PER_CELL, scale ≈ sqrt(6 / (fan_in + fan_out))
+        let scale = libm::sqrtf(6.0 / (2.0 * NEURONS_PER_CELL as f32));
+
+        for i in 0..NEURONS_PER_CELL {
+            for j in 0..NEURONS_PER_CELL {
+                w_f[i][j] = rng.uniform() * 2.0 * scale - scale;
+                w_g[i][j] = rng.uniform() * 2.0 * scale - scale;
+            }
+            for k in 0..4 {
+                w_f_in[i][k] = rng.uniform() * 2.0 * scale - scale;
+                w_g_in[i][k] = rng.uniform() * 2.0 * scale - scale;
+            }
+        }
+
+        Self {
+            w_f,
+            w_f_in,
+            b_f: [0.0; NEURONS_PER_CELL],
+            w_g,
+            w_g_in,
+            b_g: [0.0; NEURONS_PER_CELL],
+        }
+    }
+}
+
+/// Simple LCG for deterministic random floats in [0, 1)
+struct Lcg {
+    state: u64,
+}
+
+impl Lcg {
+    fn new(seed: u64) -> Self {
+        Self { state: seed }
+    }
+
+    fn uniform(&mut self) -> f32 {
+        self.state = self.state.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+        ((self.state >> 11) as f32) * (1.0 / 9007199254740992.0) // 0..1
+    }
 }
 
 // ── State ────────────────────────────────────────────────────────────────
 
 pub struct CfcState {
-    pub h: [f32; 8],
+    pub h: [f32; NEURONS_PER_CELL],
 }
 
 impl CfcState {
     pub const fn new() -> Self {
-        Self { h: [0.0; 8] }
+        Self { h: [0.0; NEURONS_PER_CELL] }
     }
 
     pub fn step(&mut self, input: &[f32; 4], dt: f32, w: &CfcWeights) {
-        let mut f = [0.0f32; 8];
-        let mut pre_g = [0.0f32; 8];
+        let mut f = [0.0f32; NEURONS_PER_CELL];
+        let mut pre_g = [0.0f32; NEURONS_PER_CELL];
 
-        for i in 0..8 {
+        for i in 0..NEURONS_PER_CELL {
             let mut fi = w.b_f[i];
-            for j in 0..8 {
+            for j in 0..NEURONS_PER_CELL {
                 fi += w.w_f[i][j] * self.h[j];
             }
             for k in 0..4 {
@@ -35,7 +91,7 @@ impl CfcState {
             f[i] = fi;
 
             let mut gi = w.b_g[i];
-            for j in 0..8 {
+            for j in 0..NEURONS_PER_CELL {
                 gi += w.w_g[i][j] * self.h[j];
             }
             for k in 0..4 {
@@ -44,7 +100,7 @@ impl CfcState {
             pre_g[i] = gi;
         }
 
-        for i in 0..8 {
+        for i in 0..NEURONS_PER_CELL {
             let g = tanh_approx(pre_g[i]);
             let s = sigmoid_approx(-f[i] * dt);
             self.h[i] = s * g + (1.0 - s) * self.h[i];
@@ -254,9 +310,9 @@ const EXP_CAP: usize = 32;
 static mut EXP_IDX: usize = 0;
 static mut EXP_FULL: bool = false;
 static mut EXP_TICKS: [u64; EXP_CAP] = [0; EXP_CAP];
-static mut EXP_CELLS: [[i16; 32]; EXP_CAP] = [[0; 32]; EXP_CAP];
+static mut EXP_CELLS: [[i16; TOTAL_NEURONS]; EXP_CAP] = [[0; TOTAL_NEURONS]; EXP_CAP];
 
-pub fn exp_record(cells: &[i16; 32]) {
+pub fn exp_record(cells: &[i16; TOTAL_NEURONS]) {
     unsafe {
         let i = EXP_IDX % EXP_CAP;
         EXP_TICKS[i] = tick();
@@ -278,9 +334,9 @@ pub fn exp_tick_at(pos: usize) -> u64 {
     }
 }
 
-pub fn exp_cells_at(pos: usize) -> [i16; 32] {
+pub fn exp_cells_at(pos: usize) -> [i16; TOTAL_NEURONS] {
     unsafe {
-        if pos < EXP_CAP { EXP_CELLS[pos] } else { [0; 32] }
+        if pos < EXP_CAP { EXP_CELLS[pos] } else { [0; TOTAL_NEURONS] }
     }
 }
 
@@ -289,8 +345,8 @@ pub struct DaydreamReport {
     pub novel: u32,
     pub familiar: u32,
     pub total_delta: f32,
-    pub weights_before: [[f32; 4]; 8],
-    pub weights_after: [[f32; 4]; 8],
+    pub weights_before: [[f32; 4]; NEURONS_PER_CELL],
+    pub weights_after: [[f32; 4]; NEURONS_PER_CELL],
 }
 
 pub fn daydream(weights: &mut CfcWeights, alpha: f32) -> DaydreamReport {
@@ -307,8 +363,8 @@ pub fn daydream(weights: &mut CfcWeights, alpha: f32) -> DaydreamReport {
             let input: [f32; 4] = [
                 cells[0] as f32 / 100.0,
                 cells[1] as f32 / 100.0,
-                cells[8] as f32 / 100.0,
-                cells[9] as f32 / 100.0,
+                cells[NEURONS_PER_CELL] as f32 / 100.0,
+                cells[NEURONS_PER_CELL + 1] as f32 / 100.0,
             ];
 
             let sim = match pattern_recall(&cells) {
@@ -318,7 +374,7 @@ pub fn daydream(weights: &mut CfcWeights, alpha: f32) -> DaydreamReport {
 
             let strength = (sim - 0.3).max(0.0);
 
-            for iu in 0..8 {
+            for iu in 0..NEURONS_PER_CELL {
                 for ji in 0..4 {
                     let delta = alpha * strength * (input[ji] - weights.w_f_in[iu][ji]);
                     weights.w_f_in[iu][ji] += delta;
@@ -349,18 +405,18 @@ const LOG_CAP: usize = 256;
 
 static mut LOG_IDX: usize = 0;
 static mut LOG_TICKS: [u64; LOG_CAP] = [0; LOG_CAP];
-static mut LOG_CELLS: [[i16; 32]; LOG_CAP] = [[0; 32]; LOG_CAP];
+static mut LOG_CELLS: [[i16; TOTAL_NEURONS]; LOG_CAP] = [[0; TOTAL_NEURONS]; LOG_CAP];
 
-pub fn log_record(tatto: &[f32; 8], chemio: &[f32; 8], metabol: &[f32; 8], integrat: &[f32; 8]) {
+pub fn log_record(tatto: &[f32; NEURONS_PER_CELL], chemio: &[f32; NEURONS_PER_CELL], metabol: &[f32; NEURONS_PER_CELL], integrat: &[f32; NEURONS_PER_CELL]) {
     unsafe {
         let i = LOG_IDX % LOG_CAP;
         let t = tick();
         LOG_TICKS[i] = t;
-        for j in 0..8 {
-            LOG_CELLS[i][j]      = (tatto[j]    * 100.0) as i16;
-            LOG_CELLS[i][8+j]    = (chemio[j]   * 100.0) as i16;
-            LOG_CELLS[i][16+j]   = (metabol[j]  * 100.0) as i16;
-            LOG_CELLS[i][24+j]   = (integrat[j] * 100.0) as i16;
+        for j in 0..NEURONS_PER_CELL {
+            LOG_CELLS[i][j]                    = (tatto[j]    * 100.0) as i16;
+            LOG_CELLS[i][NEURONS_PER_CELL + j]  = (chemio[j]   * 100.0) as i16;
+            LOG_CELLS[i][2 * NEURONS_PER_CELL + j]      = (metabol[j]  * 100.0) as i16;
+            LOG_CELLS[i][3 * NEURONS_PER_CELL + j]      = (integrat[j] * 100.0) as i16;
         }
         LOG_IDX = LOG_IDX.wrapping_add(1);
     }
@@ -376,9 +432,9 @@ pub fn log_tick_at(pos: usize) -> u64 {
     }
 }
 
-pub fn log_cells_at(pos: usize) -> [i16; 32] {
+pub fn log_cells_at(pos: usize) -> [i16; TOTAL_NEURONS] {
     unsafe {
-        if pos < LOG_CAP { LOG_CELLS[pos] } else { [0; 32] }
+        if pos < LOG_CAP { LOG_CELLS[pos] } else { [0; TOTAL_NEURONS] }
     }
 }
 
@@ -403,13 +459,13 @@ pub const PATTERN_SIM_THRESH: f32 = 0.88;
 static mut PATTERN_COUNT: usize = 0;
 static mut PATTERN_HEAD: usize = 0;
 static mut PATTERN_TICKS: [u64; PATTERN_CAP] = [0; PATTERN_CAP];
-static mut PATTERN_CELLS: [[i16; 32]; PATTERN_CAP] = [[0; 32]; PATTERN_CAP];
+static mut PATTERN_CELLS: [[i16; TOTAL_NEURONS]; PATTERN_CAP] = [[0; TOTAL_NEURONS]; PATTERN_CAP];
 
-fn pattern_similarity(a: &[i16; 32], b: &[i16; 32]) -> f32 {
+fn pattern_similarity(a: &[i16; TOTAL_NEURONS], b: &[i16; TOTAL_NEURONS]) -> f32 {
     let mut dot: i64 = 0;
     let mut na: i64 = 0;
     let mut nb: i64 = 0;
-    for i in 0..32 {
+    for i in 0..TOTAL_NEURONS {
         let ai = a[i] as i64;
         let bi = b[i] as i64;
         dot += ai * bi;
@@ -430,7 +486,7 @@ pub fn pattern_clear() {
     unsafe { PATTERN_COUNT = 0; PATTERN_HEAD = 0; }
 }
 
-pub fn pattern_store(tick: u64, cells: &[i16; 32]) -> bool {
+pub fn pattern_store(tick: u64, cells: &[i16; TOTAL_NEURONS]) -> bool {
     unsafe {
         let idx = PATTERN_HEAD;
         PATTERN_TICKS[idx] = tick;
@@ -443,7 +499,7 @@ pub fn pattern_store(tick: u64, cells: &[i16; 32]) -> bool {
     }
 }
 
-pub fn pattern_recall(cells: &[i16; 32]) -> Option<(usize, u64, f32)> {
+pub fn pattern_recall(cells: &[i16; TOTAL_NEURONS]) -> Option<(usize, u64, f32)> {
     unsafe {
         if PATTERN_COUNT == 0 { return None; }
         let mut best_idx = 0;
@@ -459,7 +515,7 @@ pub fn pattern_recall(cells: &[i16; 32]) -> Option<(usize, u64, f32)> {
     }
 }
 
-pub fn pattern_recall_full(cells: &[i16; 32]) -> Option<(u64, f32, [i16; 32])> {
+pub fn pattern_recall_full(cells: &[i16; TOTAL_NEURONS]) -> Option<(u64, f32, [i16; TOTAL_NEURONS])> {
     unsafe {
         if PATTERN_COUNT == 0 { return None; }
         let mut best_idx = 0;
@@ -475,7 +531,7 @@ pub fn pattern_recall_full(cells: &[i16; 32]) -> Option<(u64, f32, [i16; 32])> {
     }
 }
 
-pub fn pattern_recall_n(cells: &[i16; 32], n: usize) -> [(usize, u64, f32); PATTERN_CAP] {
+pub fn pattern_recall_n(cells: &[i16; TOTAL_NEURONS], n: usize) -> [(usize, u64, f32); PATTERN_CAP] {
     let mut idxs = [0usize; PATTERN_CAP];
     let mut sims = [0.0f32; PATTERN_CAP];
     let cnt;
@@ -506,20 +562,20 @@ pub fn pattern_recall_n(cells: &[i16; 32], n: usize) -> [(usize, u64, f32); PATT
     results
 }
 
-pub fn pattern_get(idx: usize) -> Option<(u64, [i16; 32])> {
+pub fn pattern_get(idx: usize) -> Option<(u64, [i16; TOTAL_NEURONS])> {
     unsafe {
         if idx >= PATTERN_COUNT { None }
         else { Some((PATTERN_TICKS[idx], PATTERN_CELLS[idx])) }
     }
 }
 
-pub fn pack_cells(tatto: &[f32; 8], chemio: &[f32; 8], metabol: &[f32; 8], integrat: &[f32; 8]) -> [i16; 32] {
-    let mut cells = [0i16; 32];
-    for j in 0..8 {
+pub fn pack_cells(tatto: &[f32; NEURONS_PER_CELL], chemio: &[f32; NEURONS_PER_CELL], metabol: &[f32; NEURONS_PER_CELL], integrat: &[f32; NEURONS_PER_CELL]) -> [i16; TOTAL_NEURONS] {
+    let mut cells = [0i16; TOTAL_NEURONS];
+    for j in 0..NEURONS_PER_CELL {
         cells[j]     = (tatto[j]    * 100.0) as i16;
-        cells[8+j]   = (chemio[j]   * 100.0) as i16;
-        cells[16+j]  = (metabol[j]  * 100.0) as i16;
-        cells[24+j]  = (integrat[j] * 100.0) as i16;
+        cells[NEURONS_PER_CELL + j]     = (chemio[j]   * 100.0) as i16;
+        cells[2 * NEURONS_PER_CELL + j] = (metabol[j]  * 100.0) as i16;
+        cells[3 * NEURONS_PER_CELL + j] = (integrat[j] * 100.0) as i16;
     }
     cells
 }

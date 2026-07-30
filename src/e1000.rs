@@ -267,10 +267,10 @@ impl E1000 {
 
     pub fn tx_broadcast_state(
         tick_val: u64,
-        tatto: &[f32; 8],
-        chemio: &[f32; 8],
-        metabol: &[f32; 8],
-        integrat: &[f32; 8],
+        tatto: &[f32; 16],
+        chemio: &[f32; 16],
+        metabol: &[f32; 16],
+        integrat: &[f32; 16],
     ) {
         let base = Self::mmio_base();
         unsafe {

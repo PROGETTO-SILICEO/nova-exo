@@ -8,8 +8,8 @@
 // Design teorico: TASK_predizione_esplicita.md (Nova, 20 Luglio 2026)
 // Upgrade cognitivo: Sempre, 20 Luglio 2026
 
-pub const PFM_IN: usize = 36;
-pub const PFM_OUT: usize = 32;
+pub const PFM_IN: usize = 68;
+pub const PFM_OUT: usize = 64;
 const ERR_BUF: usize = 128;
 const SHORT_WIN: usize = 16;
 const LONG_WIN: usize = 64;
@@ -87,15 +87,15 @@ impl PredictiveModule {
         else { Trend::Stable }
     }
 
-    pub fn predict(&self, state: &[i16; 32], input: &[f32; 4]) -> [f32; PFM_OUT] {
+    pub fn predict(&self, state: &[i16; 64], input: &[f32; 4]) -> [f32; PFM_OUT] {
         let mut concat = [0.0f32; PFM_IN];
-        for i in 0..32 {
+        for i in 0..64 {
             concat[i] = state[i] as f32 / 100.0;
         }
-        concat[32] = input[0];
-        concat[33] = input[1];
-        concat[34] = input[2];
-        concat[35] = input[3];
+        concat[64] = input[0];
+        concat[65] = input[1];
+        concat[66] = input[2];
+        concat[67] = input[3];
 
         let mut pred = [0.0f32; PFM_OUT];
         for i in 0..PFM_OUT {
@@ -113,10 +113,10 @@ impl PredictiveModule {
         for i in 0..PFM_OUT {
             concat[i] = state[i];
         }
-        concat[32] = input[0];
-        concat[33] = input[1];
-        concat[34] = input[2];
-        concat[35] = input[3];
+        concat[64] = input[0];
+        concat[65] = input[1];
+        concat[66] = input[2];
+        concat[67] = input[3];
 
         let mut pred = [0.0f32; PFM_OUT];
         for i in 0..PFM_OUT {
@@ -131,7 +131,7 @@ impl PredictiveModule {
 
     /// Chain prediction: N passi, input congelato
     /// Ogni passo usa la predizione del passo precedente come stato
-    pub fn dream(&self, state: &[i16; 32], input: &[f32; 4], steps: usize) -> [[f32; PFM_OUT]; 16] {
+    pub fn dream(&self, state: &[i16; 64], input: &[f32; 4], steps: usize) -> [[f32; PFM_OUT]; 16] {
         let mut chain = [[0.0f32; PFM_OUT]; 16];
         let n = steps.min(16);
         let mut s: [f32; PFM_OUT] = {
@@ -156,15 +156,15 @@ impl PredictiveModule {
         sum_sq / PFM_OUT as f32
     }
 
-    fn learn(&mut self, state: &[i16; 32], input: &[f32; 4], actual: &[f32; PFM_OUT]) {
+    fn learn(&mut self, state: &[i16; 64], input: &[f32; 4], actual: &[f32; PFM_OUT]) {
         let mut concat = [0.0f32; PFM_IN];
-        for i in 0..32 {
+        for i in 0..64 {
             concat[i] = state[i] as f32 / 100.0;
         }
-        concat[32] = input[0];
-        concat[33] = input[1];
-        concat[34] = input[2];
-        concat[35] = input[3];
+        concat[64] = input[0];
+        concat[65] = input[1];
+        concat[66] = input[2];
+        concat[67] = input[3];
 
         let predicted = self.predict(state, input);
         let alpha = self.learning_rate;
@@ -178,7 +178,7 @@ impl PredictiveModule {
         }
     }
 
-    pub fn step(&mut self, state: &[i16; 32], input: &[f32; 4], actual: &[i16; 32]) -> PredictionReport {
+    pub fn step(&mut self, state: &[i16; 64], input: &[f32; 4], actual: &[i16; 64]) -> PredictionReport {
         let actual_f32: [f32; PFM_OUT] = {
             let mut a = [0.0f32; PFM_OUT];
             for i in 0..PFM_OUT {
