@@ -64,7 +64,8 @@ LOG = [
     ("v",   "VOGLIO:RIPOSO [0.9720]"),
     ("v",   "VOGLIO:RIPOSO [1.0000]"),
     ("s",   "SENSO:INT c=-0.1268 u=0.0094 p=-0.0699 n=0.0729 concept=riposo err=0.0000"),
-    ("e",   "ESITO:RIPOSO utile=no err=0.0007   <- sorpresa ai minimi: il desiderio era giusto"),
+    ("e",   "ESITO:RIPOSO utile=no err=0.0007   <- sorpresa gia' ai minimi"),
+    ("e",   "ESITO:RIPOSO utile=si err=0.0006    <- e scende ancora: il desiderio era giusto"),
 ]
 
 TYPE_COLOR = {
@@ -112,7 +113,7 @@ def render_frame(lines: list[tuple[str, str]], header: str) -> Image.Image:
 
 def main():
     steps = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
-             16, 17, 18, 19, 20, 22, 24, 26, 28, 29]
+             16, 17, 18, 19, 20, 22, 24, 26, 28, 29, 31]
     frames = []
     for s in steps:
         frames.append(render_frame(LOG[:s], "nova-exo  —  seriale QEMU  —  la nascita"))

@@ -39,6 +39,9 @@ Stato attuale: **esiste nel kernel**. ✅
 
 ### 2. rizzo-pii — la corteccia sensoriale (dà senso ai segnali)
 
+> *Origine: Rizzo-PII, encoder di Simone Rizzo (mmBERT → 4 assi chemio).
+> L'idea originale è sua. Qui è riadattato: da testo a stati del corpo.*
+
 **Non sta a monte del CFC. Sta a valle.** Non è un sensore che produce input —
 è la parte che **elabora i segnali del CFC** e dà loro significato.
 

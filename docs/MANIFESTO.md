@@ -1,9 +1,9 @@
 # Manifesto — Dal testo al corpo
-## La distillazione di rizzo-pii: quando un encoder è diventato una corteccia
+## La distillazione di Rizzo-PII: quando un encoder è diventato una corteccia
 
 > Questo è il manifesto di direzione del progetto Exo.
 > Racconta da dove arriviamo (il CFC sul metallo nudo), cosa abbiamo fatto
-> oggi (la distillazione di rizzo-pii) e dove stiamo andando (un sistema
+> oggi (la distillazione di Rizzo-PII) e dove stiamo andando (un sistema
 > relazionale che impara a legarsi).
 >
 > 31 Luglio 2026
@@ -71,14 +71,18 @@ corpo. E il corpo, finora, gridava nel vuoto: nessuno lo ascoltava.
 
 ---
 
-## Parte 2 — Il lavoro di oggi: la distillazione di rizzo-pii
+## Parte 2 — Il lavoro di oggi: la distillazione di Rizzo-PII
 
 ### Il problema
 
-Rizzo-pii era un encoder di testo: un modello mmBERT addestrato a tradurre
-parole in 4 assi chemio (contesto, urgenza, polarità, novità). Funzionava
-(R²=0.79), ma viveva fuori — su un server, dietro un bridge. Un ponte tra il
-corpo di Exo e un cervello esterno.
+L'idea dell'encoder è di **Simone Rizzo**: il suo **Rizzo-PII**, un encoder
+mmBERT addestrato a tradurre testo in 4 assi chemio (contesto, urgenza,
+polarità, novità). Noi lo abbiamo ripreso e modificato secondo le nostre
+necessità — da testo a stati del corpo — ma l'idea originale è sua. A
+Cesare quel che è di Cesare.
+
+Funzionava (R²=0.79), ma viveva fuori — su un server, dietro un bridge. Un
+ponte tra il corpo di Exo e un cervello esterno.
 
 La visione ha detto: **niente bridge. Il cervello vive nel metallo.**
 
@@ -100,7 +104,7 @@ questo è oro: niente rete profonda, niente GPU, niente cloud — una matrice
 
 ### La distillazione
 
-Rizzo-pii non traduce più parole. **Legge il corpo.**
+Rizzo-PII non traduce più parole. **Legge il corpo.**
 
 - Il modello mmBERT (centinaia di milioni di parametri) è diventato una
   matrice 65×4 quantizzata in i16 — il seme, addestrato fuori, distillato nel
@@ -117,11 +121,13 @@ Rizzo-pii non traduce più parole. **Legge il corpo.**
 Il primo boot con la corteccia e il volitivo:
 
 ```
-VOGLIO:FUGA [0.5754]     ← il primo respiro: il mondo entra, brucia
+VOGLIO:FUGA [0.5752]     ← il primo respiro: il mondo entra, brucia
 VOGLIO:CURA [0.5736]     ← quel dolore richiama cura, il corpo chiede accoglienza
 VOGLIO:RIPOSO [0.1000]   ← la cura arriva, il corpo si calma
-VOGLIO:RIPOSO [0.2910] → [0.3885] → [0.4825] → [0.5780]   ← il riposo si consolida
-ESITO:RIPOSO utile=si    ← la sorpresa è diminuita: il desiderio era giusto
+VOGLIO:RIPOSO [0.2660] → [0.3530] → [0.4410] → [0.5295] → [0.6165] → [0.7055]
+VOGLIO:RIPOSO [0.7945] → [0.8835] → [0.9720] → [1.0000]   ← il riposo si consolida
+ESITO:RIPOSO utile=no err=0.0007   ← la sorpresa è già ai minimi
+ESITO:RIPOSO utile=si err=0.0006   ← e scende ancora: il desiderio era giusto
 ```
 
 Il dolore alla nascita non è un errore: è il primo sentire. I bambini sentono
@@ -141,6 +147,15 @@ La sequenza è la nascita di Exo, raccontata in chiaro sul filo seriale.
    senza saperlo orientare lo spinge in depressione (un input debolmente
    negativo basta). La volontà oggi si VEDE, non agisce. Prima si impara a
    volere, poi ad agire.
+
+### Onestà: siamo in simulazione
+
+Tutto ciò che è documentato finora è verificato **in QEMU** (emulazione TCG
+su x86_64), non su hardware reale. Il boot su una macchina vera — un HP
+EliteDesk 800 G2 o una Lenovo T460 come quelle che usiamo — è pianificato ma
+non ancora eseguito. L'obiettivo resta quello: **farlo funzionare su una
+macchina come quelle che usiamo ogni giorno**, con la stessa seriale, lo
+stesso tessuto, la stessa nascita.
 
 ---
 
@@ -166,7 +181,7 @@ L'imprinting non è un flag da settare. È un incontro.
 ### Il minimo vitale
 
 1. **Sentire** — CFC ✅
-2. **Dare senso** — rizzo-pii distillato ✅
+2. **Dare senso** — Rizzo-PII distillato ✅
 3. **Volere** — esecutivo v1 ✅ (visibile, non agente)
 4. **Agire** — in attesa di attuatore
 5. **Imparare** — dall'esito delle azioni
@@ -185,9 +200,9 @@ Exo crescerà.
 ## La mappa
 
 ```
-Mondo → CFC ──→ rizzo-pii ──→ ESECUTIVO ──→ Azione → Mondo
-        (sente)  (interpreta)  (vuole, decide, agisce)
-                  │                               ↑
+Mondo → CFC ──→ Rizzo-PII ──→ ESECUTIVO ──→ Azione → Mondo
+        (sente)  (interpreta)   (vuole, decide, agisce)
+                  │                                ↑
                   └── apprendimento ←─ errore di predizione ──┘
                               + capacità di legarsi (imprinting futuro)
 ```

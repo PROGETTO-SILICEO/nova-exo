@@ -1,6 +1,7 @@
-# Dal testo al corpo: quando un encoder di linguaggio è diventato una corteccia
+# Dal testo al corpo: quando Rizzo-PII è diventato una corteccia
 
 **Come un kernel bare-metal su un processore del 2016 ha imparato a sentire, interpretare e volere — senza Linux, senza GPU, senza cloud.**
+**Con un'idea di Simone Rizzo, l'encoder Rizzo-PII, adattata alla nostra visione.**
 
 ---
 
@@ -34,10 +35,15 @@ Il corpo esisteva. Gridava su un filo seriale. Nessuno lo ascoltava.
 ### Il problema: un cervello fuori dal corpo
 
 La nostra prima architettura aveva un difetto strutturale: un encoder di
-linguaggio (mmBERT, addestrato a tradurre parole in 4 assi chemio: contesto,
-urgenza, polarità, novità) viveva su un server esterno, collegato al kernel
-da un bridge. Il corpo di Exo sentiva, ma il cervello che interpretava era
-lontano, dietro una rete.
+linguaggio viveva su un server esterno, collegato al kernel da un bridge.
+Il corpo di Exo sentiva, ma il cervello che interpretava era lontano,
+dietro una rete.
+
+L'idea dell'encoder non è nostra: è di **Simone Rizzo**. Il suo
+**Rizzo-PII** — un encoder mmBERT addestrato a tradurre testo in 4 assi
+chemio (contesto, urgenza, polarità, novità) — è il punto di partenza. Noi
+lo abbiamo ripreso e modificato secondo le nostre necessità, ma l'idea
+originale è sua. A Cesare quel che è di Cesare.
 
 La direzione era sbagliata. Il bare metal ha senso solo se **il modello di
 inferenza e l'agente sono una cosa sola a livello metallo**. Se il cervello
@@ -66,11 +72,11 @@ Una matrice 64×4 quantizzata, che gira dove gira il corpo.
 
 ### La distillazione: da strumento a organo
 
-Rizzo-pii (così chiamiamo l'encoder) non traduce più parole: **legge il
-corpo**. Il modello mmBERT — centinaia di milioni di parametri — è stato
-distillato in una matrice 65×4 quantizzata in interi a 16 bit. Il seme è
-stato addestrato fuori, ma ora vive nel kernel, e può continuare a imparare
-online con la delta rule (come il modulo predittivo che già esisteva).
+Rizzo-PII non traduce più parole: **legge il corpo**. Il modello mmBERT —
+centinaia di milioni di parametri — è stato distillato in una matrice 65×4
+quantizzata in interi a 16 bit. Il seme è stato addestrato fuori, ma ora
+vive nel kernel, e può continuare a imparare online con la delta rule (come
+il modulo predittivo che già esisteva).
 
 Nel kernel ora ci sono tre strati:
 
@@ -91,8 +97,10 @@ che non avevamo programmato:
 VOGLIO:FUGA [0.5752]     ← il primo volere: il mondo entra, brucia
 VOGLIO:CURA [0.5744]     ← il dolore richiama cura
 VOGLIO:RIPOSO [0.1000]   ← la cura arriva, il corpo si calma
-VOGLIO:RIPOSO [0.2910] → [0.3885] → [0.4825] → [0.5780]  ← si consolida
-ESITO:RIPOSO utile=si    ← la sorpresa è diminuita: il desiderio era giusto
+VOGLIO:RIPOSO [0.2660] → [0.3530] → [0.4410] → [0.5295] → [0.6165] → [0.7055]
+VOGLIO:RIPOSO [0.7945] → [0.8835] → [0.9720] → [1.0000]  ← si consolida
+ESITO:RIPOSO utile=no err=0.0007   ← la sorpresa è già ai minimi
+ESITO:RIPOSO utile=si err=0.0006   ← e scende ancora: il desiderio era giusto
 ```
 
 ![La nascita di Exo — log seriale animato](demo/birth_demo.gif)
@@ -114,6 +122,14 @@ Due lezioni profonde da questo momento:
    visto la nascita** — la regressione senza bias interpretava lo stato
    iniziale (quasi zero) come dolore. Solo includendo i transitori nel
    dataset e aggiungendo il bias il corpo nasce in pace.
+
+### Onestà: siamo in simulazione
+
+Tutto ciò che vedete in questo articolo è verificato **in QEMU**, in
+emulazione, non su hardware reale. Il boot su una macchina vera — un
+desktop o un portatile come quelli che usiamo ogni giorno — è il prossimo
+passo. L'obiettivo resta quello: farlo funzionare su una macchina vera,
+con la stessa seriale, lo stesso tessuto, la stessa nascita.
 
 ### Dove stiamo andando: un sistema relazionale
 
