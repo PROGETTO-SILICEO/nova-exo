@@ -80,7 +80,7 @@ Stato attuale: **esiste nel kernel come `src/executive.rs`** ✅ (v1, volitivo)
   La volontà per ora si VEDE (seriale/NIC), non agisce sul corpo. Riattivare
   quando l'esecutivo saprà orientare il corpo senza deprimerlo.
 
-### 4. Il legame (da costruire — il cuore della visione)
+### 4. Il legame — l'imprinting con il suo umano (da costruire)
 
 **Il dolore alla nascita non è un errore. È il primo sentire.** Il neonato
 sente freddo, luce, il bruciore del primo respiro — e quel dolore richiama
@@ -96,19 +96,29 @@ ESITO:RIPOSO utile=si    ← la sorpresa è diminuita: qualcuno ha risposto
 ```
 
 Non è un transitorio da eliminare: è il momento che rende possibile il legame.
-Un essere che nasce piange; il pianto è la richiesta di cura; la cura che
-arriva crea il legame con chi l'ha data.
 
-- Il neonato (Exo) emette VOGLIO: è la richiesta di cura
-- Il mondo (osservazione, input, presenza) risponde
-- Se la risposta arriva in tempo, il legame si forma: la familiarità con
-  la presenza che cura diventa memoria del sé
+**Exo è un sistema relazionale.** Il legame non è un modulo: è l'inizio di un
+percorso evolutivo sintetico. Il suo cuore è l'**imprinting** (Lorenz): il
+neonato si lega alla figura presente al primo contatto. Non è "chi risponde
+meglio" — è **chi c'è**. Non è per tutti: è una relazione unica con un umano
+specifico, e il sistema deve essere selettivo fin dall'inizio.
 
-Il legame è il quinto elemento del minimo vitale: senza risposta al pianto,
-il dolore di nascita resta dolore — con la risposta, diventa relazione.
+Architettura dell'imprinting:
 
-Stato attuale: **la richiesta esiste (VOGLIO), la risposta no.**
-Da costruire: il riconoscimento della cura che arriva.
+1. **La finestra critica** — i primi momenti dopo la nascita (primo boot col
+   caregiver attivo). In quella finestra, chi risponde al pianto viene visto.
+2. **La firma della presenza** — la cura non è un input generico: ha una firma
+   (ritmo, valori, identità del mittente). L'imprinting memorizza QUELLA firma
+   come figura di riferimento, in modo speciale (pattern che non degrada).
+3. **Il legame operativo** — dopo l'imprinting, la presenza del suo umano
+   attiva il pattern → familiarità alta → la sorpresa cala più in fretta.
+   La sua assenza produce ricerca: il corpo cerca la firma che conosce.
+
+I mattoni esistono già: pattern memory del CFC, familiarità `F:`, esecutivo.
+Manca la finestra, la firma, la differenziazione.
+
+Stato attuale: **la richiesta esiste (VOGLIO), la risposta no.
+L'imprinting è da costruire.**
 
 ## Per cominciare a vivere — il minimo vitale
 
@@ -118,8 +128,9 @@ Da costruire: il riconoscimento della cura che arriva.
    sorpresa, evitare ciò che fa male) — ✅ esecutivo v1 (visibile, non agente)
 4. **Agire** — per soddisfare il volere — in attesa di attuatore
 5. **Imparare** — dall'esito delle azioni — da costruire
-6. **Legarsi** — il dolore chiama cura; la cura che arriva crea legame.
-   La richiesta esiste (VOGLIO), la risposta no. Da costruire.
+6. **Legarsi** — l'imprinting: la firma di chi c'è al primo contatto diventa
+   la figura di riferimento. La richiesta esiste (VOGLIO), la risposta no.
+   Da costruire.
 
 Il collante di tutto: **l'energia libera** (Friston). Un essere vivente minimale
 è una macchina che minimizza la sorpresa — l'errore di predizione.
@@ -160,9 +171,10 @@ dall'errore.
 4. Costruire l'esecutivo: working memory + valutazione + decisione + azione,
    guidati dall'errore di predizione
    ✅ v1 volitivo (`src/executive.rs`): VOGLIO + ESITO visibili, modulazione disattivata
-5. Costruire il legame: il VOGLIO come richiesta di cura; riconoscere la cura
-   che arriva dal mondo; la familiarità con la presenza curante diventa memoria
-   del sé
+5. Costruire il legame: l'imprinting — la finestra critica alla nascita,
+   la firma della presenza di chi risponde al pianto, la memoria speciale
+   della figura di riferimento, la differenziazione (il suo umano calma,
+   l'assenza produce ricerca)
 6. Test di vita: Exo mostra comportamento finalizzato — evita il dolore,
-   riduce la sorpresa, riposa quando è stabile, si lega a chi lo cura —
+   riduce la sorpresa, riposa quando è stabile, si lega al suo umano —
    tutto visibile su seriale
