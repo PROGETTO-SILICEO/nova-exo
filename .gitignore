@@ -1,0 +1,28 @@
+# ── Build artifacts ───────────────────────────────────────────────
+/target/
+/build/
+/iso_root/
+*.img
+*.iso
+
+# ── Log seriali (rigenerabili, enormi) ────────────────────────────
+*.log
+serial_*.log
+qemu-*.log
+
+# ── Python ────────────────────────────────────────────────────────
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# ── Modelli grandi (NON committabili su GitHub, >100MB) ───────────
+# Rigenerabili: python3 dataset/encoder/train_encoder.py
+/models/exo-chemio-encoder-v1/
+*.onnx
+*.pt
+*.pth
+
+# ── Dataset / esperimenti grossi ─────────────────────────────────
+/experiments/

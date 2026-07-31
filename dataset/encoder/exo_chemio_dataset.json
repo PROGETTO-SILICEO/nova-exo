@@ -1,0 +1,7532 @@
+{
+  "meta": {
+    "description": "Dataset di training per ExoChemio encoder",
+    "version": "1.0",
+    "date": "2026-07-31",
+    "chemio_axes": {
+      "contesto": "cosa sta succedendo (-1=errore, 0=neutro, 1=vitale)",
+      "urgenza": "quanto è importante ora (0=normale, 1=critico)",
+      "polarità": "positivo/negativo (-1=neg, 0=neutro, 1=pos)",
+      "novità": "già visto/mai visto (0=familiare, 1=mai visto)"
+    },
+    "categories": {
+      "ERR": "Errori, eccezioni, fault",
+      "WARN": "Warning, allarmi, soglie",
+      "CMD": "Comandi ricevuti via seriale",
+      "LV": "Segnali di vita, heartbeat",
+      "SIL": "Silenzio, nessun input, idle",
+      "BOOT": "Risvegli, boot, inizializzazione",
+      "PAT": "Pattern riconosciuti (attrattori)",
+      "NOV": "Pattern nuovi, mai visti",
+      "PAIN": "Dolore persistente, affaticamento cellulare",
+      "REST": "Recupero, calma, stabilizzazione"
+    },
+    "total": 468,
+    "train": 374,
+    "val": 94
+  },
+  "categories": {
+    "ERR": "Errori, eccezioni, fault",
+    "WARN": "Warning, allarmi, soglie",
+    "CMD": "Comandi ricevuti via seriale",
+    "LV": "Segnali di vita, heartbeat",
+    "SIL": "Silenzio, nessun input, idle",
+    "BOOT": "Risvegli, boot, inizializzazione",
+    "PAT": "Pattern riconosciuti (attrattori)",
+    "NOV": "Pattern nuovi, mai visti",
+    "PAIN": "Dolore persistente, affaticamento cellulare",
+    "REST": "Recupero, calma, stabilizzazione"
+  },
+  "train": [
+    {
+      "text": "Tatto: 93 consecutive error ticks",
+      "category": "PAIN",
+      "chemio": {
+        "contesto": -0.6389,
+        "urgenza": 0.5162,
+        "polarità": -0.7955,
+        "novità": 0.3497
+      },
+      "target": [
+        -0.6389,
+        0.5162,
+        -0.7955,
+        0.3497
+      ]
+    },
+    {
+      "text": "NEW pattern detected at tick 91079",
+      "category": "NOV",
+      "chemio": {
+        "contesto": 0.1844,
+        "urgenza": 0.2142,
+        "polarità": 0.1299,
+        "novità": 0.8691
+      },
+      "target": [
+        0.1844,
+        0.2142,
+        0.1299,
+        0.8691
+      ]
+    },
+    {
+      "text": "Initializing IDT... OK",
+      "category": "BOOT",
+      "chemio": {
+        "contesto": 0.3901,
+        "urgenza": 0.6503,
+        "polarità": 0.3364,
+        "novità": 0.8828
+      },
+      "target": [
+        0.3901,
+        0.6503,
+        0.3364,
+        0.8828
+      ]
+    },
+    {
+      "text": "   ",
+      "category": "SIL",
+      "chemio": {
+        "contesto": -0.0366,
+        "urgenza": 0.0,
+        "polarità": 0.0171,
+        "novità": 0.0
+      },
+      "target": [
+        -0.0366,
+        0.0,
+        0.0171,
+        0.0
+      ]
+    },
+    {
+      "text": "REBOOT",
+      "category": "CMD",
+      "chemio": {
+        "contesto": 0.0015,
+        "urgenza": 0.475,
+        "polarità": 0.1398,
+        "novità": 0.13
+      },
+      "target": [
+        0.0015,
+        0.475,
+        0.1398,
+        0.13
+      ]
+    },
+    {
+      "text": "known state: h-dist=5.06 from pattern #2",
+      "category": "PAT",
+      "chemio": {
+        "contesto": 0.5745,
+        "urgenza": 0.122,
+        "polarità": 0.5198,
+        "novità": 0.0014
+      },
+      "target": [
+        0.5745,
+        0.122,
+        0.5198,
+        0.0014
+      ]
+    },
+    {
+      "text": "battito: tick=60920, hrange=[-0.42,0.39]",
+      "category": "LV",
+      "chemio": {
+        "contesto": 0.832,
+        "urgenza": 0.0,
+        "polarità": 0.7887,
+        "novità": 0.1958
+      },
+      "target": [
+        0.832,
+        0.0,
+        0.7887,
+        0.1958
+      ]
+    },
+    {
+      "text": "heartbeat OK — tick=31877, uptime=351s",
+      "category": "LV",
+      "chemio": {
+        "contesto": 0.8038,
+        "urgenza": 0.0,
+        "polarità": 0.7804,
+        "novità": 0.1786
+      },
+      "target": [
+        0.8038,
+        0.0,
+        0.7804,
+        0.1786
+      ]
+    },
+    {
+      "text": "heartbeat at 55341: no errors since last check",
+      "category": "LV",
+      "chemio": {
+        "contesto": 0.8809,
+        "urgenza": 0.0,
+        "polarità": 0.7899,
+        "novità": 0.1659
+      },
+      "target": [
+        0.8809,
+        0.0,
+        0.7899,
+        0.1659
+      ]
+    },
+    {
+      "text": "outlier: Integrat h=-0.29 exceeds threshold 8723",
+      "category": "NOV",
+      "chemio": {
+        "contesto": 0.3126,
+        "urgenza": 0.4088,
+        "polarità": 0.1192,
+        "novità": 0.8854
+      },
+      "target": [
+        0.3126,
+        0.4088,
+        0.1192,
+        0.8854
+      ]
+    },
+    {
+      "text": "SAVE 7",
+      "category": "CMD",
+      "chemio": {
+        "contesto": 0.1814,
+        "urgenza": 0.4201,
+        "polarità": 0.2416,
+        "novità": 0.6629
+      },
+      "target": [
+        0.1814,
+        0.4201,
+        0.2416,
+        0.6629
+      ]
+    },
+    {
+      "text": "RESET",
+      "category": "CMD",
+      "chemio": {
+        "contesto": 0.1417,
+        "urgenza": 0.5072,
+        "polarità": 0.4942,
+        "novità": 0.4322
+      },
+      "target": [
+        0.1417,
+        0.5072,
+        0.4942,
+        0.4322
+      ]
+    },
+    {
+      "text": "Tatto: 38 consecutive error ticks",
+      "category": "PAIN",
+      "chemio": {
+        "contesto": -0.5402,
+        "urgenza": 0.5063,
+        "polarità": -0.5531,
+        "novità": 0.6858
+      },
+      "target": [
+        -0.5402,
+        0.5063,
+        -0.5531,
+        0.6858
+      ]
+    },
+    {
+      "text": "calma: all cells within nominal range",
+      "category": "REST",
+      "chemio": {
+        "contesto": 0.5029,
+        "urgenza": 0.0,
+        "polarità": 0.6194,
+        "novità": 0.0
+      },
+      "target": [
+        0.5029,
+        0.0,
+        0.6194,
+        0.0
+      ]
+    },
+    {
+      "text": "heartbeat @17169: attractor pool=18",
+      "category": "LV",
+      "chemio": {
+        "contesto": 0.9783,
+        "urgenza": 0.0,
+        "polarità": 0.8036,
+        "novità": 0.1007
+      },
+      "target": [
+        0.9783,
+        0.0,
+        0.8036,
+        0.1007
+      ]
+    },
+    {
+      "text": "SLEEP:BEGIN — daydreaming, consolidating 25 patterns",
+      "category": "REST",
+      "chemio": {
+        "contesto": 0.3618,
+        "urgenza": 0.0,
+        "polarità": 0.4039,
+        "novità": 0.0
+      },
+      "target": [
+        0.3618,
+        0.0,
+        0.4039,
+        0.0
+      ]
+    },
+    {
+      "text": "WARM BOOT — retaining 20 patterns",
+      "category": "BOOT",
+      "chemio": {
+        "contesto": 0.6545,
+        "urgenza": 0.7297,
+        "polarità": 0.2682,
+        "novità": 0.8691
+      },
+      "target": [
+        0.6545,
+        0.7297,
+        0.2682,
+        0.8691
+      ]
+    },
+    {
+      "text": "ERR: double fault, shutdown requested",
+      "category": "ERR",
+      "chemio": {
+        "contesto": -0.8699,
+        "urgenza": 0.8855,
+        "polarità": -0.5551,
+        "novità": 0.7225
+      },
+      "target": [
+        -0.8699,
+        0.8855,
+        -0.5551,
+        0.7225
+      ]
+    },
+    {
+      "text": "tissue stress: 1.159 above threshold",
+      "category": "PAIN",
+      "chemio": {
+        "contesto": -0.5402,
+        "urgenza": 0.618,
+        "polarità": -0.4267,
+        "novità": 0.442
+      },
+      "target": [
+        -0.5402,
+        0.618,
+        -0.4267,
+        0.442
+      ]
+    },
+    {
+      "text": "alive — cells OK, 64 patterns stored",
+      "category": "LV",
+      "chemio": {
+        "contesto": 0.963,
+        "urgenza": 0.0,
+        "polarità": 0.7013,
+        "novità": 0.1577
+      },
+      "target": [
+        0.963,
+        0.0,
+        0.7013,
+        0.1577
+      ]
+    },
+    {
+      "text": "panic: stack overflow at cfc.rs:411",
+      "category": "ERR",
+      "chemio": {
+        "contesto": -0.6998,
+        "urgenza": 0.6916,
+        "polarità": -0.6069,
+        "novità": 0.6056
+      },
+      "target": [
+        -0.6998,
+        0.6916,
+        -0.6069,
+        0.6056
+      ]
+    },
+    {
+      "text": "unknown sequence: 00 01 10 11 00 10 00 10",
+      "category": "NOV",
+      "chemio": {
+        "contesto": 0.2987,
+        "urgenza": 0.2073,
+        "polarità": -0.0643,
+        "novità": 0.88
+      },
+      "target": [
+        0.2987,
+        0.2073,
+        -0.0643,
+        0.88
+      ]
+    },
+    {
+      "text": "heartbeat at 85172: no errors since last check",
+      "category": "LV",
+      "chemio": {
+        "contesto": 0.9657,
+        "urgenza": 0.0,
+        "polarità": 0.7117,
+        "novità": 0.1296
+      },
+      "target": [
+        0.9657,
+        0.0,
+        0.7117,
+        0.1296
+      ]
+    },
+    {
+      "text": "LEARN P0",
+      "category": "CMD",
+      "chemio": {
+        "contesto": 0.0402,
+        "urgenza": 0.2422,
+        "polarità": 0.5585,
+        "novità": 0.2871
+      },
+      "target": [
+        0.0402,
+        0.2422,
+        0.5585,
+        0.2871
+      ]
+    },
+    {
+      "text": "[no input]",
+      "category": "SIL",
+      "chemio": {
+        "contesto": -0.0442,
+        "urgenza": 0.0,
+        "polarità": 0.0148,
+        "novità": 0.0
+      },
+      "target": [
+        -0.0442,
+        0.0,
+        0.0148,
+        0.0
+      ]
+    },
+    {
+      "text": "ERR: double fault, shutdown requested",
+      "category": "ERR",
+      "chemio": {
+        "contesto": -0.9871,
+        "urgenza": 0.9058,
+        "polarità": -0.894,
+        "novità": 0.5619
+      },
+      "target": [
+        -0.9871,
+        0.9058,
+        -0.894,
+        0.5619
+      ]
+    },
+    {
+      "text": "ECHO stack overflow",
+      "category": "CMD",
+      "chemio": {
+        "contesto": 0.3619,
+        "urgenza": 0.0531,
+        "polarità": 0.3486,
+        "novità": 0.1675
+      },
+      "target": [
+        0.3619,
+        0.0531,
+        0.3486,
+        0.1675
+      ]
+    },
+    {
+      "text": "APIC timer at 1000 Hz",
+      "category": "BOOT",
+      "chemio": {
+        "contesto": 0.559,
+        "urgenza": 0.4261,
+        "polarità": 0.367,
+        "novità": 0.801
+      },
+      "target": [
+        0.559,
+        0.4261,
+        0.367,
+        0.801
+      ]
+    },
+    {
+      "text": "WARN: stack usage at 14% of 64MB",
+      "category": "WARN",
+      "chemio": {
+        "contesto": -0.1896,
+        "urgenza": 0.2795,
+        "polarità": -0.1022,
+        "novità": 0.3102
+      },
+      "target": [
+        -0.1896,
+        0.2795,
+        -0.1022,
+        0.3102
+      ]
+    },
+    {
+      "text": "A: 89.7% match with pattern #31",
+      "category": "PAT",
+      "chemio": {
+        "contesto": 0.5258,
+        "urgenza": 0.0877,
+        "polarità": 0.8096,
+        "novità": 0.1756
+      },
+      "target": [
+        0.5258,
+        0.0877,
+        0.8096,
+        0.1756
+      ]
+    },
+    {
+      "text": "COLD BOOT — all cells reset",
+      "category": "BOOT",
+      "chemio": {
+        "contesto": 0.494,
+        "urgenza": 0.6793,
+        "polarità": 0.4048,
+        "novità": 0.8419
+      },
+      "target": [
+        0.494,
+        0.6793,
+        0.4048,
+        0.8419
+      ]
+    },
+    {
+      "text": "GET neurons_per_cell",
+      "category": "CMD",
+      "chemio": {
+        "contesto": 0.0006,
+        "urgenza": 0.1161,
+        "polarità": 0.0651,
+        "novità": 0.2838
+      },
+      "target": [
+        0.0006,
+        0.1161,
+        0.0651,
+        0.2838
+      ]
+    },
+    {
+      "text": "SLEEP:BEGIN — daydreaming, consolidating 72 patterns",
+      "category": "REST",
+      "chemio": {
+        "contesto": 0.4015,
+        "urgenza": 0.0,
+        "polarità": 0.6904,
+        "novità": 0.0
+      },
+      "target": [
+        0.4015,
+        0.0,
+        0.6904,
+        0.0
+      ]
+    },
+    {
+      "text": "pattern recall: P0 @ t=63014",
+      "category": "PAT",
+      "chemio": {
+        "contesto": 0.6291,
+        "urgenza": 0.0516,
+        "polarità": 0.5293,
+        "novità": 0.0493
+      },
+      "target": [
+        0.6291,
+        0.0516,
+        0.5293,
+        0.0493
+      ]
+    },
+    {
+      "text": "APIC timer at 1000 Hz",
+      "category": "BOOT",
+      "chemio": {
+        "contesto": 0.4376,
+        "urgenza": 0.4971,
+        "polarità": 0.3847,
+        "novità": 0.9793
+      },
+      "target": [
+        0.4376,
+        0.4971,
+        0.3847,
+        0.9793
+      ]
+    },
+    {
+      "text": "",
+      "category": "SIL",
+      "chemio": {
+        "contesto": -0.002,
+        "urgenza": 0.0,
+        "polarità": -0.048,
+        "novità": 0.0
+      },
+      "target": [
+        -0.002,
+        0.0,
+        -0.048,
+        0.0
+      ]
+    },
+    {
+      "text": "calma: all cells within nominal range",
+      "category": "REST",
+      "chemio": {
+        "contesto": 0.5742,
+        "urgenza": 0.0,
+        "polarità": 0.4219,
+        "novità": 0.0
+      },
+      "target": [
+        0.5742,
+        0.0,
+        0.4219,
+        0.0
+      ]
+    },
+    {
+      "text": "WARN: memory usage at 85% of 4096kb",
+      "category": "WARN",
+      "chemio": {
+        "contesto": -0.4818,
+        "urgenza": 0.2953,
+        "polarità": -0.3844,
+        "novità": 0.1593
+      },
+      "target": [
+        -0.4818,
+        0.2953,
+        -0.3844,
+        0.1593
+      ]
+    },
+    {
+      "text": "tick 98491: all systems nominal",
+      "category": "LV",
+      "chemio": {
+        "contesto": 0.9156,
+        "urgenza": 0.0,
+        "polarità": 0.7723,
+        "novità": 0.0073
+      },
+      "target": [
+        0.9156,
+        0.0,
+        0.7723,
+        0.0073
+      ]
+    },
+    {
+      "text": "ERR: invalid argument to syscall #16",
+      "category": "ERR",
+      "chemio": {
+        "contesto": -0.8408,
+        "urgenza": 0.8598,
+        "polarità": -0.8002,
+        "novità": 0.4681
+      },
+      "target": [
+        -0.8408,
+        0.8598,
+        -0.8002,
+        0.4681
+      ]
+    },
+    {
+      "text": "NEW pattern detected at tick 88082",
+      "category": "NOV",
+      "chemio": {
+        "contesto": 0.2157,
+        "urgenza": 0.1507,
+        "polarità": -0.0236,
+        "novità": 0.9857
+      },
+      "target": [
+        0.2157,
+        0.1507,
+        -0.0236,
+        0.9857
+      ]
+    },
+    {
+      "text": "ERR: cannot acquire spinlock from IRQ context",
+      "category": "ERR",
+      "chemio": {
+        "contesto": -0.6124,
+        "urgenza": 0.7306,
+        "polarità": -0.6464,
+        "novità": 0.8701
+      },
+      "target": [
+        -0.6124,
+        0.7306,
+        -0.6464,
+        0.8701
+      ]
+    },
+    {
+      "text": "pain memory: GPF occurred 66 times in last 1002 ticks",
+      "category": "PAIN",
+      "chemio": {
+        "contesto": -0.6541,
+        "urgenza": 0.4476,
+        "polarità": -0.6113,
+        "novità": 0.4593
+      },
+      "target": [
+        -0.6541,
+        0.4476,
+        -0.6113,
+        0.4593
+      ]
+    },
+    {
+      "text": "HEARTBEAT — 411s uptime, 46 ticks processed",
+      "category": "LV",
+      "chemio": {
+        "contesto": 0.8863,
+        "urgenza": 0.0,
+        "polarità": 0.8918,
+        "novità": 0.0832
+      },
+      "target": [
+        0.8863,
+        0.0,
+        0.8918,
+        0.0832
+      ]
+    },
+    {
+      "text": "idle — tick 27481, no events",
+      "category": "SIL",
+      "chemio": {
+        "contesto": -0.0428,
+        "urgenza": 0.0,
+        "polarità": 0.0141,
+        "novità": 0.0
+      },
+      "target": [
+        -0.0428,
+        0.0,
+        0.0141,
+        0.0
+      ]
+    },
+    {
+      "text": "APIC timer at 250 Hz",
+      "category": "BOOT",
+      "chemio": {
+        "contesto": 0.2665,
+        "urgenza": 0.7105,
+        "polarità": 0.2012,
+        "novità": 0.8159
+      },
+      "target": [
+        0.2665,
+        0.7105,
+        0.2012,
+        0.8159
+      ]
+    },
+    {
+      "text": "first occurrence of IRQ",
+      "category": "NOV",
+      "chemio": {
+        "contesto": 0.2951,
+        "urgenza": 0.2154,
+        "polarità": -0.0283,
+        "novità": 0.9006
+      },
+      "target": [
+        0.2951,
+        0.2154,
+        -0.0283,
+        0.9006
+      ]
+    },
+    {
+      "text": "strange signal on syscall: constant",
+      "category": "NOV",
+      "chemio": {
+        "contesto": 0.1844,
+        "urgenza": 0.3306,
+        "polarità": 0.2404,
+        "novità": 0.9089
+      },
+      "target": [
+        0.1844,
+        0.3306,
+        0.2404,
+        0.9089
+      ]
+    },
+    {
+      "text": "pain memory: TIMER occurred 44 times in last 896 ticks",
+      "category": "PAIN",
+      "chemio": {
+        "contesto": -0.4918,
+        "urgenza": 0.5919,
+        "polarità": -0.6961,
+        "novità": 0.327
+      },
+      "target": [
+        -0.4918,
+        0.5919,
+        -0.6961,
+        0.327
+      ]
+    },
+    {
+      "text": "... waiting ...",
+      "category": "SIL",
+      "chemio": {
+        "contesto": -0.0335,
+        "urgenza": 0.0,
+        "polarità": 0.0476,
+        "novità": 0.0
+      },
+      "target": [
+        -0.0335,
+        0.0,
+        0.0476,
+        0.0
+      ]
+    },
+    {
+      "text": "tick 58015: all systems nominal",
+      "category": "LV",
+      "chemio": {
+        "contesto": 0.8708,
+        "urgenza": 0.0,
+        "polarità": 0.7005,
+        "novità": 0.0899
+      },
+      "target": [
+        0.8708,
+        0.0,
+        0.7005,
+        0.0899
+      ]
+    },
+    {
+      "text": "\n",
+      "category": "SIL",
+      "chemio": {
+        "contesto": 0.0184,
+        "urgenza": 0.0,
+        "polarità": 0.0009,
+        "novità": 0.0
+      },
+      "target": [
+        0.0184,
+        0.0,
+        0.0009,
+        0.0
+      ]
+    },
+    {
+      "text": "STATUS",
+      "category": "CMD",
+      "chemio": {
+        "contesto": 0.0538,
+        "urgenza": 0.2408,
+        "polarità": 0.5949,
+        "novità": 0.2293
+      },
+      "target": [
+        0.0538,
+        0.2408,
+        0.5949,
+        0.2293
+      ]
+    },
+    {
+      "text": "WARN: prediction error spike: MSE=0.1908",
+      "category": "WARN",
+      "chemio": {
+        "contesto": -0.4152,
+        "urgenza": 0.3888,
+        "polarità": -0.0366,
+        "novità": 0.1403
+      },
+      "target": [
+        -0.4152,
+        0.3888,
+        -0.0366,
+        0.1403
+      ]
+    },
+    {
+      "text": "ERR: cannot acquire spinlock from IRQ context",
+      "category": "ERR",
+      "chemio": {
+        "contesto": -0.85,
+        "urgenza": 0.8201,
+        "polarità": -0.6022,
+        "novità": 0.616
+      },
+      "target": [
+        -0.85,
+        0.8201,
+        -0.6022,
+        0.616
+      ]
+    },
+    {
+      "text": "pattern 67 recognized at tick 72760",
+      "category": "PAT",
+      "chemio": {
+        "contesto": 0.5893,
+        "urgenza": 0.0667,
+        "polarità": 0.8922,
+        "novità": 0.0451
+      },
+      "target": [
+        0.5893,
+        0.0667,
+        0.8922,
+        0.0451
+      ]
+    },
+    {
+      "text": "battito: tick=35842, hrange=[-0.40,0.24]",
+      "category": "LV",
+      "chemio": {
+        "contesto": 0.8188,
+        "urgenza": 0.0,
+        "polarità": 0.8229,
+        "novità": 0.0655
+      },
+      "target": [
+        0.8188,
+        0.0,
+        0.8229,
+        0.0655
+      ]
+    },
+    {
+      "text": "ECHO corrupt table",
+      "category": "CMD",
+      "chemio": {
+        "contesto": 0.1713,
+        "urgenza": 0.5288,
+        "polarità": 0.4164,
+        "novità": 0.3844
+      },
+      "target": [
+        0.1713,
+        0.5288,
+        0.4164,
+        0.3844
+      ]
+    },
+    {
+      "text": "\n",
+      "category": "SIL",
+      "chemio": {
+        "contesto": 0.0124,
+        "urgenza": 0.0,
+        "polarità": 0.0099,
+        "novità": 0.0
+      },
+      "target": [
+        0.0124,
+        0.0,
+        0.0099,
+        0.0
+      ]
+    },
+    {
+      "text": "PF: supervisor mode access at user address 0x18c26797",
+      "category": "ERR",
+      "chemio": {
+        "contesto": -0.7153,
+        "urgenza": 0.6372,
+        "polarità": -0.5315,
+        "novità": 0.9384
+      },
+      "target": [
+        -0.7153,
+        0.6372,
+        -0.5315,
+        0.9384
+      ]
+    },
+    {
+      "text": "—",
+      "category": "SIL",
+      "chemio": {
+        "contesto": -0.0184,
+        "urgenza": 0.0,
+        "polarità": 0.018,
+        "novità": 0.0
+      },
+      "target": [
+        -0.0184,
+        0.0,
+        0.018,
+        0.0
+      ]
+    },
+    {
+      "text": "alive: 64 neurons active, 82 synapses tracked",
+      "category": "LV",
+      "chemio": {
+        "contesto": 0.8504,
+        "urgenza": 0.0,
+        "polarità": 0.8811,
+        "novità": 0.1402
+      },
+      "target": [
+        0.8504,
+        0.0,
+        0.8811,
+        0.1402
+      ]
+    },
+    {
+      "text": "panic: unhandled exception at kernel/syscall.rs:58",
+      "category": "ERR",
+      "chemio": {
+        "contesto": -0.6706,
+        "urgenza": 0.6168,
+        "polarità": -0.8578,
+        "novità": 0.778
+      },
+      "target": [
+        -0.6706,
+        0.6168,
+        -0.8578,
+        0.778
+      ]
+    },
+    {
+      "text": "GET pattern_capacity",
+      "category": "CMD",
+      "chemio": {
+        "contesto": 0.0043,
+        "urgenza": 0.1109,
+        "polarità": 0.4922,
+        "novità": 0.6984
+      },
+      "target": [
+        0.0043,
+        0.1109,
+        0.4922,
+        0.6984
+      ]
+    },
+    {
+      "text": "heartbeat — core 3 active, temp=69.2C",
+      "category": "LV",
+      "chemio": {
+        "contesto": 0.8654,
+        "urgenza": 0.0,
+        "polarità": 0.7668,
+        "novità": 0.022
+      },
+      "target": [
+        0.8654,
+        0.0,
+        0.7668,
+        0.022
+      ]
+    },
+    {
+      "text": "WARN: tick drift detected: delta=1.7ms",
+      "category": "WARN",
+      "chemio": {
+        "contesto": -0.3089,
+        "urgenza": 0.4995,
+        "polarità": -0.0592,
+        "novità": 0.1785
+      },
+      "target": [
+        -0.3089,
+        0.4995,
+        -0.0592,
+        0.1785
+      ]
+    },
+    {
+      "text": "WARN: metabol oscillation period deviating: 191ms vs expected 200ms",
+      "category": "WARN",
+      "chemio": {
+        "contesto": -0.1154,
+        "urgenza": 0.24,
+        "polarità": -0.2558,
+        "novità": 0.224
+      },
+      "target": [
+        -0.1154,
+        0.24,
+        -0.2558,
+        0.224
+      ]
+    },
+    {
+      "text": "heartbeat — core 2 active, temp=70.5C",
+      "category": "LV",
+      "chemio": {
+        "contesto": 0.8579,
+        "urgenza": 0.0,
+        "polarità": 0.8681,
+        "novità": 0.0919
+      },
+      "target": [
+        0.8579,
+        0.0,
+        0.8681,
+        0.0919
+      ]
+    },
+    {
+      "text": "Nova Exo v0.14.3 starting...",
+      "category": "BOOT",
+      "chemio": {
+        "contesto": 0.7843,
+        "urgenza": 0.6846,
+        "polarità": 0.3783,
+        "novità": 0.8138
+      },
+      "target": [
+        0.7843,
+        0.6846,
+        0.3783,
+        0.8138
+      ]
+    },
+    {
+      "text": "WARN: Tatto cell saturated at h=0.14 for 278 ticks",
+      "category": "WARN",
+      "chemio": {
+        "contesto": -0.3286,
+        "urgenza": 0.2496,
+        "polarità": -0.3416,
+        "novità": 0.205
+      },
+      "target": [
+        -0.3286,
+        0.2496,
+        -0.3416,
+        0.205
+      ]
+    },
+    {
+      "text": "(idle)",
+      "category": "SIL",
+      "chemio": {
+        "contesto": 0.0024,
+        "urgenza": 0.0,
+        "polarità": 0.0029,
+        "novità": 0.0
+      },
+      "target": [
+        0.0024,
+        0.0,
+        0.0029,
+        0.0
+      ]
+    },
+    {
+      "text": "DUMP",
+      "category": "CMD",
+      "chemio": {
+        "contesto": 0.0268,
+        "urgenza": 0.0523,
+        "polarità": 0.5267,
+        "novità": 0.4988
+      },
+      "target": [
+        0.0268,
+        0.0523,
+        0.5267,
+        0.4988
+      ]
+    },
+    {
+      "text": "battito: tick=95109, hrange=[-0.19,0.24]",
+      "category": "LV",
+      "chemio": {
+        "contesto": 0.9843,
+        "urgenza": 0.0,
+        "polarità": 0.8481,
+        "novità": 0.1847
+      },
+      "target": [
+        0.9843,
+        0.0,
+        0.8481,
+        0.1847
+      ]
+    },
+    {
+      "text": "tick 53234: sensor sweep clean",
+      "category": "LV",
+      "chemio": {
+        "contesto": 0.9464,
+        "urgenza": 0.0,
+        "polarità": 0.7194,
+        "novità": 0.1623
+      },
+      "target": [
+        0.9464,
+        0.0,
+        0.7194,
+        0.1623
+      ]
+    },
+    {
+      "text": "—",
+      "category": "SIL",
+      "chemio": {
+        "contesto": -0.0065,
+        "urgenza": 0.0,
+        "polarità": 0.0273,
+        "novità": 0.0
+      },
+      "target": [
+        -0.0065,
+        0.0,
+        0.0273,
+        0.0
+      ]
+    },
+    {
+      "text": "—",
+      "category": "SIL",
+      "chemio": {
+        "contesto": 0.0482,
+        "urgenza": 0.0,
+        "polarità": 0.0116,
+        "novità": 0.0
+      },
+      "target": [
+        0.0482,
+        0.0,
+        0.0116,
+        0.0
+      ]
+    },
+    {
+      "text": "FORGET P1",
+      "category": "CMD",
+      "chemio": {
+        "contesto": 0.3923,
+        "urgenza": 0.343,
+        "polarità": 0.4004,
+        "novità": 0.2155
+      },
+      "target": [
+        0.3923,
+        0.343,
+        0.4004,
+        0.2155
+      ]
+    },
+    {
+      "text": "ERR: syscall recover not implemented",
+      "category": "ERR",
+      "chemio": {
+        "contesto": -0.6488,
+        "urgenza": 0.7851,
+        "polarità": -0.7565,
+        "novità": 0.5833
+      },
+      "target": [
+        -0.6488,
+        0.7851,
+        -0.7565,
+        0.5833
+      ]
+    },
+    {
+      "text": "COLD BOOT — all cells reset",
+      "category": "BOOT",
+      "chemio": {
+        "contesto": 0.2539,
+        "urgenza": 0.6392,
+        "polarità": 0.1641,
+        "novità": 0.8206
+      },
+      "target": [
+        0.2539,
+        0.6392,
+        0.1641,
+        0.8206
+      ]
+    },
+    {
+      "text": "novel state: h-dist=5.45 from nearest pattern",
+      "category": "NOV",
+      "chemio": {
+        "contesto": 0.3802,
+        "urgenza": 0.3585,
+        "polarità": -0.0748,
+        "novità": 0.9181
+      },
+      "target": [
+        0.3802,
+        0.3585,
+        -0.0748,
+        0.9181
+      ]
+    },
+    {
+      "text": "tick 25533: sensor sweep clean",
+      "category": "LV",
+      "chemio": {
+        "contesto": 0.9377,
+        "urgenza": 0.0,
+        "polarità": 0.7847,
+        "novità": 0.0378
+      },
+      "target": [
+        0.9377,
+        0.0,
+        0.7847,
+        0.0378
+      ]
+    },
+    {
+      "text": "... waiting ...",
+      "category": "SIL",
+      "chemio": {
+        "contesto": 0.0145,
+        "urgenza": 0.0,
+        "polarità": -0.0369,
+        "novità": 0.0
+      },
+      "target": [
+        0.0145,
+        0.0,
+        -0.0369,
+        0.0
+      ]
+    },
+    {
+      "text": "daydream complete: 5 processed, 10 novel",
+      "category": "REST",
+      "chemio": {
+        "contesto": 0.3597,
+        "urgenza": 0.0,
+        "polarità": 0.6914,
+        "novità": 0.0
+      },
+      "target": [
+        0.3597,
+        0.0,
+        0.6914,
+        0.0
+      ]
+    },
+    {
+      "text": "PF: supervisor mode access at user address 0xb2b9437a",
+      "category": "ERR",
+      "chemio": {
+        "contesto": -0.8489,
+        "urgenza": 0.7107,
+        "polarità": -0.7631,
+        "novità": 0.7514
+      },
+      "target": [
+        -0.8489,
+        0.7107,
+        -0.7631,
+        0.7514
+      ]
+    },
+    {
+      "text": "pain memory: GPF occurred 66 times in last 4261 ticks",
+      "category": "PAIN",
+      "chemio": {
+        "contesto": -0.6518,
+        "urgenza": 0.356,
+        "polarità": -0.5855,
+        "novità": 0.2438
+      },
+      "target": [
+        -0.6518,
+        0.356,
+        -0.5855,
+        0.2438
+      ]
+    },
+    {
+      "text": "... waiting ...",
+      "category": "SIL",
+      "chemio": {
+        "contesto": -0.0296,
+        "urgenza": 0.0,
+        "polarità": 0.047,
+        "novità": 0.0
+      },
+      "target": [
+        -0.0296,
+        0.0,
+        0.047,
+        0.0
+      ]
+    },
+    {
+      "text": "ERR: stack segment fault, ss=0x7e45, esp=0x956269f0",
+      "category": "ERR",
+      "chemio": {
+        "contesto": -0.7918,
+        "urgenza": 0.8163,
+        "polarità": -0.8145,
+        "novità": 0.707
+      },
+      "target": [
+        -0.7918,
+        0.8163,
+        -0.8145,
+        0.707
+      ]
+    },
+    {
+      "text": "WARN: memory allocation failed at schedule",
+      "category": "ERR",
+      "chemio": {
+        "contesto": -0.8312,
+        "urgenza": 0.7114,
+        "polarità": -0.8001,
+        "novità": 0.954
+      },
+      "target": [
+        -0.8312,
+        0.7114,
+        -0.8001,
+        0.954
+      ]
+    },
+    {
+      "text": "REBOOT",
+      "category": "CMD",
+      "chemio": {
+        "contesto": 0.3461,
+        "urgenza": 0.0245,
+        "polarità": 0.5669,
+        "novità": 0.4492
+      },
+      "target": [
+        0.3461,
+        0.0245,
+        0.5669,
+        0.4492
+      ]
+    },
+    {
+      "text": "Tatto: 45 consecutive error ticks",
+      "category": "PAIN",
+      "chemio": {
+        "contesto": -0.5654,
+        "urgenza": 0.4558,
+        "polarità": -0.4221,
+        "novità": 0.457
+      },
+      "target": [
+        -0.5654,
+        0.4558,
+        -0.4221,
+        0.457
+      ]
+    },
+    {
+      "text": "STATUS",
+      "category": "CMD",
+      "chemio": {
+        "contesto": 0.2603,
+        "urgenza": 0.2535,
+        "polarità": 0.3775,
+        "novità": 0.3221
+      },
+      "target": [
+        0.2603,
+        0.2535,
+        0.3775,
+        0.3221
+      ]
+    },
+    {
+      "text": "pattern recall: P1 @ t=5731",
+      "category": "PAT",
+      "chemio": {
+        "contesto": 0.6936,
+        "urgenza": 0.1402,
+        "polarità": 0.8873,
+        "novità": 0.1742
+      },
+      "target": [
+        0.6936,
+        0.1402,
+        0.8873,
+        0.1742
+      ]
+    },
+    {
+      "text": "match: Tatto+Chemio cells agree, sim=0.79",
+      "category": "PAT",
+      "chemio": {
+        "contesto": 0.4179,
+        "urgenza": 0.1884,
+        "polarità": 0.5025,
+        "novità": 0.0968
+      },
+      "target": [
+        0.4179,
+        0.1884,
+        0.5025,
+        0.0968
+      ]
+    },
+    {
+      "text": "CONFIG debug=100",
+      "category": "CMD",
+      "chemio": {
+        "contesto": 0.3419,
+        "urgenza": 0.4995,
+        "polarità": 0.0985,
+        "novità": 0.5514
+      },
+      "target": [
+        0.3419,
+        0.4995,
+        0.0985,
+        0.5514
+      ]
+    },
+    {
+      "text": "tick 7291: all systems nominal",
+      "category": "LV",
+      "chemio": {
+        "contesto": 0.9021,
+        "urgenza": 0.0,
+        "polarità": 0.8617,
+        "novità": 0.1298
+      },
+      "target": [
+        0.9021,
+        0.0,
+        0.8617,
+        0.1298
+      ]
+    },
+    {
+      "text": "WARM BOOT — retaining 95 patterns",
+      "category": "BOOT",
+      "chemio": {
+        "contesto": 0.4751,
+        "urgenza": 0.4226,
+        "polarità": 0.3241,
+        "novità": 0.9775
+      },
+      "target": [
+        0.4751,
+        0.4226,
+        0.3241,
+        0.9775
+      ]
+    },
+    {
+      "text": "tick 10283: all systems nominal",
+      "category": "LV",
+      "chemio": {
+        "contesto": 0.8783,
+        "urgenza": 0.0,
+        "polarità": 0.8396,
+        "novità": 0.0181
+      },
+      "target": [
+        0.8783,
+        0.0,
+        0.8396,
+        0.0181
+      ]
+    },
+    {
+      "text": "calma: all cells within nominal range",
+      "category": "REST",
+      "chemio": {
+        "contesto": 0.3911,
+        "urgenza": 0.0,
+        "polarità": 0.737,
+        "novità": 0.0
+      },
+      "target": [
+        0.3911,
+        0.0,
+        0.737,
+        0.0
+      ]
+    },
+    {
+      "text": "pattern recall: P3 @ t=87070",
+      "category": "PAT",
+      "chemio": {
+        "contesto": 0.4602,
+        "urgenza": 0.0188,
+        "polarità": 0.6346,
+        "novità": 0.0816
+      },
+      "target": [
+        0.4602,
+        0.0188,
+        0.6346,
+        0.0816
+      ]
+    },
+    {
+      "text": "pain signal: Metabol cell overexcited",
+      "category": "PAIN",
+      "chemio": {
+        "contesto": -0.7552,
+        "urgenza": 0.5598,
+        "polarità": -0.6179,
+        "novità": 0.5706
+      },
+      "target": [
+        -0.7552,
+        0.5598,
+        -0.6179,
+        0.5706
+      ]
+    },
+    {
+      "text": "unknown sequence: 11 00 00 01 01 01 00 00",
+      "category": "NOV",
+      "chemio": {
+        "contesto": 0.441,
+        "urgenza": 0.2714,
+        "polarità": -0.0121,
+        "novità": 0.8328
+      },
+      "target": [
+        0.441,
+        0.2714,
+        -0.0121,
+        0.8328
+      ]
+    },
+    {
+      "text": "PF err=0x24 addr=0x386ecbe0 — page not present",
+      "category": "ERR",
+      "chemio": {
+        "contesto": -0.8934,
+        "urgenza": 0.88,
+        "polarità": -0.5382,
+        "novità": 0.7448
+      },
+      "target": [
+        -0.8934,
+        0.88,
+        -0.5382,
+        0.7448
+      ]
+    },
+    {
+      "text": "WARM BOOT — retaining 92 patterns",
+      "category": "BOOT",
+      "chemio": {
+        "contesto": 0.4281,
+        "urgenza": 0.4041,
+        "polarità": 0.4856,
+        "novità": 0.8557
+      },
+      "target": [
+        0.4281,
+        0.4041,
+        0.4856,
+        0.8557
+      ]
+    },
+    {
+      "text": "ECHO unexpected state",
+      "category": "CMD",
+      "chemio": {
+        "contesto": 0.3376,
+        "urgenza": 0.3416,
+        "polarità": 0.5381,
+        "novità": 0.114
+      },
+      "target": [
+        0.3376,
+        0.3416,
+        0.5381,
+        0.114
+      ]
+    },
+    {
+      "text": "WARN: chemio input buffer at 36% capacity",
+      "category": "WARN",
+      "chemio": {
+        "contesto": -0.3282,
+        "urgenza": 0.2889,
+        "polarità": -0.2375,
+        "novità": 0.2114
+      },
+      "target": [
+        -0.3282,
+        0.2889,
+        -0.2375,
+        0.2114
+      ]
+    },
+    {
+      "text": "battito: tick=32120, hrange=[-0.15,0.05]",
+      "category": "LV",
+      "chemio": {
+        "contesto": 0.9213,
+        "urgenza": 0.0,
+        "polarità": 0.708,
+        "novità": 0.1878
+      },
+      "target": [
+        0.9213,
+        0.0,
+        0.708,
+        0.1878
+      ]
+    },
+    {
+      "text": "NEW pattern detected at tick 3010",
+      "category": "NOV",
+      "chemio": {
+        "contesto": 0.4861,
+        "urgenza": 0.3539,
+        "polarità": 0.0881,
+        "novità": 0.9122
+      },
+      "target": [
+        0.4861,
+        0.3539,
+        0.0881,
+        0.9122
+      ]
+    },
+    {
+      "text": "Metabol energy restored to 91%",
+      "category": "REST",
+      "chemio": {
+        "contesto": 0.4692,
+        "urgenza": 0.0,
+        "polarità": 0.5085,
+        "novità": 0.0
+      },
+      "target": [
+        0.4692,
+        0.0,
+        0.5085,
+        0.0
+      ]
+    },
+    {
+      "text": "known state: h-dist=0.79 from pattern #13",
+      "category": "PAT",
+      "chemio": {
+        "contesto": 0.5346,
+        "urgenza": 0.0677,
+        "polarità": 0.5164,
+        "novità": 0.0107
+      },
+      "target": [
+        0.5346,
+        0.0677,
+        0.5164,
+        0.0107
+      ]
+    },
+    {
+      "text": "ERR: double fault, shutdown requested",
+      "category": "ERR",
+      "chemio": {
+        "contesto": -0.8206,
+        "urgenza": 0.9668,
+        "polarità": -0.749,
+        "novità": 0.4481
+      },
+      "target": [
+        -0.8206,
+        0.9668,
+        -0.749,
+        0.4481
+      ]
+    },
+    {
+      "text": "vivo: 419s, 780 page faults handled",
+      "category": "LV",
+      "chemio": {
+        "contesto": 0.9668,
+        "urgenza": 0.0,
+        "polarità": 0.786,
+        "novità": 0.1275
+      },
+      "target": [
+        0.9668,
+        0.0,
+        0.786,
+        0.1275
+      ]
+    },
+    {
+      "text": "NOTICE: 95 unacknowledged interrupts",
+      "category": "WARN",
+      "chemio": {
+        "contesto": -0.4037,
+        "urgenza": 0.3573,
+        "polarità": -0.0904,
+        "novità": 0.3825
+      },
+      "target": [
+        -0.4037,
+        0.3573,
+        -0.0904,
+        0.3825
+      ]
+    },
+    {
+      "text": "WARN: metabol oscillation period deviating: 206ms vs expected 200ms",
+      "category": "WARN",
+      "chemio": {
+        "contesto": -0.3792,
+        "urgenza": 0.3228,
+        "polarità": -0.0724,
+        "novità": 0.1499
+      },
+      "target": [
+        -0.3792,
+        0.3228,
+        -0.0724,
+        0.1499
+      ]
+    },
+    {
+      "text": "vivo: 3148s, 120 page faults handled",
+      "category": "LV",
+      "chemio": {
+        "contesto": 0.9646,
+        "urgenza": 0.0,
+        "polarità": 0.8458,
+        "novità": 0.1153
+      },
+      "target": [
+        0.9646,
+        0.0,
+        0.8458,
+        0.1153
+      ]
+    },
+    {
+      "text": "pattern 1 activated: 241 ticks since last seen",
+      "category": "PAT",
+      "chemio": {
+        "contesto": 0.4089,
+        "urgenza": 0.1693,
+        "polarità": 0.5097,
+        "novità": 0.0314
+      },
+      "target": [
+        0.4089,
+        0.1693,
+        0.5097,
+        0.0314
+      ]
+    },
+    {
+      "text": "Interrupts enabled — entering main loop",
+      "category": "BOOT",
+      "chemio": {
+        "contesto": 0.2271,
+        "urgenza": 0.6946,
+        "polarità": 0.241,
+        "novità": 0.8814
+      },
+      "target": [
+        0.2271,
+        0.6946,
+        0.241,
+        0.8814
+      ]
+    },
+    {
+      "text": "ERR: invalid argument to syscall #24",
+      "category": "ERR",
+      "chemio": {
+        "contesto": -0.6672,
+        "urgenza": 0.9679,
+        "polarità": -0.8647,
+        "novità": 0.9067
+      },
+      "target": [
+        -0.6672,
+        0.9679,
+        -0.8647,
+        0.9067
+      ]
+    },
+    {
+      "text": "attractor: error (sim=0.64)",
+      "category": "PAT",
+      "chemio": {
+        "contesto": 0.6429,
+        "urgenza": 0.0358,
+        "polarità": 0.7831,
+        "novità": 0.1665
+      },
+      "target": [
+        0.6429,
+        0.0358,
+        0.7831,
+        0.1665
+      ]
+    },
+    {
+      "text": "heartbeat OK — tick=5356, uptime=931s",
+      "category": "LV",
+      "chemio": {
+        "contesto": 0.9246,
+        "urgenza": 0.0,
+        "polarità": 0.7047,
+        "novità": 0.0841
+      },
+      "target": [
+        0.9246,
+        0.0,
+        0.7047,
+        0.0841
+      ]
+    },
+    {
+      "text": "WARN: metabol oscillation period deviating: 190ms vs expected 200ms",
+      "category": "WARN",
+      "chemio": {
+        "contesto": -0.3843,
+        "urgenza": 0.3908,
+        "polarità": -0.3462,
+        "novità": 0.1734
+      },
+      "target": [
+        -0.3843,
+        0.3908,
+        -0.3462,
+        0.1734
+      ]
+    },
+    {
+      "text": "QUERY chemio",
+      "category": "CMD",
+      "chemio": {
+        "contesto": 0.339,
+        "urgenza": 0.282,
+        "polarità": 0.1066,
+        "novità": 0.1978
+      },
+      "target": [
+        0.339,
+        0.282,
+        0.1066,
+        0.1978
+      ]
+    },
+    {
+      "text": "match: 3 of 4 cells agree, sim=0.62",
+      "category": "PAT",
+      "chemio": {
+        "contesto": 0.6668,
+        "urgenza": 0.1454,
+        "polarità": 0.7195,
+        "novità": 0.1132
+      },
+      "target": [
+        0.6668,
+        0.1454,
+        0.7195,
+        0.1132
+      ]
+    },
+    {
+      "text": "ERR: cannot acquire spinlock from IRQ context",
+      "category": "ERR",
+      "chemio": {
+        "contesto": -0.7979,
+        "urgenza": 0.8542,
+        "polarità": -0.8505,
+        "novità": 0.4183
+      },
+      "target": [
+        -0.7979,
+        0.8542,
+        -0.8505,
+        0.4183
+      ]
+    },
+    {
+      "text": "... waiting ...",
+      "category": "SIL",
+      "chemio": {
+        "contesto": 0.0023,
+        "urgenza": 0.0,
+        "polarità": 0.0137,
+        "novità": 0.0
+      },
+      "target": [
+        0.0023,
+        0.0,
+        0.0137,
+        0.0
+      ]
+    },
+    {
+      "text": "ERR: invalid argument to syscall #4",
+      "category": "ERR",
+      "chemio": {
+        "contesto": -0.824,
+        "urgenza": 0.692,
+        "polarità": -0.6942,
+        "novità": 0.5685
+      },
+      "target": [
+        -0.824,
+        0.692,
+        -0.6942,
+        0.5685
+      ]
+    },
+    {
+      "text": "PF: supervisor mode access at user address 0x392456de",
+      "category": "ERR",
+      "chemio": {
+        "contesto": -0.9283,
+        "urgenza": 0.9995,
+        "polarità": -0.7033,
+        "novità": 0.4631
+      },
+      "target": [
+        -0.9283,
+        0.9995,
+        -0.7033,
+        0.4631
+      ]
+    },
+    {
+      "text": "WARN: stack usage at 24% of 1GB",
+      "category": "WARN",
+      "chemio": {
+        "contesto": -0.1872,
+        "urgenza": 0.4629,
+        "polarità": -0.2901,
+        "novità": 0.285
+      },
+      "target": [
+        -0.1872,
+        0.4629,
+        -0.2901,
+        0.285
+      ]
+    },
+    {
+      "text": "tissue stress: 0.715 above threshold",
+      "category": "PAIN",
+      "chemio": {
+        "contesto": -0.5879,
+        "urgenza": 0.5787,
+        "polarità": -0.559,
+        "novità": 0.6431
+      },
+      "target": [
+        -0.5879,
+        0.5787,
+        -0.559,
+        0.6431
+      ]
+    },
+    {
+      "text": "ERR: double fault, shutdown requested",
+      "category": "ERR",
+      "chemio": {
+        "contesto": -0.663,
+        "urgenza": 0.8254,
+        "polarità": -0.5699,
+        "novità": 0.417
+      },
+      "target": [
+        -0.663,
+        0.8254,
+        -0.5699,
+        0.417
+      ]
+    },
+    {
+      "text": "ERR: out of memory, alloc size=948kb",
+      "category": "ERR",
+      "chemio": {
+        "contesto": -0.8071,
+        "urgenza": 0.8163,
+        "polarità": -0.8027,
+        "novità": 0.5023
+      },
+      "target": [
+        -0.8071,
+        0.8163,
+        -0.8027,
+        0.5023
+      ]
+    },
+    {
+      "text": "A: 59.3% match with pattern #40",
+      "category": "PAT",
+      "chemio": {
+        "contesto": 0.4061,
+        "urgenza": 0.0775,
+        "polarità": 0.6109,
+        "novità": 0.0572
+      },
+      "target": [
+        0.4061,
+        0.0775,
+        0.6109,
+        0.0572
+      ]
+    },
+    {
+      "text": "heartbeat @14579: attractor pool=41",
+      "category": "LV",
+      "chemio": {
+        "contesto": 0.9855,
+        "urgenza": 0.0,
+        "polarità": 0.8286,
+        "novità": 0.1184
+      },
+      "target": [
+        0.9855,
+        0.0,
+        0.8286,
+        0.1184
+      ]
+    },
+    {
+      "text": "sysok: mem=6103kb free, cpu=88%",
+      "category": "LV",
+      "chemio": {
+        "contesto": 0.8817,
+        "urgenza": 0.0,
+        "polarità": 0.7256,
+        "novità": 0.0485
+      },
+      "target": [
+        0.8817,
+        0.0,
+        0.7256,
+        0.0485
+      ]
+    },
+    {
+      "text": "tick 34431: all systems nominal",
+      "category": "LV",
+      "chemio": {
+        "contesto": 0.8269,
+        "urgenza": 0.0,
+        "polarità": 0.7699,
+        "novità": 0.0487
+      },
+      "target": [
+        0.8269,
+        0.0,
+        0.7699,
+        0.0487
+      ]
+    },
+    {
+      "text": "WARN: sensor 38 not responding, retry 65",
+      "category": "WARN",
+      "chemio": {
+        "contesto": -0.2985,
+        "urgenza": 0.4741,
+        "polarità": -0.257,
+        "novità": 0.2417
+      },
+      "target": [
+        -0.2985,
+        0.4741,
+        -0.257,
+        0.2417
+      ]
+    },
+    {
+      "text": "ERR: invalid argument to syscall #10",
+      "category": "ERR",
+      "chemio": {
+        "contesto": -0.9841,
+        "urgenza": 0.9689,
+        "polarità": -0.778,
+        "novità": 0.694
+      },
+      "target": [
+        -0.9841,
+        0.9689,
+        -0.778,
+        0.694
+      ]
+    },
+    {
+      "text": "ERR: segmentation fault at 0x37f8a88b",
+      "category": "ERR",
+      "chemio": {
+        "contesto": -0.9485,
+        "urgenza": 0.6387,
+        "polarità": -0.7507,
+        "novità": 0.9921
+      },
+      "target": [
+        -0.9485,
+        0.6387,
+        -0.7507,
+        0.9921
+      ]
+    },
+    {
+      "text": "MEMORIZZA: new experience at tick 91067",
+      "category": "NOV",
+      "chemio": {
+        "contesto": 0.4016,
+        "urgenza": 0.3406,
+        "polarità": -0.0967,
+        "novità": 0.8028
+      },
+      "target": [
+        0.4016,
+        0.3406,
+        -0.0967,
+        0.8028
+      ]
+    },
+    {
+      "text": "known state: h-dist=3.36 from pattern #89",
+      "category": "PAT",
+      "chemio": {
+        "contesto": 0.7277,
+        "urgenza": 0.1266,
+        "polarità": 0.889,
+        "novità": 0.1489
+      },
+      "target": [
+        0.7277,
+        0.1266,
+        0.889,
+        0.1489
+      ]
+    },
+    {
+      "text": "APIC timer at 500 Hz",
+      "category": "BOOT",
+      "chemio": {
+        "contesto": 0.4121,
+        "urgenza": 0.6287,
+        "polarità": 0.3332,
+        "novità": 0.8122
+      },
+      "target": [
+        0.4121,
+        0.6287,
+        0.3332,
+        0.8122
+      ]
+    },
+    {
+      "text": "heartbeat — core 1 active, temp=50.3C",
+      "category": "LV",
+      "chemio": {
+        "contesto": 0.9745,
+        "urgenza": 0.0,
+        "polarità": 0.8239,
+        "novità": 0.0833
+      },
+      "target": [
+        0.9745,
+        0.0,
+        0.8239,
+        0.0833
+      ]
+    },
+    {
+      "text": "WARN: Tatto cell saturated at h=-0.49 for 377 ticks",
+      "category": "WARN",
+      "chemio": {
+        "contesto": -0.4471,
+        "urgenza": 0.508,
+        "polarità": -0.2929,
+        "novità": 0.4754
+      },
+      "target": [
+        -0.4471,
+        0.508,
+        -0.2929,
+        0.4754
+      ]
+    },
+    {
+      "text": "Nova Exo v0.15.4 starting...",
+      "category": "BOOT",
+      "chemio": {
+        "contesto": 0.7724,
+        "urgenza": 0.5332,
+        "polarità": 0.4063,
+        "novità": 0.9456
+      },
+      "target": [
+        0.7724,
+        0.5332,
+        0.4063,
+        0.9456
+      ]
+    },
+    {
+      "text": "MEMORIZZA: new experience at tick 48222",
+      "category": "NOV",
+      "chemio": {
+        "contesto": 0.3035,
+        "urgenza": 0.4343,
+        "polarità": 0.2345,
+        "novità": 0.9404
+      },
+      "target": [
+        0.3035,
+        0.4343,
+        0.2345,
+        0.9404
+      ]
+    },
+    {
+      "text": "pain signal: Chemio cell overexcited",
+      "category": "PAIN",
+      "chemio": {
+        "contesto": -0.792,
+        "urgenza": 0.302,
+        "polarità": -0.5358,
+        "novità": 0.4307
+      },
+      "target": [
+        -0.792,
+        0.302,
+        -0.5358,
+        0.4307
+      ]
+    },
+    {
+      "text": "life signal: 35 patterns, 28 strong matches",
+      "category": "LV",
+      "chemio": {
+        "contesto": 0.9638,
+        "urgenza": 0.0,
+        "polarità": 0.8203,
+        "novità": 0.1487
+      },
+      "target": [
+        0.9638,
+        0.0,
+        0.8203,
+        0.1487
+      ]
+    },
+    {
+      "text": "SLEEP:END — delta=4.6400, 3 novel connections",
+      "category": "REST",
+      "chemio": {
+        "contesto": 0.3178,
+        "urgenza": 0.0,
+        "polarità": 0.6524,
+        "novità": 0.0
+      },
+      "target": [
+        0.3178,
+        0.0,
+        0.6524,
+        0.0
+      ]
+    },
+    {
+      "text": "... waiting ...",
+      "category": "SIL",
+      "chemio": {
+        "contesto": -0.0007,
+        "urgenza": 0.0,
+        "polarità": -0.0244,
+        "novità": 0.0
+      },
+      "target": [
+        -0.0007,
+        0.0,
+        -0.0244,
+        0.0
+      ]
+    },
+    {
+      "text": "QUERY all",
+      "category": "CMD",
+      "chemio": {
+        "contesto": 0.0054,
+        "urgenza": 0.5221,
+        "polarità": 0.1657,
+        "novità": 0.2438
+      },
+      "target": [
+        0.0054,
+        0.5221,
+        0.1657,
+        0.2438
+      ]
+    },
+    {
+      "text": "WARN: chemio input buffer at 69% capacity",
+      "category": "WARN",
+      "chemio": {
+        "contesto": -0.4874,
+        "urgenza": 0.2461,
+        "polarità": -0.1367,
+        "novità": 0.1746
+      },
+      "target": [
+        -0.4874,
+        0.2461,
+        -0.1367,
+        0.1746
+      ]
+    },
+    {
+      "text": "RESET",
+      "category": "CMD",
+      "chemio": {
+        "contesto": 0.3216,
+        "urgenza": 0.3407,
+        "polarità": 0.2554,
+        "novità": 0.4518
+      },
+      "target": [
+        0.3216,
+        0.3407,
+        0.2554,
+        0.4518
+      ]
+    },
+    {
+      "text": "COLD BOOT — all cells reset",
+      "category": "BOOT",
+      "chemio": {
+        "contesto": 0.4121,
+        "urgenza": 0.5979,
+        "polarità": 0.3273,
+        "novità": 0.9223
+      },
+      "target": [
+        0.4121,
+        0.5979,
+        0.3273,
+        0.9223
+      ]
+    },
+    {
+      "text": "A: recall #1: similarity 0.869",
+      "category": "PAT",
+      "chemio": {
+        "contesto": 0.5399,
+        "urgenza": 0.1006,
+        "polarità": 0.7783,
+        "novità": 0.0137
+      },
+      "target": [
+        0.5399,
+        0.1006,
+        0.7783,
+        0.0137
+      ]
+    },
+    {
+      "text": "SLEEP:END — delta=3.5500, 1 novel connections",
+      "category": "REST",
+      "chemio": {
+        "contesto": 0.3846,
+        "urgenza": 0.0,
+        "polarità": 0.657,
+        "novità": 0.0
+      },
+      "target": [
+        0.3846,
+        0.0,
+        0.657,
+        0.0
+      ]
+    },
+    {
+      "text": "SLEEP:BEGIN — daydreaming, consolidating 59 patterns",
+      "category": "REST",
+      "chemio": {
+        "contesto": 0.3071,
+        "urgenza": 0.0,
+        "polarità": 0.7226,
+        "novità": 0.0
+      },
+      "target": [
+        0.3071,
+        0.0,
+        0.7226,
+        0.0
+      ]
+    },
+    {
+      "text": "tick 97988: all systems nominal",
+      "category": "LV",
+      "chemio": {
+        "contesto": 0.8511,
+        "urgenza": 0.0,
+        "polarità": 0.735,
+        "novità": 0.0513
+      },
+      "target": [
+        0.8511,
+        0.0,
+        0.735,
+        0.0513
+      ]
+    },
+    {
+      "text": "pattern 30 activated: 73 ticks since last seen",
+      "category": "PAT",
+      "chemio": {
+        "contesto": 0.7746,
+        "urgenza": 0.0693,
+        "polarità": 0.783,
+        "novità": 0.1047
+      },
+      "target": [
+        0.7746,
+        0.0693,
+        0.783,
+        0.1047
+      ]
+    },
+    {
+      "text": "STATUS",
+      "category": "CMD",
+      "chemio": {
+        "contesto": 0.1857,
+        "urgenza": 0.123,
+        "polarità": 0.5977,
+        "novità": 0.6446
+      },
+      "target": [
+        0.1857,
+        0.123,
+        0.5977,
+        0.6446
+      ]
+    },
+    {
+      "text": "Memory: 3kb available",
+      "category": "BOOT",
+      "chemio": {
+        "contesto": 0.2435,
+        "urgenza": 0.7185,
+        "polarità": 0.1701,
+        "novità": 0.8639
+      },
+      "target": [
+        0.2435,
+        0.7185,
+        0.1701,
+        0.8639
+      ]
+    },
+    {
+      "text": "WARN: tick drift detected: delta=9.42ms",
+      "category": "WARN",
+      "chemio": {
+        "contesto": -0.1356,
+        "urgenza": 0.4984,
+        "polarità": -0.1143,
+        "novità": 0.381
+      },
+      "target": [
+        -0.1356,
+        0.4984,
+        -0.1143,
+        0.381
+      ]
+    },
+    {
+      "text": "outlier: Chemio h=0.86 exceeds threshold 3129",
+      "category": "NOV",
+      "chemio": {
+        "contesto": 0.3101,
+        "urgenza": 0.3241,
+        "polarità": 0.2056,
+        "novità": 0.865
+      },
+      "target": [
+        0.3101,
+        0.3241,
+        0.2056,
+        0.865
+      ]
+    },
+    {
+      "text": "FATAL: kernel panic — page fault",
+      "category": "ERR",
+      "chemio": {
+        "contesto": -0.7744,
+        "urgenza": 0.6872,
+        "polarità": -0.6202,
+        "novità": 0.8601
+      },
+      "target": [
+        -0.7744,
+        0.6872,
+        -0.6202,
+        0.8601
+      ]
+    },
+    {
+      "text": "PF: write access to read-only page at 0x27cd8130",
+      "category": "ERR",
+      "chemio": {
+        "contesto": -0.699,
+        "urgenza": 0.8358,
+        "polarità": -0.7464,
+        "novità": 0.9779
+      },
+      "target": [
+        -0.699,
+        0.8358,
+        -0.7464,
+        0.9779
+      ]
+    },
+    {
+      "text": "ERR: division by zero at IP=0x60e7a113",
+      "category": "ERR",
+      "chemio": {
+        "contesto": -0.7248,
+        "urgenza": 0.723,
+        "polarità": -0.8161,
+        "novità": 0.9887
+      },
+      "target": [
+        -0.7248,
+        0.723,
+        -0.8161,
+        0.9887
+      ]
+    },
+    {
+      "text": "GP err=0x6b at 0x07a0ca6e — selector error",
+      "category": "ERR",
+      "chemio": {
+        "contesto": -0.9739,
+        "urgenza": 0.6183,
+        "polarità": -0.5206,
+        "novità": 0.6736
+      },
+      "target": [
+        -0.9739,
+        0.6183,
+        -0.5206,
+        0.6736
+      ]
+    },
+    {
+      "text": "STATUS",
+      "category": "CMD",
+      "chemio": {
+        "contesto": 0.3211,
+        "urgenza": 0.351,
+        "polarità": 0.4129,
+        "novità": 0.3312
+      },
+      "target": [
+        0.3211,
+        0.351,
+        0.4129,
+        0.3312
+      ]
+    },
+    {
+      "text": "[no input]",
+      "category": "SIL",
+      "chemio": {
+        "contesto": 0.0474,
+        "urgenza": 0.0,
+        "polarità": 0.0134,
+        "novità": 0.0
+      },
+      "target": [
+        0.0474,
+        0.0,
+        0.0134,
+        0.0
+      ]
+    },
+    {
+      "text": "tissue stress: 0.911 above threshold",
+      "category": "PAIN",
+      "chemio": {
+        "contesto": -0.6311,
+        "urgenza": 0.4751,
+        "polarità": -0.4307,
+        "novità": 0.3747
+      },
+      "target": [
+        -0.6311,
+        0.4751,
+        -0.4307,
+        0.3747
+      ]
+    },
+    {
+      "text": "ERR: invalid argument to syscall #16",
+      "category": "ERR",
+      "chemio": {
+        "contesto": -0.8292,
+        "urgenza": 0.7389,
+        "polarità": -0.8693,
+        "novità": 0.8942
+      },
+      "target": [
+        -0.8292,
+        0.7389,
+        -0.8693,
+        0.8942
+      ]
+    },
+    {
+      "text": "ERR: out of memory, alloc size=2460kb",
+      "category": "ERR",
+      "chemio": {
+        "contesto": -0.9821,
+        "urgenza": 0.8843,
+        "polarità": -0.891,
+        "novità": 0.6058
+      },
+      "target": [
+        -0.9821,
+        0.8843,
+        -0.891,
+        0.6058
+      ]
+    },
+    {
+      "text": "match: all 4 cells agree, sim=0.89",
+      "category": "PAT",
+      "chemio": {
+        "contesto": 0.498,
+        "urgenza": 0.0495,
+        "polarità": 0.8256,
+        "novità": 0.1845
+      },
+      "target": [
+        0.498,
+        0.0495,
+        0.8256,
+        0.1845
+      ]
+    },
+    {
+      "text": "PF: supervisor mode access at user address 0x17be3111",
+      "category": "ERR",
+      "chemio": {
+        "contesto": -0.6079,
+        "urgenza": 0.6817,
+        "polarità": -0.7437,
+        "novità": 0.7207
+      },
+      "target": [
+        -0.6079,
+        0.6817,
+        -0.7437,
+        0.7207
+      ]
+    },
+    {
+      "text": "match: all 4 cells agree, sim=0.86",
+      "category": "PAT",
+      "chemio": {
+        "contesto": 0.4918,
+        "urgenza": 0.1513,
+        "polarità": 0.7937,
+        "novità": 0.002
+      },
+      "target": [
+        0.4918,
+        0.1513,
+        0.7937,
+        0.002
+      ]
+    },
+    {
+      "text": "heartbeat — core 3 active, temp=47.4C",
+      "category": "LV",
+      "chemio": {
+        "contesto": 0.83,
+        "urgenza": 0.0,
+        "polarità": 0.8272,
+        "novità": 0.161
+      },
+      "target": [
+        0.83,
+        0.0,
+        0.8272,
+        0.161
+      ]
+    },
+    {
+      "text": "LEARN P0",
+      "category": "CMD",
+      "chemio": {
+        "contesto": 0.3782,
+        "urgenza": 0.379,
+        "polarità": 0.094,
+        "novità": 0.6677
+      },
+      "target": [
+        0.3782,
+        0.379,
+        0.094,
+        0.6677
+      ]
+    },
+    {
+      "text": "daydream complete: 31 processed, 0 novel",
+      "category": "REST",
+      "chemio": {
+        "contesto": 0.5192,
+        "urgenza": 0.0,
+        "polarità": 0.6619,
+        "novità": 0.0
+      },
+      "target": [
+        0.5192,
+        0.0,
+        0.6619,
+        0.0
+      ]
+    },
+    {
+      "text": "life signal: 74 patterns, 39 strong matches",
+      "category": "LV",
+      "chemio": {
+        "contesto": 0.896,
+        "urgenza": 0.0,
+        "polarità": 0.7019,
+        "novità": 0.1654
+      },
+      "target": [
+        0.896,
+        0.0,
+        0.7019,
+        0.1654
+      ]
+    },
+    {
+      "text": "...",
+      "category": "SIL",
+      "chemio": {
+        "contesto": -0.045,
+        "urgenza": 0.0,
+        "polarità": -0.0077,
+        "novità": 0.0
+      },
+      "target": [
+        -0.045,
+        0.0,
+        -0.0077,
+        0.0
+      ]
+    },
+    {
+      "text": "attractor: process (sim=0.83)",
+      "category": "PAT",
+      "chemio": {
+        "contesto": 0.6655,
+        "urgenza": 0.0612,
+        "polarità": 0.8799,
+        "novità": 0.0768
+      },
+      "target": [
+        0.6655,
+        0.0612,
+        0.8799,
+        0.0768
+      ]
+    },
+    {
+      "text": "STATUS",
+      "category": "CMD",
+      "chemio": {
+        "contesto": 0.0586,
+        "urgenza": 0.2168,
+        "polarità": 0.0424,
+        "novità": 0.1356
+      },
+      "target": [
+        0.0586,
+        0.2168,
+        0.0424,
+        0.1356
+      ]
+    },
+    {
+      "text": "heartbeat @15930: attractor pool=15",
+      "category": "LV",
+      "chemio": {
+        "contesto": 0.8953,
+        "urgenza": 0.0,
+        "polarità": 0.8615,
+        "novità": 0.11
+      },
+      "target": [
+        0.8953,
+        0.0,
+        0.8615,
+        0.11
+      ]
+    },
+    {
+      "text": "strange signal on serial: random",
+      "category": "NOV",
+      "chemio": {
+        "contesto": 0.3281,
+        "urgenza": 0.3832,
+        "polarità": 0.1216,
+        "novità": 0.9263
+      },
+      "target": [
+        0.3281,
+        0.3832,
+        0.1216,
+        0.9263
+      ]
+    },
+    {
+      "text": "APIC timer at 1000 Hz",
+      "category": "BOOT",
+      "chemio": {
+        "contesto": 0.7099,
+        "urgenza": 0.487,
+        "polarità": 0.1508,
+        "novità": 0.9054
+      },
+      "target": [
+        0.7099,
+        0.487,
+        0.1508,
+        0.9054
+      ]
+    },
+    {
+      "text": "WARN: pattern match similarity below threshold (0.62)",
+      "category": "WARN",
+      "chemio": {
+        "contesto": -0.1323,
+        "urgenza": 0.4007,
+        "polarità": -0.1163,
+        "novità": 0.2695
+      },
+      "target": [
+        -0.1323,
+        0.4007,
+        -0.1163,
+        0.2695
+      ]
+    },
+    {
+      "text": "SLEEP:END — delta=8.8100, 2 novel connections",
+      "category": "REST",
+      "chemio": {
+        "contesto": 0.4147,
+        "urgenza": 0.0,
+        "polarità": 0.7444,
+        "novità": 0.0
+      },
+      "target": [
+        0.4147,
+        0.0,
+        0.7444,
+        0.0
+      ]
+    },
+    {
+      "text": "WARN: memory allocation failed at memory_alloc",
+      "category": "ERR",
+      "chemio": {
+        "contesto": -0.6729,
+        "urgenza": 0.6425,
+        "polarità": -0.7011,
+        "novità": 0.8795
+      },
+      "target": [
+        -0.6729,
+        0.6425,
+        -0.7011,
+        0.8795
+      ]
+    },
+    {
+      "text": "ALERT: temperature at 39.2C, throttling",
+      "category": "WARN",
+      "chemio": {
+        "contesto": -0.1572,
+        "urgenza": 0.5049,
+        "polarità": -0.3859,
+        "novità": 0.3182
+      },
+      "target": [
+        -0.1572,
+        0.5049,
+        -0.3859,
+        0.3182
+      ]
+    },
+    {
+      "text": "SEND unhandled exception",
+      "category": "CMD",
+      "chemio": {
+        "contesto": 0.3797,
+        "urgenza": 0.3565,
+        "polarità": 0.4123,
+        "novità": 0.1589
+      },
+      "target": [
+        0.3797,
+        0.3565,
+        0.4123,
+        0.1589
+      ]
+    },
+    {
+      "text": "known state: h-dist=8.40 from pattern #33",
+      "category": "PAT",
+      "chemio": {
+        "contesto": 0.7662,
+        "urgenza": 0.0331,
+        "polarità": 0.5146,
+        "novità": 0.0822
+      },
+      "target": [
+        0.7662,
+        0.0331,
+        0.5146,
+        0.0822
+      ]
+    },
+    {
+      "text": "SLEEP:END — delta=9.0800, 1 novel connections",
+      "category": "REST",
+      "chemio": {
+        "contesto": 0.3191,
+        "urgenza": 0.0,
+        "polarità": 0.656,
+        "novità": 0.0
+      },
+      "target": [
+        0.3191,
+        0.0,
+        0.656,
+        0.0
+      ]
+    },
+    {
+      "text": "QUERY chemio",
+      "category": "CMD",
+      "chemio": {
+        "contesto": 0.3248,
+        "urgenza": 0.1529,
+        "polarità": 0.297,
+        "novità": 0.6609
+      },
+      "target": [
+        0.3248,
+        0.1529,
+        0.297,
+        0.6609
+      ]
+    },
+    {
+      "text": "BIOStrap: stage 13/2 loaded",
+      "category": "BOOT",
+      "chemio": {
+        "contesto": 0.4442,
+        "urgenza": 0.4378,
+        "polarità": 0.2288,
+        "novità": 0.8792
+      },
+      "target": [
+        0.4442,
+        0.4378,
+        0.2288,
+        0.8792
+      ]
+    },
+    {
+      "text": "vivo: 1452s, 529 page faults handled",
+      "category": "LV",
+      "chemio": {
+        "contesto": 0.9945,
+        "urgenza": 0.0,
+        "polarità": 0.7874,
+        "novità": 0.1587
+      },
+      "target": [
+        0.9945,
+        0.0,
+        0.7874,
+        0.1587
+      ]
+    },
+    {
+      "text": "ERR: stack segment fault, ss=0x477d, esp=0x956269f0",
+      "category": "ERR",
+      "chemio": {
+        "contesto": -0.9041,
+        "urgenza": 0.9482,
+        "polarità": -0.7905,
+        "novità": 0.7768
+      },
+      "target": [
+        -0.9041,
+        0.9482,
+        -0.7905,
+        0.7768
+      ]
+    },
+    {
+      "text": "known state: h-dist=9.60 from pattern #63",
+      "category": "PAT",
+      "chemio": {
+        "contesto": 0.5847,
+        "urgenza": 0.0462,
+        "polarità": 0.6808,
+        "novità": 0.1956
+      },
+      "target": [
+        0.5847,
+        0.0462,
+        0.6808,
+        0.1956
+      ]
+    },
+    {
+      "text": "Wake from sleep: tick=99625, elapsed=3086ms",
+      "category": "BOOT",
+      "chemio": {
+        "contesto": 0.2161,
+        "urgenza": 0.6469,
+        "polarità": 0.3231,
+        "novità": 0.8418
+      },
+      "target": [
+        0.2161,
+        0.6469,
+        0.3231,
+        0.8418
+      ]
+    },
+    {
+      "text": "sysok: mem=8741kb free, cpu=96%",
+      "category": "LV",
+      "chemio": {
+        "contesto": 0.8332,
+        "urgenza": 0.0,
+        "polarità": 0.824,
+        "novità": 0.0022
+      },
+      "target": [
+        0.8332,
+        0.0,
+        0.824,
+        0.0022
+      ]
+    },
+    {
+      "text": "WARN: chemio input buffer at 74% capacity",
+      "category": "WARN",
+      "chemio": {
+        "contesto": -0.2738,
+        "urgenza": 0.5991,
+        "polarità": -0.1479,
+        "novità": 0.3936
+      },
+      "target": [
+        -0.2738,
+        0.5991,
+        -0.1479,
+        0.3936
+      ]
+    },
+    {
+      "text": "Memory: 3kb available",
+      "category": "BOOT",
+      "chemio": {
+        "contesto": 0.2129,
+        "urgenza": 0.716,
+        "polarità": 0.1775,
+        "novità": 0.8059
+      },
+      "target": [
+        0.2129,
+        0.716,
+        0.1775,
+        0.8059
+      ]
+    },
+    {
+      "text": "[no input]",
+      "category": "SIL",
+      "chemio": {
+        "contesto": 0.018,
+        "urgenza": 0.0,
+        "polarità": 0.0095,
+        "novità": 0.0
+      },
+      "target": [
+        0.018,
+        0.0,
+        0.0095,
+        0.0
+      ]
+    },
+    {
+      "text": "Tatto: 26 consecutive error ticks",
+      "category": "PAIN",
+      "chemio": {
+        "contesto": -0.6392,
+        "urgenza": 0.5165,
+        "polarità": -0.5446,
+        "novità": 0.5063
+      },
+      "target": [
+        -0.6392,
+        0.5165,
+        -0.5446,
+        0.5063
+      ]
+    },
+    {
+      "text": "PF: supervisor mode access at user address 0xce9ff57f",
+      "category": "ERR",
+      "chemio": {
+        "contesto": -0.6047,
+        "urgenza": 0.7742,
+        "polarità": -0.5011,
+        "novità": 0.7763
+      },
+      "target": [
+        -0.6047,
+        0.7742,
+        -0.5011,
+        0.7763
+      ]
+    },
+    {
+      "text": "Serial port 0x02e8 initialized at 9600 baud",
+      "category": "BOOT",
+      "chemio": {
+        "contesto": 0.6325,
+        "urgenza": 0.6599,
+        "polarità": 0.4667,
+        "novità": 0.9989
+      },
+      "target": [
+        0.6325,
+        0.6599,
+        0.4667,
+        0.9989
+      ]
+    },
+    {
+      "text": "stabilizing: Integrat h range narrowing (0.1977)",
+      "category": "REST",
+      "chemio": {
+        "contesto": 0.3581,
+        "urgenza": 0.0,
+        "polarità": 0.6444,
+        "novità": 0.0
+      },
+      "target": [
+        0.3581,
+        0.0,
+        0.6444,
+        0.0
+      ]
+    },
+    {
+      "text": "ERR: invalid argument to syscall #9",
+      "category": "ERR",
+      "chemio": {
+        "contesto": -0.6915,
+        "urgenza": 0.882,
+        "polarità": -0.6239,
+        "novità": 0.6934
+      },
+      "target": [
+        -0.6915,
+        0.882,
+        -0.6239,
+        0.6934
+      ]
+    },
+    {
+      "text": "metabol: energy level at 56%, entering conservation",
+      "category": "PAIN",
+      "chemio": {
+        "contesto": -0.4192,
+        "urgenza": 0.5981,
+        "polarità": -0.5511,
+        "novità": 0.5208
+      },
+      "target": [
+        -0.4192,
+        0.5981,
+        -0.5511,
+        0.5208
+      ]
+    },
+    {
+      "text": "alive — cells OK, 14 patterns stored",
+      "category": "LV",
+      "chemio": {
+        "contesto": 0.9375,
+        "urgenza": 0.0,
+        "polarità": 0.795,
+        "novità": 0.0299
+      },
+      "target": [
+        0.9375,
+        0.0,
+        0.795,
+        0.0299
+      ]
+    },
+    {
+      "text": "Interrupts enabled — entering main loop",
+      "category": "BOOT",
+      "chemio": {
+        "contesto": 0.3076,
+        "urgenza": 0.4812,
+        "polarità": 0.1605,
+        "novità": 0.9656
+      },
+      "target": [
+        0.3076,
+        0.4812,
+        0.1605,
+        0.9656
+      ]
+    },
+    {
+      "text": "HEARTBEAT — 2277s uptime, 11 ticks processed",
+      "category": "LV",
+      "chemio": {
+        "contesto": 0.8467,
+        "urgenza": 0.0,
+        "polarità": 0.7062,
+        "novità": 0.1865
+      },
+      "target": [
+        0.8467,
+        0.0,
+        0.7062,
+        0.1865
+      ]
+    },
+    {
+      "text": "NEW pattern detected at tick 64275",
+      "category": "NOV",
+      "chemio": {
+        "contesto": 0.257,
+        "urgenza": 0.4671,
+        "polarità": 0.1836,
+        "novità": 0.9262
+      },
+      "target": [
+        0.257,
+        0.4671,
+        0.1836,
+        0.9262
+      ]
+    },
+    {
+      "text": "COLD BOOT — all cells reset",
+      "category": "BOOT",
+      "chemio": {
+        "contesto": 0.3091,
+        "urgenza": 0.7118,
+        "polarità": 0.2262,
+        "novità": 0.9241
+      },
+      "target": [
+        0.3091,
+        0.7118,
+        0.2262,
+        0.9241
+      ]
+    },
+    {
+      "text": "panic: invalid memory access at kernel/main.rs:842",
+      "category": "ERR",
+      "chemio": {
+        "contesto": -0.6328,
+        "urgenza": 0.755,
+        "polarità": -0.5902,
+        "novità": 0.8073
+      },
+      "target": [
+        -0.6328,
+        0.755,
+        -0.5902,
+        0.8073
+      ]
+    },
+    {
+      "text": "A: recall #5: similarity 0.625",
+      "category": "PAT",
+      "chemio": {
+        "contesto": 0.4953,
+        "urgenza": 0.1821,
+        "polarità": 0.6834,
+        "novità": 0.0373
+      },
+      "target": [
+        0.4953,
+        0.1821,
+        0.6834,
+        0.0373
+      ]
+    },
+    {
+      "text": "tick 1130: all systems nominal",
+      "category": "LV",
+      "chemio": {
+        "contesto": 0.939,
+        "urgenza": 0.0,
+        "polarità": 0.7043,
+        "novità": 0.1058
+      },
+      "target": [
+        0.939,
+        0.0,
+        0.7043,
+        0.1058
+      ]
+    },
+    {
+      "text": "panic: stack overflow at kernel/syscall.rs:795",
+      "category": "ERR",
+      "chemio": {
+        "contesto": -0.7461,
+        "urgenza": 0.8789,
+        "polarità": -0.56,
+        "novità": 0.8774
+      },
+      "target": [
+        -0.7461,
+        0.8789,
+        -0.56,
+        0.8774
+      ]
+    },
+    {
+      "text": "RECALL 4",
+      "category": "CMD",
+      "chemio": {
+        "contesto": 0.2508,
+        "urgenza": 0.3744,
+        "polarità": 0.0354,
+        "novità": 0.543
+      },
+      "target": [
+        0.2508,
+        0.3744,
+        0.0354,
+        0.543
+      ]
+    },
+    {
+      "text": "GP err=0x6b at 0xce9ff57f — selector error",
+      "category": "ERR",
+      "chemio": {
+        "contesto": -0.7255,
+        "urgenza": 0.8553,
+        "polarità": -0.7097,
+        "novità": 0.9644
+      },
+      "target": [
+        -0.7255,
+        0.8553,
+        -0.7097,
+        0.9644
+      ]
+    },
+    {
+      "text": "FATAL: kernel panic — segment not present",
+      "category": "ERR",
+      "chemio": {
+        "contesto": -0.7906,
+        "urgenza": 0.8558,
+        "polarità": -0.7761,
+        "novità": 0.6083
+      },
+      "target": [
+        -0.7906,
+        0.8558,
+        -0.7761,
+        0.6083
+      ]
+    },
+    {
+      "text": "SENSE syscall",
+      "category": "CMD",
+      "chemio": {
+        "contesto": 0.3979,
+        "urgenza": 0.228,
+        "polarità": 0.5777,
+        "novità": 0.5554
+      },
+      "target": [
+        0.3979,
+        0.228,
+        0.5777,
+        0.5554
+      ]
+    },
+    {
+      "text": "WAKE",
+      "category": "CMD",
+      "chemio": {
+        "contesto": 0.3909,
+        "urgenza": 0.4754,
+        "polarità": 0.4948,
+        "novità": 0.3378
+      },
+      "target": [
+        0.3909,
+        0.4754,
+        0.4948,
+        0.3378
+      ]
+    },
+    {
+      "text": "pattern recall: P3 @ t=37096",
+      "category": "PAT",
+      "chemio": {
+        "contesto": 0.7918,
+        "urgenza": 0.0067,
+        "polarità": 0.6487,
+        "novità": 0.1525
+      },
+      "target": [
+        0.7918,
+        0.0067,
+        0.6487,
+        0.1525
+      ]
+    },
+    {
+      "text": "Tatto at saturation: h=-0.55 for 243 ticks",
+      "category": "PAIN",
+      "chemio": {
+        "contesto": -0.731,
+        "urgenza": 0.6751,
+        "polarità": -0.4692,
+        "novità": 0.359
+      },
+      "target": [
+        -0.731,
+        0.6751,
+        -0.4692,
+        0.359
+      ]
+    },
+    {
+      "text": "STATUS",
+      "category": "CMD",
+      "chemio": {
+        "contesto": 0.2484,
+        "urgenza": 0.2901,
+        "polarità": 0.3518,
+        "novità": 0.5184
+      },
+      "target": [
+        0.2484,
+        0.2901,
+        0.3518,
+        0.5184
+      ]
+    },
+    {
+      "text": "ERR: general protection fault, code=0x7d",
+      "category": "ERR",
+      "chemio": {
+        "contesto": -0.9125,
+        "urgenza": 0.7824,
+        "polarità": -0.8758,
+        "novità": 0.7826
+      },
+      "target": [
+        -0.9125,
+        0.7824,
+        -0.8758,
+        0.7826
+      ]
+    },
+    {
+      "text": "DUMP",
+      "category": "CMD",
+      "chemio": {
+        "contesto": 0.1678,
+        "urgenza": 0.0147,
+        "polarità": 0.0837,
+        "novità": 0.29
+      },
+      "target": [
+        0.1678,
+        0.0147,
+        0.0837,
+        0.29
+      ]
+    },
+    {
+      "text": "NOTICE: 58 unacknowledged interrupts",
+      "category": "WARN",
+      "chemio": {
+        "contesto": -0.1495,
+        "urgenza": 0.4766,
+        "polarità": -0.0822,
+        "novità": 0.4034
+      },
+      "target": [
+        -0.1495,
+        0.4766,
+        -0.0822,
+        0.4034
+      ]
+    },
+    {
+      "text": "first occurrence of PF",
+      "category": "NOV",
+      "chemio": {
+        "contesto": 0.2751,
+        "urgenza": 0.1235,
+        "polarità": 0.0049,
+        "novità": 0.8179
+      },
+      "target": [
+        0.2751,
+        0.1235,
+        0.0049,
+        0.8179
+      ]
+    },
+    {
+      "text": "\n",
+      "category": "SIL",
+      "chemio": {
+        "contesto": -0.0203,
+        "urgenza": 0.0,
+        "polarità": -0.0302,
+        "novità": 0.0
+      },
+      "target": [
+        -0.0203,
+        0.0,
+        -0.0302,
+        0.0
+      ]
+    },
+    {
+      "text": "STATUS",
+      "category": "CMD",
+      "chemio": {
+        "contesto": 0.3935,
+        "urgenza": 0.4084,
+        "polarità": 0.4615,
+        "novità": 0.4847
+      },
+      "target": [
+        0.3935,
+        0.4084,
+        0.4615,
+        0.4847
+      ]
+    },
+    {
+      "text": "ECHO unhandled exception",
+      "category": "CMD",
+      "chemio": {
+        "contesto": 0.0092,
+        "urgenza": 0.459,
+        "polarità": 0.1231,
+        "novità": 0.504
+      },
+      "target": [
+        0.0092,
+        0.459,
+        0.1231,
+        0.504
+      ]
+    },
+    {
+      "text": "WARN: pattern match similarity below threshold (0.90)",
+      "category": "WARN",
+      "chemio": {
+        "contesto": -0.1223,
+        "urgenza": 0.3705,
+        "polarità": -0.2259,
+        "novità": 0.133
+      },
+      "target": [
+        -0.1223,
+        0.3705,
+        -0.2259,
+        0.133
+      ]
+    },
+    {
+      "text": "[no input]",
+      "category": "SIL",
+      "chemio": {
+        "contesto": -0.0036,
+        "urgenza": 0.0,
+        "polarità": -0.0258,
+        "novità": 0.0
+      },
+      "target": [
+        -0.0036,
+        0.0,
+        -0.0258,
+        0.0
+      ]
+    },
+    {
+      "text": "STATUS",
+      "category": "CMD",
+      "chemio": {
+        "contesto": 0.2156,
+        "urgenza": 0.1677,
+        "polarità": 0.5176,
+        "novità": 0.1829
+      },
+      "target": [
+        0.2156,
+        0.1677,
+        0.5176,
+        0.1829
+      ]
+    },
+    {
+      "text": "cell Integrat h=0.15 — outside nominal range (-0.26,0.27)",
+      "category": "PAIN",
+      "chemio": {
+        "contesto": -0.7638,
+        "urgenza": 0.5292,
+        "polarità": -0.4052,
+        "novità": 0.6312
+      },
+      "target": [
+        -0.7638,
+        0.5292,
+        -0.4052,
+        0.6312
+      ]
+    },
+    {
+      "text": "WARM BOOT — retaining 11 patterns",
+      "category": "BOOT",
+      "chemio": {
+        "contesto": 0.5818,
+        "urgenza": 0.5351,
+        "polarità": 0.262,
+        "novità": 0.815
+      },
+      "target": [
+        0.5818,
+        0.5351,
+        0.262,
+        0.815
+      ]
+    },
+    {
+      "text": "pain signal: Integrat cell overexcited",
+      "category": "PAIN",
+      "chemio": {
+        "contesto": -0.7091,
+        "urgenza": 0.5676,
+        "polarità": -0.5368,
+        "novità": 0.7877
+      },
+      "target": [
+        -0.7091,
+        0.5676,
+        -0.5368,
+        0.7877
+      ]
+    },
+    {
+      "text": "WARN: memory allocation failed at syscall_dispatch",
+      "category": "ERR",
+      "chemio": {
+        "contesto": -0.9601,
+        "urgenza": 0.6699,
+        "polarità": -0.8842,
+        "novità": 0.5743
+      },
+      "target": [
+        -0.9601,
+        0.6699,
+        -0.8842,
+        0.5743
+      ]
+    },
+    {
+      "text": "healing: Tatto pain memory decayed by 4.2200",
+      "category": "REST",
+      "chemio": {
+        "contesto": 0.4383,
+        "urgenza": 0.0,
+        "polarità": 0.7835,
+        "novità": 0.0
+      },
+      "target": [
+        0.4383,
+        0.0,
+        0.7835,
+        0.0
+      ]
+    },
+    {
+      "text": "\n",
+      "category": "SIL",
+      "chemio": {
+        "contesto": -0.0199,
+        "urgenza": 0.0,
+        "polarità": 0.0229,
+        "novità": 0.0
+      },
+      "target": [
+        -0.0199,
+        0.0,
+        0.0229,
+        0.0
+      ]
+    },
+    {
+      "text": "pattern recall: P3 @ t=89027",
+      "category": "PAT",
+      "chemio": {
+        "contesto": 0.5066,
+        "urgenza": 0.1967,
+        "polarità": 0.8155,
+        "novità": 0.1802
+      },
+      "target": [
+        0.5066,
+        0.1967,
+        0.8155,
+        0.1802
+      ]
+    },
+    {
+      "text": "ERR: cannot acquire spinlock from IRQ context",
+      "category": "ERR",
+      "chemio": {
+        "contesto": -0.9376,
+        "urgenza": 0.6427,
+        "polarità": -0.5319,
+        "novità": 0.8055
+      },
+      "target": [
+        -0.9376,
+        0.6427,
+        -0.5319,
+        0.8055
+      ]
+    },
+    {
+      "text": "vivo: 2215s, 60 page faults handled",
+      "category": "LV",
+      "chemio": {
+        "contesto": 0.8013,
+        "urgenza": 0.0,
+        "polarità": 0.7715,
+        "novità": 0.0081
+      },
+      "target": [
+        0.8013,
+        0.0,
+        0.7715,
+        0.0081
+      ]
+    },
+    {
+      "text": "APIC timer at 100 Hz",
+      "category": "BOOT",
+      "chemio": {
+        "contesto": 0.4385,
+        "urgenza": 0.6989,
+        "polarità": 0.486,
+        "novità": 0.8724
+      },
+      "target": [
+        0.4385,
+        0.6989,
+        0.486,
+        0.8724
+      ]
+    },
+    {
+      "text": "strange signal on syscall: oscillating",
+      "category": "NOV",
+      "chemio": {
+        "contesto": 0.1167,
+        "urgenza": 0.3614,
+        "polarità": 0.2927,
+        "novità": 0.8376
+      },
+      "target": [
+        0.1167,
+        0.3614,
+        0.2927,
+        0.8376
+      ]
+    },
+    {
+      "text": "A: recall #27: similarity 0.533",
+      "category": "PAT",
+      "chemio": {
+        "contesto": 0.5366,
+        "urgenza": 0.1003,
+        "polarità": 0.8718,
+        "novità": 0.1617
+      },
+      "target": [
+        0.5366,
+        0.1003,
+        0.8718,
+        0.1617
+      ]
+    },
+    {
+      "text": "NEW: no similar pattern in memory (35 patterns checked)",
+      "category": "NOV",
+      "chemio": {
+        "contesto": 0.275,
+        "urgenza": 0.1868,
+        "polarità": 0.1477,
+        "novità": 0.8742
+      },
+      "target": [
+        0.275,
+        0.1868,
+        0.1477,
+        0.8742
+      ]
+    },
+    {
+      "text": "WARN: stack usage at 85% of 64MB",
+      "category": "WARN",
+      "chemio": {
+        "contesto": -0.1876,
+        "urgenza": 0.2688,
+        "polarità": -0.2001,
+        "novità": 0.1355
+      },
+      "target": [
+        -0.1876,
+        0.2688,
+        -0.2001,
+        0.1355
+      ]
+    },
+    {
+      "text": "",
+      "category": "SIL",
+      "chemio": {
+        "contesto": -0.0056,
+        "urgenza": 0.0,
+        "polarità": -0.0035,
+        "novità": 0.0
+      },
+      "target": [
+        -0.0056,
+        0.0,
+        -0.0035,
+        0.0
+      ]
+    },
+    {
+      "text": "RESET",
+      "category": "CMD",
+      "chemio": {
+        "contesto": 0.0588,
+        "urgenza": 0.3392,
+        "polarità": 0.1766,
+        "novità": 0.5634
+      },
+      "target": [
+        0.0588,
+        0.3392,
+        0.1766,
+        0.5634
+      ]
+    },
+    {
+      "text": "Wake from sleep: tick=4219, elapsed=1947ms",
+      "category": "BOOT",
+      "chemio": {
+        "contesto": 0.3004,
+        "urgenza": 0.5355,
+        "polarità": 0.4418,
+        "novità": 0.8386
+      },
+      "target": [
+        0.3004,
+        0.5355,
+        0.4418,
+        0.8386
+      ]
+    },
+    {
+      "text": "HEARTBEAT — 3256s uptime, 76 ticks processed",
+      "category": "LV",
+      "chemio": {
+        "contesto": 0.8153,
+        "urgenza": 0.0,
+        "polarità": 0.8247,
+        "novità": 0.1393
+      },
+      "target": [
+        0.8153,
+        0.0,
+        0.8247,
+        0.1393
+      ]
+    },
+    {
+      "text": "daydream complete: 3 processed, 3 novel",
+      "category": "REST",
+      "chemio": {
+        "contesto": 0.5696,
+        "urgenza": 0.0,
+        "polarità": 0.6741,
+        "novità": 0.0
+      },
+      "target": [
+        0.5696,
+        0.0,
+        0.6741,
+        0.0
+      ]
+    },
+    {
+      "text": "ERR: invalid argument to syscall #4",
+      "category": "ERR",
+      "chemio": {
+        "contesto": -0.9187,
+        "urgenza": 0.8587,
+        "polarità": -0.5311,
+        "novità": 0.9083
+      },
+      "target": [
+        -0.9187,
+        0.8587,
+        -0.5311,
+        0.9083
+      ]
+    },
+    {
+      "text": "... waiting ...",
+      "category": "SIL",
+      "chemio": {
+        "contesto": -0.0127,
+        "urgenza": 0.0,
+        "polarità": 0.0006,
+        "novità": 0.0
+      },
+      "target": [
+        -0.0127,
+        0.0,
+        0.0006,
+        0.0
+      ]
+    },
+    {
+      "text": "panic: unhandled exception at kernel/idt.rs:736",
+      "category": "ERR",
+      "chemio": {
+        "contesto": -0.7212,
+        "urgenza": 0.7985,
+        "polarità": -0.55,
+        "novità": 0.7124
+      },
+      "target": [
+        -0.7212,
+        0.7985,
+        -0.55,
+        0.7124
+      ]
+    },
+    {
+      "text": "ERR: invalid opcode at 0xce4a2bbd",
+      "category": "ERR",
+      "chemio": {
+        "contesto": -0.879,
+        "urgenza": 0.7579,
+        "polarità": -0.7516,
+        "novità": 0.9808
+      },
+      "target": [
+        -0.879,
+        0.7579,
+        -0.7516,
+        0.9808
+      ]
+    },
+    {
+      "text": "pattern recall: P0 @ t=18340",
+      "category": "PAT",
+      "chemio": {
+        "contesto": 0.6132,
+        "urgenza": 0.1283,
+        "polarità": 0.7529,
+        "novità": 0.0367
+      },
+      "target": [
+        0.6132,
+        0.1283,
+        0.7529,
+        0.0367
+      ]
+    },
+    {
+      "text": "ERR: division by zero at IP=0xdc98d2c1",
+      "category": "ERR",
+      "chemio": {
+        "contesto": -0.9233,
+        "urgenza": 0.8712,
+        "polarità": -0.5032,
+        "novità": 0.8158
+      },
+      "target": [
+        -0.9233,
+        0.8712,
+        -0.5032,
+        0.8158
+      ]
+    },
+    {
+      "text": "Memory: 5kb available",
+      "category": "BOOT",
+      "chemio": {
+        "contesto": 0.3297,
+        "urgenza": 0.4862,
+        "polarità": 0.1122,
+        "novità": 0.9505
+      },
+      "target": [
+        0.3297,
+        0.4862,
+        0.1122,
+        0.9505
+      ]
+    },
+    {
+      "text": "pattern 1 activated: 50 ticks since last seen",
+      "category": "PAT",
+      "chemio": {
+        "contesto": 0.7671,
+        "urgenza": 0.1268,
+        "polarità": 0.8357,
+        "novità": 0.0396
+      },
+      "target": [
+        0.7671,
+        0.1268,
+        0.8357,
+        0.0396
+      ]
+    },
+    {
+      "text": "SHUTDOWN",
+      "category": "CMD",
+      "chemio": {
+        "contesto": 0.1873,
+        "urgenza": 0.5887,
+        "polarità": 0.5549,
+        "novità": 0.3961
+      },
+      "target": [
+        0.1873,
+        0.5887,
+        0.5549,
+        0.3961
+      ]
+    },
+    {
+      "text": "[no input]",
+      "category": "SIL",
+      "chemio": {
+        "contesto": -0.0285,
+        "urgenza": 0.0,
+        "polarità": 0.0354,
+        "novità": 0.0
+      },
+      "target": [
+        -0.0285,
+        0.0,
+        0.0354,
+        0.0
+      ]
+    },
+    {
+      "text": "LOAD apic at 0xce4a2bbd",
+      "category": "CMD",
+      "chemio": {
+        "contesto": 0.0825,
+        "urgenza": 0.0866,
+        "polarità": 0.4346,
+        "novità": 0.5714
+      },
+      "target": [
+        0.0825,
+        0.0866,
+        0.4346,
+        0.5714
+      ]
+    },
+    {
+      "text": "PF: supervisor mode access at user address 0x37f8a88b",
+      "category": "ERR",
+      "chemio": {
+        "contesto": -0.9285,
+        "urgenza": 0.8848,
+        "polarità": -0.7322,
+        "novità": 0.5857
+      },
+      "target": [
+        -0.9285,
+        0.8848,
+        -0.7322,
+        0.5857
+      ]
+    },
+    {
+      "text": "ERR: invalid argument to syscall #24",
+      "category": "ERR",
+      "chemio": {
+        "contesto": -0.9847,
+        "urgenza": 0.8386,
+        "polarità": -0.7617,
+        "novità": 0.8719
+      },
+      "target": [
+        -0.9847,
+        0.8386,
+        -0.7617,
+        0.8719
+      ]
+    },
+    {
+      "text": "LOAD apic at 0x8b8148f6",
+      "category": "CMD",
+      "chemio": {
+        "contesto": 0.3656,
+        "urgenza": 0.5474,
+        "polarità": 0.3922,
+        "novità": 0.4185
+      },
+      "target": [
+        0.3656,
+        0.5474,
+        0.3922,
+        0.4185
+      ]
+    },
+    {
+      "text": "vivo: 2668s, 359 page faults handled",
+      "category": "LV",
+      "chemio": {
+        "contesto": 0.8541,
+        "urgenza": 0.0,
+        "polarità": 0.7078,
+        "novità": 0.0315
+      },
+      "target": [
+        0.8541,
+        0.0,
+        0.7078,
+        0.0315
+      ]
+    },
+    {
+      "text": "ERR: segmentation fault at 0x392456de",
+      "category": "ERR",
+      "chemio": {
+        "contesto": -0.6504,
+        "urgenza": 0.8218,
+        "polarità": -0.859,
+        "novità": 0.9075
+      },
+      "target": [
+        -0.6504,
+        0.8218,
+        -0.859,
+        0.9075
+      ]
+    },
+    {
+      "text": "NOTICE: 74 unacknowledged interrupts",
+      "category": "WARN",
+      "chemio": {
+        "contesto": -0.3021,
+        "urgenza": 0.3856,
+        "polarità": -0.0695,
+        "novità": 0.2798
+      },
+      "target": [
+        -0.3021,
+        0.3856,
+        -0.0695,
+        0.2798
+      ]
+    },
+    {
+      "text": "A: recall #59: similarity 0.586",
+      "category": "PAT",
+      "chemio": {
+        "contesto": 0.5341,
+        "urgenza": 0.0593,
+        "polarità": 0.8315,
+        "novità": 0.0875
+      },
+      "target": [
+        0.5341,
+        0.0593,
+        0.8315,
+        0.0875
+      ]
+    },
+    {
+      "text": "SENSE sense",
+      "category": "CMD",
+      "chemio": {
+        "contesto": 0.3196,
+        "urgenza": 0.1443,
+        "polarità": 0.0305,
+        "novità": 0.615
+      },
+      "target": [
+        0.3196,
+        0.1443,
+        0.0305,
+        0.615
+      ]
+    },
+    {
+      "text": "ERR: cannot acquire spinlock from IRQ context",
+      "category": "ERR",
+      "chemio": {
+        "contesto": -0.7125,
+        "urgenza": 0.7359,
+        "polarità": -0.6782,
+        "novità": 0.5071
+      },
+      "target": [
+        -0.7125,
+        0.7359,
+        -0.6782,
+        0.5071
+      ]
+    },
+    {
+      "text": "sysok: mem=48273kb free, cpu=82%",
+      "category": "LV",
+      "chemio": {
+        "contesto": 0.9179,
+        "urgenza": 0.0,
+        "polarità": 0.7127,
+        "novità": 0.175
+      },
+      "target": [
+        0.9179,
+        0.0,
+        0.7127,
+        0.175
+      ]
+    },
+    {
+      "text": "stabilizing: Integrat h range narrowing (0.2691)",
+      "category": "REST",
+      "chemio": {
+        "contesto": 0.3101,
+        "urgenza": 0.0,
+        "polarità": 0.587,
+        "novità": 0.0
+      },
+      "target": [
+        0.3101,
+        0.0,
+        0.587,
+        0.0
+      ]
+    },
+    {
+      "text": "WARN: pattern match similarity below threshold (0.53)",
+      "category": "WARN",
+      "chemio": {
+        "contesto": -0.4149,
+        "urgenza": 0.4965,
+        "polarità": -0.3543,
+        "novità": 0.2818
+      },
+      "target": [
+        -0.4149,
+        0.4965,
+        -0.3543,
+        0.2818
+      ]
+    },
+    {
+      "text": "HEARTBEAT — 1388s uptime, 21 ticks processed",
+      "category": "LV",
+      "chemio": {
+        "contesto": 0.9823,
+        "urgenza": 0.0,
+        "polarità": 0.7165,
+        "novità": 0.1909
+      },
+      "target": [
+        0.9823,
+        0.0,
+        0.7165,
+        0.1909
+      ]
+    },
+    {
+      "text": "A: recall #97: similarity 0.663",
+      "category": "PAT",
+      "chemio": {
+        "contesto": 0.5978,
+        "urgenza": 0.194,
+        "polarità": 0.8949,
+        "novità": 0.1565
+      },
+      "target": [
+        0.5978,
+        0.194,
+        0.8949,
+        0.1565
+      ]
+    },
+    {
+      "text": "ECHO corrupt table",
+      "category": "CMD",
+      "chemio": {
+        "contesto": 0.3244,
+        "urgenza": 0.0496,
+        "polarità": 0.541,
+        "novità": 0.5352
+      },
+      "target": [
+        0.3244,
+        0.0496,
+        0.541,
+        0.5352
+      ]
+    },
+    {
+      "text": "DUMP",
+      "category": "CMD",
+      "chemio": {
+        "contesto": 0.0875,
+        "urgenza": 0.4849,
+        "polarità": 0.1739,
+        "novità": 0.6651
+      },
+      "target": [
+        0.0875,
+        0.4849,
+        0.1739,
+        0.6651
+      ]
+    },
+    {
+      "text": "tick 48661: sensor sweep clean",
+      "category": "LV",
+      "chemio": {
+        "contesto": 0.8904,
+        "urgenza": 0.0,
+        "polarità": 0.8526,
+        "novità": 0.0443
+      },
+      "target": [
+        0.8904,
+        0.0,
+        0.8526,
+        0.0443
+      ]
+    },
+    {
+      "text": "",
+      "category": "SIL",
+      "chemio": {
+        "contesto": -0.0017,
+        "urgenza": 0.0,
+        "polarità": -0.0312,
+        "novità": 0.0
+      },
+      "target": [
+        -0.0017,
+        0.0,
+        -0.0312,
+        0.0
+      ]
+    },
+    {
+      "text": "PF: supervisor mode access at user address 0x571aa876",
+      "category": "ERR",
+      "chemio": {
+        "contesto": -0.7025,
+        "urgenza": 0.7899,
+        "polarità": -0.7963,
+        "novità": 0.5483
+      },
+      "target": [
+        -0.7025,
+        0.7899,
+        -0.7963,
+        0.5483
+      ]
+    },
+    {
+      "text": "—",
+      "category": "SIL",
+      "chemio": {
+        "contesto": 0.0297,
+        "urgenza": 0.0,
+        "polarità": 0.0317,
+        "novità": 0.0
+      },
+      "target": [
+        0.0297,
+        0.0,
+        0.0317,
+        0.0
+      ]
+    },
+    {
+      "text": "DUMP",
+      "category": "CMD",
+      "chemio": {
+        "contesto": 0.3737,
+        "urgenza": 0.4762,
+        "polarità": 0.4184,
+        "novità": 0.1911
+      },
+      "target": [
+        0.3737,
+        0.4762,
+        0.4184,
+        0.1911
+      ]
+    },
+    {
+      "text": "ERR: syscall idle not implemented",
+      "category": "ERR",
+      "chemio": {
+        "contesto": -0.7861,
+        "urgenza": 0.8566,
+        "polarità": -0.6527,
+        "novità": 0.8536
+      },
+      "target": [
+        -0.7861,
+        0.8566,
+        -0.6527,
+        0.8536
+      ]
+    },
+    {
+      "text": "ERR: invalid argument to syscall #24",
+      "category": "ERR",
+      "chemio": {
+        "contesto": -0.6417,
+        "urgenza": 0.7,
+        "polarità": -0.7474,
+        "novità": 0.4076
+      },
+      "target": [
+        -0.6417,
+        0.7,
+        -0.7474,
+        0.4076
+      ]
+    },
+    {
+      "text": "unexpected input: -59 52 -81 -31",
+      "category": "NOV",
+      "chemio": {
+        "contesto": 0.2056,
+        "urgenza": 0.4171,
+        "polarità": 0.1404,
+        "novità": 0.8781
+      },
+      "target": [
+        0.2056,
+        0.4171,
+        0.1404,
+        0.8781
+      ]
+    },
+    {
+      "text": "GET log_level",
+      "category": "CMD",
+      "chemio": {
+        "contesto": 0.2997,
+        "urgenza": 0.3068,
+        "polarità": 0.547,
+        "novità": 0.1676
+      },
+      "target": [
+        0.2997,
+        0.3068,
+        0.547,
+        0.1676
+      ]
+    },
+    {
+      "text": "HEARTBEAT — 438s uptime, 42 ticks processed",
+      "category": "LV",
+      "chemio": {
+        "contesto": 0.8678,
+        "urgenza": 0.0,
+        "polarità": 0.7895,
+        "novità": 0.0838
+      },
+      "target": [
+        0.8678,
+        0.0,
+        0.7895,
+        0.0838
+      ]
+    },
+    {
+      "text": "Loading vmm... done",
+      "category": "BOOT",
+      "chemio": {
+        "contesto": 0.7732,
+        "urgenza": 0.516,
+        "polarità": 0.2285,
+        "novità": 0.9316
+      },
+      "target": [
+        0.7732,
+        0.516,
+        0.2285,
+        0.9316
+      ]
+    },
+    {
+      "text": "pattern 94 activated: 285 ticks since last seen",
+      "category": "PAT",
+      "chemio": {
+        "contesto": 0.7152,
+        "urgenza": 0.1318,
+        "polarità": 0.6954,
+        "novità": 0.0308
+      },
+      "target": [
+        0.7152,
+        0.1318,
+        0.6954,
+        0.0308
+      ]
+    },
+    {
+      "text": "WARM BOOT — retaining 57 patterns",
+      "category": "BOOT",
+      "chemio": {
+        "contesto": 0.2981,
+        "urgenza": 0.705,
+        "polarità": 0.3507,
+        "novità": 0.9407
+      },
+      "target": [
+        0.2981,
+        0.705,
+        0.3507,
+        0.9407
+      ]
+    },
+    {
+      "text": "ALERT: battery at 25%, entering low-power mode",
+      "category": "WARN",
+      "chemio": {
+        "contesto": -0.2024,
+        "urgenza": 0.5604,
+        "polarità": -0.3359,
+        "novità": 0.1796
+      },
+      "target": [
+        -0.2024,
+        0.5604,
+        -0.3359,
+        0.1796
+      ]
+    },
+    {
+      "text": "idle — tick 41561, no events",
+      "category": "SIL",
+      "chemio": {
+        "contesto": -0.0338,
+        "urgenza": 0.0,
+        "polarità": -0.0092,
+        "novità": 0.0
+      },
+      "target": [
+        -0.0338,
+        0.0,
+        -0.0092,
+        0.0
+      ]
+    },
+    {
+      "text": "STATUS",
+      "category": "CMD",
+      "chemio": {
+        "contesto": 0.3538,
+        "urgenza": 0.053,
+        "polarità": 0.5227,
+        "novità": 0.1164
+      },
+      "target": [
+        0.3538,
+        0.053,
+        0.5227,
+        0.1164
+      ]
+    },
+    {
+      "text": "attractor: error (sim=0.68)",
+      "category": "PAT",
+      "chemio": {
+        "contesto": 0.4124,
+        "urgenza": 0.1254,
+        "polarità": 0.5962,
+        "novità": 0.0199
+      },
+      "target": [
+        0.4124,
+        0.1254,
+        0.5962,
+        0.0199
+      ]
+    },
+    {
+      "text": "SLEEP",
+      "category": "CMD",
+      "chemio": {
+        "contesto": 0.198,
+        "urgenza": 0.3193,
+        "polarità": 0.2307,
+        "novità": 0.19
+      },
+      "target": [
+        0.198,
+        0.3193,
+        0.2307,
+        0.19
+      ]
+    },
+    {
+      "text": "WARN: sensor 96 not responding, retry 25",
+      "category": "WARN",
+      "chemio": {
+        "contesto": -0.2745,
+        "urgenza": 0.2664,
+        "polarità": -0.2839,
+        "novità": 0.374
+      },
+      "target": [
+        -0.2745,
+        0.2664,
+        -0.2839,
+        0.374
+      ]
+    },
+    {
+      "text": "ERR: invalid opcode at 0x46685257",
+      "category": "ERR",
+      "chemio": {
+        "contesto": -0.7791,
+        "urgenza": 0.6373,
+        "polarità": -0.5031,
+        "novità": 0.9478
+      },
+      "target": [
+        -0.7791,
+        0.6373,
+        -0.5031,
+        0.9478
+      ]
+    },
+    {
+      "text": "unexpected input: -47 50 -15 6",
+      "category": "NOV",
+      "chemio": {
+        "contesto": 0.3834,
+        "urgenza": 0.2555,
+        "polarità": 0.25,
+        "novità": 0.9978
+      },
+      "target": [
+        0.3834,
+        0.2555,
+        0.25,
+        0.9978
+      ]
+    },
+    {
+      "text": "HEARTBEAT — 222s uptime, 34 ticks processed",
+      "category": "LV",
+      "chemio": {
+        "contesto": 0.926,
+        "urgenza": 0.0,
+        "polarità": 0.7506,
+        "novità": 0.1997
+      },
+      "target": [
+        0.926,
+        0.0,
+        0.7506,
+        0.1997
+      ]
+    },
+    {
+      "text": "alive: 68 neurons active, 86 synapses tracked",
+      "category": "LV",
+      "chemio": {
+        "contesto": 0.9684,
+        "urgenza": 0.0,
+        "polarità": 0.732,
+        "novità": 0.1686
+      },
+      "target": [
+        0.9684,
+        0.0,
+        0.732,
+        0.1686
+      ]
+    },
+    {
+      "text": "PF: supervisor mode access at user address 0x392456de",
+      "category": "ERR",
+      "chemio": {
+        "contesto": -0.954,
+        "urgenza": 0.7114,
+        "polarità": -0.8095,
+        "novità": 0.6575
+      },
+      "target": [
+        -0.954,
+        0.7114,
+        -0.8095,
+        0.6575
+      ]
+    },
+    {
+      "text": "ALERT: temperature at 47.0C, throttling",
+      "category": "WARN",
+      "chemio": {
+        "contesto": -0.4135,
+        "urgenza": 0.346,
+        "polarità": -0.0406,
+        "novità": 0.1118
+      },
+      "target": [
+        -0.4135,
+        0.346,
+        -0.0406,
+        0.1118
+      ]
+    },
+    {
+      "text": "vivo: 355s, 675 page faults handled",
+      "category": "LV",
+      "chemio": {
+        "contesto": 0.8993,
+        "urgenza": 0.0,
+        "polarità": 0.846,
+        "novità": 0.1745
+      },
+      "target": [
+        0.8993,
+        0.0,
+        0.846,
+        0.1745
+      ]
+    },
+    {
+      "text": "novel state: h-dist=1.51 from nearest pattern",
+      "category": "NOV",
+      "chemio": {
+        "contesto": 0.4866,
+        "urgenza": 0.3645,
+        "polarità": 0.1249,
+        "novità": 0.84
+      },
+      "target": [
+        0.4866,
+        0.3645,
+        0.1249,
+        0.84
+      ]
+    },
+    {
+      "text": "tick 77614: sensor sweep clean",
+      "category": "LV",
+      "chemio": {
+        "contesto": 0.8952,
+        "urgenza": 0.0,
+        "polarità": 0.8666,
+        "novità": 0.1314
+      },
+      "target": [
+        0.8952,
+        0.0,
+        0.8666,
+        0.1314
+      ]
+    },
+    {
+      "text": "(idle)",
+      "category": "SIL",
+      "chemio": {
+        "contesto": 0.0024,
+        "urgenza": 0.0,
+        "polarità": -0.0212,
+        "novità": 0.0
+      },
+      "target": [
+        0.0024,
+        0.0,
+        -0.0212,
+        0.0
+      ]
+    },
+    {
+      "text": "WARN: prediction error spike: MSE=0.2225",
+      "category": "WARN",
+      "chemio": {
+        "contesto": -0.3095,
+        "urgenza": 0.316,
+        "polarità": -0.133,
+        "novità": 0.4836
+      },
+      "target": [
+        -0.3095,
+        0.316,
+        -0.133,
+        0.4836
+      ]
+    },
+    {
+      "text": "FORGET P0",
+      "category": "CMD",
+      "chemio": {
+        "contesto": 0.3441,
+        "urgenza": 0.3683,
+        "polarità": 0.2265,
+        "novità": 0.4045
+      },
+      "target": [
+        0.3441,
+        0.3683,
+        0.2265,
+        0.4045
+      ]
+    },
+    {
+      "text": "HEARTBEAT — 2070s uptime, 95 ticks processed",
+      "category": "LV",
+      "chemio": {
+        "contesto": 0.9957,
+        "urgenza": 0.0,
+        "polarità": 0.8553,
+        "novità": 0.1777
+      },
+      "target": [
+        0.9957,
+        0.0,
+        0.8553,
+        0.1777
+      ]
+    },
+    {
+      "text": "",
+      "category": "SIL",
+      "chemio": {
+        "contesto": -0.0304,
+        "urgenza": 0.0,
+        "polarità": 0.0025,
+        "novità": 0.0
+      },
+      "target": [
+        -0.0304,
+        0.0,
+        0.0025,
+        0.0
+      ]
+    },
+    {
+      "text": "pattern 29 recognized at tick 80643",
+      "category": "PAT",
+      "chemio": {
+        "contesto": 0.4885,
+        "urgenza": 0.077,
+        "polarità": 0.8439,
+        "novità": 0.1964
+      },
+      "target": [
+        0.4885,
+        0.077,
+        0.8439,
+        0.1964
+      ]
+    },
+    {
+      "text": "A: 76.7% match with pattern #55",
+      "category": "PAT",
+      "chemio": {
+        "contesto": 0.784,
+        "urgenza": 0.0205,
+        "polarità": 0.7946,
+        "novità": 0.0414
+      },
+      "target": [
+        0.784,
+        0.0205,
+        0.7946,
+        0.0414
+      ]
+    },
+    {
+      "text": "[no input]",
+      "category": "SIL",
+      "chemio": {
+        "contesto": -0.0108,
+        "urgenza": 0.0,
+        "polarità": -0.0138,
+        "novità": 0.0
+      },
+      "target": [
+        -0.0108,
+        0.0,
+        -0.0138,
+        0.0
+      ]
+    },
+    {
+      "text": "idle — tick 81039, no events",
+      "category": "SIL",
+      "chemio": {
+        "contesto": 0.0218,
+        "urgenza": 0.0,
+        "polarità": 0.0371,
+        "novità": 0.0
+      },
+      "target": [
+        0.0218,
+        0.0,
+        0.0371,
+        0.0
+      ]
+    },
+    {
+      "text": "WARN: memory usage at 88% of 64MB",
+      "category": "WARN",
+      "chemio": {
+        "contesto": -0.1349,
+        "urgenza": 0.4674,
+        "polarità": -0.0675,
+        "novità": 0.3825
+      },
+      "target": [
+        -0.1349,
+        0.4674,
+        -0.0675,
+        0.3825
+      ]
+    },
+    {
+      "text": "ERR: stack segment fault, ss=0x8686, esp=0x7e570ddf",
+      "category": "ERR",
+      "chemio": {
+        "contesto": -0.603,
+        "urgenza": 0.6498,
+        "polarità": -0.5271,
+        "novità": 0.4974
+      },
+      "target": [
+        -0.603,
+        0.6498,
+        -0.5271,
+        0.4974
+      ]
+    },
+    {
+      "text": "HEARTBEAT — 3329s uptime, 54 ticks processed",
+      "category": "LV",
+      "chemio": {
+        "contesto": 0.9963,
+        "urgenza": 0.0,
+        "polarità": 0.7274,
+        "novità": 0.0638
+      },
+      "target": [
+        0.9963,
+        0.0,
+        0.7274,
+        0.0638
+      ]
+    },
+    {
+      "text": "GET neurons_per_cell",
+      "category": "CMD",
+      "chemio": {
+        "contesto": 0.1689,
+        "urgenza": 0.0126,
+        "polarità": 0.4129,
+        "novità": 0.2009
+      },
+      "target": [
+        0.1689,
+        0.0126,
+        0.4129,
+        0.2009
+      ]
+    },
+    {
+      "text": "NEW: no similar pattern in memory (90 patterns checked)",
+      "category": "NOV",
+      "chemio": {
+        "contesto": 0.1845,
+        "urgenza": 0.2938,
+        "polarità": 0.0168,
+        "novità": 0.872
+      },
+      "target": [
+        0.1845,
+        0.2938,
+        0.0168,
+        0.872
+      ]
+    },
+    {
+      "text": "RUN timer x90",
+      "category": "CMD",
+      "chemio": {
+        "contesto": 0.0727,
+        "urgenza": 0.0748,
+        "polarità": 0.0274,
+        "novità": 0.1726
+      },
+      "target": [
+        0.0727,
+        0.0748,
+        0.0274,
+        0.1726
+      ]
+    },
+    {
+      "text": "ERR: invalid argument to syscall #24",
+      "category": "ERR",
+      "chemio": {
+        "contesto": -0.9384,
+        "urgenza": 0.7201,
+        "polarità": -0.6438,
+        "novità": 0.7819
+      },
+      "target": [
+        -0.9384,
+        0.7201,
+        -0.6438,
+        0.7819
+      ]
+    },
+    {
+      "text": "ERR: division by zero at IP=0x19db3ad0",
+      "category": "ERR",
+      "chemio": {
+        "contesto": -0.8801,
+        "urgenza": 0.9177,
+        "polarità": -0.6282,
+        "novità": 0.9511
+      },
+      "target": [
+        -0.8801,
+        0.9177,
+        -0.6282,
+        0.9511
+      ]
+    },
+    {
+      "text": "A: 57.1% match with pattern #59",
+      "category": "PAT",
+      "chemio": {
+        "contesto": 0.55,
+        "urgenza": 0.0709,
+        "polarità": 0.5378,
+        "novità": 0.1904
+      },
+      "target": [
+        0.55,
+        0.0709,
+        0.5378,
+        0.1904
+      ]
+    },
+    {
+      "text": "ERR: syscall idle not implemented",
+      "category": "ERR",
+      "chemio": {
+        "contesto": -0.8648,
+        "urgenza": 0.9941,
+        "polarità": -0.5427,
+        "novità": 0.8227
+      },
+      "target": [
+        -0.8648,
+        0.9941,
+        -0.5427,
+        0.8227
+      ]
+    },
+    {
+      "text": "Metabol energy restored to 56%",
+      "category": "REST",
+      "chemio": {
+        "contesto": 0.5138,
+        "urgenza": 0.0,
+        "polarità": 0.4569,
+        "novità": 0.0
+      },
+      "target": [
+        0.5138,
+        0.0,
+        0.4569,
+        0.0
+      ]
+    },
+    {
+      "text": "Loading apic... done",
+      "category": "BOOT",
+      "chemio": {
+        "contesto": 0.204,
+        "urgenza": 0.5994,
+        "polarità": 0.4073,
+        "novità": 0.9211
+      },
+      "target": [
+        0.204,
+        0.5994,
+        0.4073,
+        0.9211
+      ]
+    },
+    {
+      "text": "ERR: out of memory, alloc size=789kb",
+      "category": "ERR",
+      "chemio": {
+        "contesto": -0.8201,
+        "urgenza": 0.7339,
+        "polarità": -0.7556,
+        "novità": 0.7362
+      },
+      "target": [
+        -0.8201,
+        0.7339,
+        -0.7556,
+        0.7362
+      ]
+    },
+    {
+      "text": "ERR: double fault, shutdown requested",
+      "category": "ERR",
+      "chemio": {
+        "contesto": -0.8299,
+        "urgenza": 0.8178,
+        "polarità": -0.6409,
+        "novità": 0.945
+      },
+      "target": [
+        -0.8299,
+        0.8178,
+        -0.6409,
+        0.945
+      ]
+    },
+    {
+      "text": "attractor: recover (sim=0.59)",
+      "category": "PAT",
+      "chemio": {
+        "contesto": 0.5499,
+        "urgenza": 0.129,
+        "polarità": 0.8248,
+        "novità": 0.072
+      },
+      "target": [
+        0.5499,
+        0.129,
+        0.8248,
+        0.072
+      ]
+    },
+    {
+      "text": "pain signal: Metabol cell overexcited",
+      "category": "PAIN",
+      "chemio": {
+        "contesto": -0.787,
+        "urgenza": 0.44,
+        "polarità": -0.4313,
+        "novità": 0.2919
+      },
+      "target": [
+        -0.787,
+        0.44,
+        -0.4313,
+        0.2919
+      ]
+    },
+    {
+      "text": "EXEC cat",
+      "category": "CMD",
+      "chemio": {
+        "contesto": 0.2959,
+        "urgenza": 0.5219,
+        "polarità": 0.5073,
+        "novità": 0.146
+      },
+      "target": [
+        0.2959,
+        0.5219,
+        0.5073,
+        0.146
+      ]
+    },
+    {
+      "text": "WARN: chemio input buffer at 64% capacity",
+      "category": "WARN",
+      "chemio": {
+        "contesto": -0.1409,
+        "urgenza": 0.2677,
+        "polarità": -0.0055,
+        "novità": 0.3889
+      },
+      "target": [
+        -0.1409,
+        0.2677,
+        -0.0055,
+        0.3889
+      ]
+    },
+    {
+      "text": "MEMORIZZA: new experience at tick 75487",
+      "category": "NOV",
+      "chemio": {
+        "contesto": 0.3197,
+        "urgenza": 0.1267,
+        "polarità": 0.2875,
+        "novità": 0.9682
+      },
+      "target": [
+        0.3197,
+        0.1267,
+        0.2875,
+        0.9682
+      ]
+    },
+    {
+      "text": "cell Integrat h=0.79 — outside nominal range (-0.42,0.33)",
+      "category": "PAIN",
+      "chemio": {
+        "contesto": -0.5823,
+        "urgenza": 0.5159,
+        "polarità": -0.6557,
+        "novità": 0.2082
+      },
+      "target": [
+        -0.5823,
+        0.5159,
+        -0.6557,
+        0.2082
+      ]
+    },
+    {
+      "text": "heartbeat — core 3 active, temp=72.4C",
+      "category": "LV",
+      "chemio": {
+        "contesto": 0.8128,
+        "urgenza": 0.0,
+        "polarità": 0.8002,
+        "novità": 0.0283
+      },
+      "target": [
+        0.8128,
+        0.0,
+        0.8002,
+        0.0283
+      ]
+    },
+    {
+      "text": "ERR: out of memory, alloc size=3322kb",
+      "category": "ERR",
+      "chemio": {
+        "contesto": -0.6692,
+        "urgenza": 0.8061,
+        "polarità": -0.8653,
+        "novità": 0.8016
+      },
+      "target": [
+        -0.6692,
+        0.8061,
+        -0.8653,
+        0.8016
+      ]
+    },
+    {
+      "text": "tick 87197: all systems nominal",
+      "category": "LV",
+      "chemio": {
+        "contesto": 0.8474,
+        "urgenza": 0.0,
+        "polarità": 0.7286,
+        "novità": 0.194
+      },
+      "target": [
+        0.8474,
+        0.0,
+        0.7286,
+        0.194
+      ]
+    },
+    {
+      "text": "ALERT: battery at 87%, entering low-power mode",
+      "category": "WARN",
+      "chemio": {
+        "contesto": -0.2209,
+        "urgenza": 0.4014,
+        "polarità": -0.3784,
+        "novità": 0.4602
+      },
+      "target": [
+        -0.2209,
+        0.4014,
+        -0.3784,
+        0.4602
+      ]
+    },
+    {
+      "text": "FORGET P2",
+      "category": "CMD",
+      "chemio": {
+        "contesto": 0.1302,
+        "urgenza": 0.3115,
+        "polarità": 0.5905,
+        "novità": 0.1218
+      },
+      "target": [
+        0.1302,
+        0.3115,
+        0.5905,
+        0.1218
+      ]
+    },
+    {
+      "text": "\n",
+      "category": "SIL",
+      "chemio": {
+        "contesto": -0.0419,
+        "urgenza": 0.0,
+        "polarità": -0.0473,
+        "novità": 0.0
+      },
+      "target": [
+        -0.0419,
+        0.0,
+        -0.0473,
+        0.0
+      ]
+    },
+    {
+      "text": "STATE",
+      "category": "CMD",
+      "chemio": {
+        "contesto": 0.0126,
+        "urgenza": 0.5118,
+        "polarità": 0.1513,
+        "novità": 0.2119
+      },
+      "target": [
+        0.0126,
+        0.5118,
+        0.1513,
+        0.2119
+      ]
+    },
+    {
+      "text": "NOTICE: 32 unacknowledged interrupts",
+      "category": "WARN",
+      "chemio": {
+        "contesto": -0.4398,
+        "urgenza": 0.3348,
+        "polarità": -0.0263,
+        "novità": 0.3361
+      },
+      "target": [
+        -0.4398,
+        0.3348,
+        -0.0263,
+        0.3361
+      ]
+    },
+    {
+      "text": "WARN: memory allocation failed at tissue_step",
+      "category": "ERR",
+      "chemio": {
+        "contesto": -0.686,
+        "urgenza": 0.9111,
+        "polarità": -0.5347,
+        "novità": 0.6663
+      },
+      "target": [
+        -0.686,
+        0.9111,
+        -0.5347,
+        0.6663
+      ]
+    },
+    {
+      "text": "MEMORIZZA: new experience at tick 89560",
+      "category": "NOV",
+      "chemio": {
+        "contesto": 0.2668,
+        "urgenza": 0.272,
+        "polarità": 0.0337,
+        "novità": 0.8091
+      },
+      "target": [
+        0.2668,
+        0.272,
+        0.0337,
+        0.8091
+      ]
+    },
+    {
+      "text": "ERR: division by zero at IP=0xbacfb3d0",
+      "category": "ERR",
+      "chemio": {
+        "contesto": -0.6628,
+        "urgenza": 0.8191,
+        "polarità": -0.7744,
+        "novità": 0.8421
+      },
+      "target": [
+        -0.6628,
+        0.8191,
+        -0.7744,
+        0.8421
+      ]
+    },
+    {
+      "text": "pattern 36 activated: 68 ticks since last seen",
+      "category": "PAT",
+      "chemio": {
+        "contesto": 0.5703,
+        "urgenza": 0.1156,
+        "polarità": 0.5595,
+        "novità": 0.162
+      },
+      "target": [
+        0.5703,
+        0.1156,
+        0.5595,
+        0.162
+      ]
+    },
+    {
+      "text": "WARN: integrat attractor convergence slow (69 steps)",
+      "category": "WARN",
+      "chemio": {
+        "contesto": -0.2398,
+        "urgenza": 0.2292,
+        "polarità": -0.1409,
+        "novità": 0.2359
+      },
+      "target": [
+        -0.2398,
+        0.2292,
+        -0.1409,
+        0.2359
+      ]
+    },
+    {
+      "text": "ERR: syscall recover not implemented",
+      "category": "ERR",
+      "chemio": {
+        "contesto": -0.9221,
+        "urgenza": 0.9136,
+        "polarità": -0.6958,
+        "novità": 0.8191
+      },
+      "target": [
+        -0.9221,
+        0.9136,
+        -0.6958,
+        0.8191
+      ]
+    },
+    {
+      "text": "WARN: prediction error spike: MSE=0.0891",
+      "category": "WARN",
+      "chemio": {
+        "contesto": -0.3019,
+        "urgenza": 0.2684,
+        "polarità": -0.3186,
+        "novità": 0.3548
+      },
+      "target": [
+        -0.3019,
+        0.2684,
+        -0.3186,
+        0.3548
+      ]
+    },
+    {
+      "text": "tissue stress: 1.244 above threshold",
+      "category": "PAIN",
+      "chemio": {
+        "contesto": -0.7031,
+        "urgenza": 0.5878,
+        "polarità": -0.7035,
+        "novità": 0.5767
+      },
+      "target": [
+        -0.7031,
+        0.5878,
+        -0.7035,
+        0.5767
+      ]
+    },
+    {
+      "text": "Wake from sleep: tick=25646, elapsed=4250ms",
+      "category": "BOOT",
+      "chemio": {
+        "contesto": 0.5565,
+        "urgenza": 0.4882,
+        "polarità": 0.3473,
+        "novità": 0.9093
+      },
+      "target": [
+        0.5565,
+        0.4882,
+        0.3473,
+        0.9093
+      ]
+    },
+    {
+      "text": "calma: all cells within nominal range",
+      "category": "REST",
+      "chemio": {
+        "contesto": 0.3818,
+        "urgenza": 0.0,
+        "polarità": 0.629,
+        "novità": 0.0
+      },
+      "target": [
+        0.3818,
+        0.0,
+        0.629,
+        0.0
+      ]
+    },
+    {
+      "text": "—",
+      "category": "SIL",
+      "chemio": {
+        "contesto": -0.0052,
+        "urgenza": 0.0,
+        "polarità": -0.0342,
+        "novità": 0.0
+      },
+      "target": [
+        -0.0052,
+        0.0,
+        -0.0342,
+        0.0
+      ]
+    },
+    {
+      "text": "metabol: energy level at 64%, entering conservation",
+      "category": "PAIN",
+      "chemio": {
+        "contesto": -0.7545,
+        "urgenza": 0.3168,
+        "polarità": -0.4185,
+        "novità": 0.4826
+      },
+      "target": [
+        -0.7545,
+        0.3168,
+        -0.4185,
+        0.4826
+      ]
+    },
+    {
+      "text": "NEW pattern detected at tick 47809",
+      "category": "NOV",
+      "chemio": {
+        "contesto": 0.2784,
+        "urgenza": 0.2356,
+        "polarità": -0.0341,
+        "novità": 0.8213
+      },
+      "target": [
+        0.2784,
+        0.2356,
+        -0.0341,
+        0.8213
+      ]
+    },
+    {
+      "text": "novel state: h-dist=0.03 from nearest pattern",
+      "category": "NOV",
+      "chemio": {
+        "contesto": 0.3397,
+        "urgenza": 0.2027,
+        "polarità": 0.0881,
+        "novità": 0.8955
+      },
+      "target": [
+        0.3397,
+        0.2027,
+        0.0881,
+        0.8955
+      ]
+    },
+    {
+      "text": "novel state: h-dist=2.55 from nearest pattern",
+      "category": "NOV",
+      "chemio": {
+        "contesto": 0.2047,
+        "urgenza": 0.364,
+        "polarità": -0.0203,
+        "novità": 0.9659
+      },
+      "target": [
+        0.2047,
+        0.364,
+        -0.0203,
+        0.9659
+      ]
+    },
+    {
+      "text": "WARN: interrupt took 4683 us, threshold is 5174",
+      "category": "WARN",
+      "chemio": {
+        "contesto": -0.4734,
+        "urgenza": 0.4148,
+        "polarità": -0.3331,
+        "novità": 0.396
+      },
+      "target": [
+        -0.4734,
+        0.4148,
+        -0.3331,
+        0.396
+      ]
+    },
+    {
+      "text": "WARN: memory allocation failed at syscall_dispatch",
+      "category": "ERR",
+      "chemio": {
+        "contesto": -0.9048,
+        "urgenza": 0.6489,
+        "polarità": -0.5773,
+        "novità": 0.5976
+      },
+      "target": [
+        -0.9048,
+        0.6489,
+        -0.5773,
+        0.5976
+      ]
+    },
+    {
+      "text": "PF err=0xb5 addr=0x8b8148f6 — page not present",
+      "category": "ERR",
+      "chemio": {
+        "contesto": -0.7068,
+        "urgenza": 0.6472,
+        "polarità": -0.54,
+        "novità": 0.601
+      },
+      "target": [
+        -0.7068,
+        0.6472,
+        -0.54,
+        0.601
+      ]
+    },
+    {
+      "text": "NOTICE: 30 unacknowledged interrupts",
+      "category": "WARN",
+      "chemio": {
+        "contesto": -0.2173,
+        "urgenza": 0.3259,
+        "polarità": -0.0301,
+        "novità": 0.2734
+      },
+      "target": [
+        -0.2173,
+        0.3259,
+        -0.0301,
+        0.2734
+      ]
+    },
+    {
+      "text": "PF: write access to read-only page at 0x571aa876",
+      "category": "ERR",
+      "chemio": {
+        "contesto": -0.969,
+        "urgenza": 0.6498,
+        "polarità": -0.856,
+        "novità": 0.729
+      },
+      "target": [
+        -0.969,
+        0.6498,
+        -0.856,
+        0.729
+      ]
+    },
+    {
+      "text": "RECALL 3",
+      "category": "CMD",
+      "chemio": {
+        "contesto": 0.0105,
+        "urgenza": 0.2804,
+        "polarità": 0.3093,
+        "novità": 0.5919
+      },
+      "target": [
+        0.0105,
+        0.2804,
+        0.3093,
+        0.5919
+      ]
+    },
+    {
+      "text": "first occurrence of GPF",
+      "category": "NOV",
+      "chemio": {
+        "contesto": 0.2848,
+        "urgenza": 0.1447,
+        "polarità": 0.0497,
+        "novità": 0.8361
+      },
+      "target": [
+        0.2848,
+        0.1447,
+        0.0497,
+        0.8361
+      ]
+    },
+    {
+      "text": "panic: unhandled exception at kernel/idt.rs:825",
+      "category": "ERR",
+      "chemio": {
+        "contesto": -0.7065,
+        "urgenza": 0.9532,
+        "polarità": -0.6521,
+        "novità": 0.6184
+      },
+      "target": [
+        -0.7065,
+        0.9532,
+        -0.6521,
+        0.6184
+      ]
+    },
+    {
+      "text": "SEND corrupt table",
+      "category": "CMD",
+      "chemio": {
+        "contesto": 0.3145,
+        "urgenza": 0.1658,
+        "polarità": 0.4698,
+        "novità": 0.5599
+      },
+      "target": [
+        0.3145,
+        0.1658,
+        0.4698,
+        0.5599
+      ]
+    },
+    {
+      "text": "ERR: invalid argument to syscall #29",
+      "category": "ERR",
+      "chemio": {
+        "contesto": -0.8184,
+        "urgenza": 0.7313,
+        "polarità": -0.823,
+        "novità": 0.4616
+      },
+      "target": [
+        -0.8184,
+        0.7313,
+        -0.823,
+        0.4616
+      ]
+    },
+    {
+      "text": "FATAL: kernel panic — divide error",
+      "category": "ERR",
+      "chemio": {
+        "contesto": -0.8981,
+        "urgenza": 0.6327,
+        "polarità": -0.6986,
+        "novità": 0.4684
+      },
+      "target": [
+        -0.8981,
+        0.6327,
+        -0.6986,
+        0.4684
+      ]
+    },
+    {
+      "text": "burnout warning: Metabol has been active for 282 ticks",
+      "category": "PAIN",
+      "chemio": {
+        "contesto": -0.779,
+        "urgenza": 0.6577,
+        "polarità": -0.5015,
+        "novità": 0.7536
+      },
+      "target": [
+        -0.779,
+        0.6577,
+        -0.5015,
+        0.7536
+      ]
+    },
+    {
+      "text": "Tatto: 67 consecutive error ticks",
+      "category": "PAIN",
+      "chemio": {
+        "contesto": -0.5211,
+        "urgenza": 0.444,
+        "polarità": -0.4149,
+        "novità": 0.3536
+      },
+      "target": [
+        -0.5211,
+        0.444,
+        -0.4149,
+        0.3536
+      ]
+    },
+    {
+      "text": "outlier: Tatto h=-0.35 exceeds threshold 9011",
+      "category": "NOV",
+      "chemio": {
+        "contesto": 0.1836,
+        "urgenza": 0.3226,
+        "polarità": 0.1606,
+        "novità": 0.8558
+      },
+      "target": [
+        0.1836,
+        0.3226,
+        0.1606,
+        0.8558
+      ]
+    },
+    {
+      "text": "ERR core 2: page fault at 0x27cd8130",
+      "category": "ERR",
+      "chemio": {
+        "contesto": -0.8645,
+        "urgenza": 0.6449,
+        "polarità": -0.7084,
+        "novità": 0.424
+      },
+      "target": [
+        -0.8645,
+        0.6449,
+        -0.7084,
+        0.424
+      ]
+    }
+  ],
+  "val": [
+    {
+      "text": "WARN: chemio input buffer at 74% capacity",
+      "category": "WARN",
+      "chemio": {
+        "contesto": -0.4692,
+        "urgenza": 0.4773,
+        "polarità": -0.2713,
+        "novità": 0.431
+      },
+      "target": [
+        -0.4692,
+        0.4773,
+        -0.2713,
+        0.431
+      ]
+    },
+    {
+      "text": "daydream complete: 6 processed, 3 novel",
+      "category": "REST",
+      "chemio": {
+        "contesto": 0.3197,
+        "urgenza": 0.0,
+        "polarità": 0.548,
+        "novità": 0.0
+      },
+      "target": [
+        0.3197,
+        0.0,
+        0.548,
+        0.0
+      ]
+    },
+    {
+      "text": "ALERT: battery at 81%, entering low-power mode",
+      "category": "WARN",
+      "chemio": {
+        "contesto": -0.2171,
+        "urgenza": 0.5516,
+        "polarità": -0.2001,
+        "novità": 0.1738
+      },
+      "target": [
+        -0.2171,
+        0.5516,
+        -0.2001,
+        0.1738
+      ]
+    },
+    {
+      "text": "PF: supervisor mode access at user address 0x392456de",
+      "category": "ERR",
+      "chemio": {
+        "contesto": -0.7548,
+        "urgenza": 0.9614,
+        "polarità": -0.686,
+        "novità": 0.4065
+      },
+      "target": [
+        -0.7548,
+        0.9614,
+        -0.686,
+        0.4065
+      ]
+    },
+    {
+      "text": "cell Tatto h=0.49 — outside nominal range (-0.31,0.25)",
+      "category": "PAIN",
+      "chemio": {
+        "contesto": -0.4722,
+        "urgenza": 0.6289,
+        "polarità": -0.4376,
+        "novità": 0.7173
+      },
+      "target": [
+        -0.4722,
+        0.6289,
+        -0.4376,
+        0.7173
+      ]
+    },
+    {
+      "text": "attractor: process (sim=0.98)",
+      "category": "PAT",
+      "chemio": {
+        "contesto": 0.5171,
+        "urgenza": 0.0965,
+        "polarità": 0.7357,
+        "novità": 0.0778
+      },
+      "target": [
+        0.5171,
+        0.0965,
+        0.7357,
+        0.0778
+      ]
+    },
+    {
+      "text": "RUN tissue x72",
+      "category": "CMD",
+      "chemio": {
+        "contesto": 0.1537,
+        "urgenza": 0.089,
+        "polarità": 0.193,
+        "novità": 0.4175
+      },
+      "target": [
+        0.1537,
+        0.089,
+        0.193,
+        0.4175
+      ]
+    },
+    {
+      "text": "DUMP",
+      "category": "CMD",
+      "chemio": {
+        "contesto": 0.2803,
+        "urgenza": 0.22,
+        "polarità": 0.5806,
+        "novità": 0.5329
+      },
+      "target": [
+        0.2803,
+        0.22,
+        0.5806,
+        0.5329
+      ]
+    },
+    {
+      "text": "life signal: 15 patterns, 14 strong matches",
+      "category": "LV",
+      "chemio": {
+        "contesto": 0.8533,
+        "urgenza": 0.0,
+        "polarità": 0.8537,
+        "novità": 0.0336
+      },
+      "target": [
+        0.8533,
+        0.0,
+        0.8537,
+        0.0336
+      ]
+    },
+    {
+      "text": "WARN: prediction error spike: MSE=0.0173",
+      "category": "WARN",
+      "chemio": {
+        "contesto": -0.325,
+        "urgenza": 0.2398,
+        "polarità": -0.0795,
+        "novità": 0.3017
+      },
+      "target": [
+        -0.325,
+        0.2398,
+        -0.0795,
+        0.3017
+      ]
+    },
+    {
+      "text": "ECHO corrupt table",
+      "category": "CMD",
+      "chemio": {
+        "contesto": 0.3543,
+        "urgenza": 0.2267,
+        "polarità": 0.382,
+        "novità": 0.1532
+      },
+      "target": [
+        0.3543,
+        0.2267,
+        0.382,
+        0.1532
+      ]
+    },
+    {
+      "text": "SENSE sense",
+      "category": "CMD",
+      "chemio": {
+        "contesto": 0.3783,
+        "urgenza": 0.1508,
+        "polarità": 0.5049,
+        "novità": 0.1821
+      },
+      "target": [
+        0.3783,
+        0.1508,
+        0.5049,
+        0.1821
+      ]
+    },
+    {
+      "text": "ERR: syscall idle not implemented",
+      "category": "ERR",
+      "chemio": {
+        "contesto": -0.9002,
+        "urgenza": 0.8854,
+        "polarità": -0.593,
+        "novità": 0.7895
+      },
+      "target": [
+        -0.9002,
+        0.8854,
+        -0.593,
+        0.7895
+      ]
+    },
+    {
+      "text": "WARN: integrat attractor convergence slow (45 steps)",
+      "category": "WARN",
+      "chemio": {
+        "contesto": -0.1021,
+        "urgenza": 0.2727,
+        "polarità": -0.246,
+        "novità": 0.2277
+      },
+      "target": [
+        -0.1021,
+        0.2727,
+        -0.246,
+        0.2277
+      ]
+    },
+    {
+      "text": "Wake from sleep: tick=97411, elapsed=4708ms",
+      "category": "BOOT",
+      "chemio": {
+        "contesto": 0.6859,
+        "urgenza": 0.687,
+        "polarità": 0.4298,
+        "novità": 0.9467
+      },
+      "target": [
+        0.6859,
+        0.687,
+        0.4298,
+        0.9467
+      ]
+    },
+    {
+      "text": "panic: corrupt table at kernel/timer.rs:512",
+      "category": "ERR",
+      "chemio": {
+        "contesto": -0.7533,
+        "urgenza": 0.956,
+        "polarità": -0.7187,
+        "novità": 0.4627
+      },
+      "target": [
+        -0.7533,
+        0.956,
+        -0.7187,
+        0.4627
+      ]
+    },
+    {
+      "text": "ERR: general protection fault, code=0x6b",
+      "category": "ERR",
+      "chemio": {
+        "contesto": -0.6573,
+        "urgenza": 0.891,
+        "polarità": -0.7804,
+        "novità": 0.889
+      },
+      "target": [
+        -0.6573,
+        0.891,
+        -0.7804,
+        0.889
+      ]
+    },
+    {
+      "text": "LOAD tessuto at 0x17be3111",
+      "category": "CMD",
+      "chemio": {
+        "contesto": 0.0746,
+        "urgenza": 0.1492,
+        "polarità": 0.551,
+        "novità": 0.2927
+      },
+      "target": [
+        0.0746,
+        0.1492,
+        0.551,
+        0.2927
+      ]
+    },
+    {
+      "text": "FORGET P2",
+      "category": "CMD",
+      "chemio": {
+        "contesto": 0.1012,
+        "urgenza": 0.2395,
+        "polarità": 0.4277,
+        "novità": 0.3229
+      },
+      "target": [
+        0.1012,
+        0.2395,
+        0.4277,
+        0.3229
+      ]
+    },
+    {
+      "text": "ERR: invalid argument to syscall #16",
+      "category": "ERR",
+      "chemio": {
+        "contesto": -0.8159,
+        "urgenza": 0.8831,
+        "polarità": -0.7081,
+        "novità": 0.777
+      },
+      "target": [
+        -0.8159,
+        0.8831,
+        -0.7081,
+        0.777
+      ]
+    },
+    {
+      "text": "pattern recall: P3 @ t=92623",
+      "category": "PAT",
+      "chemio": {
+        "contesto": 0.7914,
+        "urgenza": 0.0556,
+        "polarità": 0.8692,
+        "novità": 0.0673
+      },
+      "target": [
+        0.7914,
+        0.0556,
+        0.8692,
+        0.0673
+      ]
+    },
+    {
+      "text": "novel state: h-dist=8.84 from nearest pattern",
+      "category": "NOV",
+      "chemio": {
+        "contesto": 0.1871,
+        "urgenza": 0.1066,
+        "polarità": 0.1608,
+        "novità": 0.8402
+      },
+      "target": [
+        0.1871,
+        0.1066,
+        0.1608,
+        0.8402
+      ]
+    },
+    {
+      "text": "anomaly detected at sensor 1: val=0.001",
+      "category": "NOV",
+      "chemio": {
+        "contesto": 0.2578,
+        "urgenza": 0.3718,
+        "polarità": 0.1016,
+        "novità": 0.8554
+      },
+      "target": [
+        0.2578,
+        0.3718,
+        0.1016,
+        0.8554
+      ]
+    },
+    {
+      "text": "idle — tick 11710, no events",
+      "category": "SIL",
+      "chemio": {
+        "contesto": -0.0164,
+        "urgenza": 0.0,
+        "polarità": 0.0064,
+        "novità": 0.0
+      },
+      "target": [
+        -0.0164,
+        0.0,
+        0.0064,
+        0.0
+      ]
+    },
+    {
+      "text": "SLEEP:END — delta=9.3800, 5 novel connections",
+      "category": "REST",
+      "chemio": {
+        "contesto": 0.3458,
+        "urgenza": 0.0,
+        "polarità": 0.4298,
+        "novità": 0.0
+      },
+      "target": [
+        0.3458,
+        0.0,
+        0.4298,
+        0.0
+      ]
+    },
+    {
+      "text": "[no input]",
+      "category": "SIL",
+      "chemio": {
+        "contesto": 0.0012,
+        "urgenza": 0.0,
+        "polarità": -0.036,
+        "novità": 0.0
+      },
+      "target": [
+        0.0012,
+        0.0,
+        -0.036,
+        0.0
+      ]
+    },
+    {
+      "text": "pattern recall: P4 @ t=89020",
+      "category": "PAT",
+      "chemio": {
+        "contesto": 0.7365,
+        "urgenza": 0.0934,
+        "polarità": 0.84,
+        "novità": 0.1809
+      },
+      "target": [
+        0.7365,
+        0.0934,
+        0.84,
+        0.1809
+      ]
+    },
+    {
+      "text": "ERR core 1: page fault at 0x386ecbe0",
+      "category": "ERR",
+      "chemio": {
+        "contesto": -0.8139,
+        "urgenza": 0.8485,
+        "polarità": -0.7296,
+        "novità": 0.6805
+      },
+      "target": [
+        -0.8139,
+        0.8485,
+        -0.7296,
+        0.6805
+      ]
+    },
+    {
+      "text": "ERR: division by zero at IP=0x60e7a113",
+      "category": "ERR",
+      "chemio": {
+        "contesto": -0.7043,
+        "urgenza": 0.8252,
+        "polarità": -0.7797,
+        "novità": 0.6372
+      },
+      "target": [
+        -0.7043,
+        0.8252,
+        -0.7797,
+        0.6372
+      ]
+    },
+    {
+      "text": "panic: unhandled exception at kernel/timer.rs:842",
+      "category": "ERR",
+      "chemio": {
+        "contesto": -0.7645,
+        "urgenza": 0.6063,
+        "polarità": -0.7939,
+        "novità": 0.4761
+      },
+      "target": [
+        -0.7645,
+        0.6063,
+        -0.7939,
+        0.4761
+      ]
+    },
+    {
+      "text": "ERR core 3: page fault at 0x18c26797",
+      "category": "ERR",
+      "chemio": {
+        "contesto": -0.7729,
+        "urgenza": 0.6372,
+        "polarità": -0.5791,
+        "novità": 0.8192
+      },
+      "target": [
+        -0.7729,
+        0.6372,
+        -0.5791,
+        0.8192
+      ]
+    },
+    {
+      "text": "ERR: segmentation fault at 0x07a0ca6e",
+      "category": "ERR",
+      "chemio": {
+        "contesto": -0.7227,
+        "urgenza": 0.7626,
+        "polarità": -0.8128,
+        "novità": 0.615
+      },
+      "target": [
+        -0.7227,
+        0.7626,
+        -0.8128,
+        0.615
+      ]
+    },
+    {
+      "text": "pain signal: Integrat cell overexcited",
+      "category": "PAIN",
+      "chemio": {
+        "contesto": -0.6854,
+        "urgenza": 0.4028,
+        "polarità": -0.7247,
+        "novità": 0.7553
+      },
+      "target": [
+        -0.6854,
+        0.4028,
+        -0.7247,
+        0.7553
+      ]
+    },
+    {
+      "text": "ALERT: battery at 11%, entering low-power mode",
+      "category": "WARN",
+      "chemio": {
+        "contesto": -0.1448,
+        "urgenza": 0.3564,
+        "polarità": -0.2331,
+        "novità": 0.4976
+      },
+      "target": [
+        -0.1448,
+        0.3564,
+        -0.2331,
+        0.4976
+      ]
+    },
+    {
+      "text": "consolidation: 65 experiences processed",
+      "category": "REST",
+      "chemio": {
+        "contesto": 0.319,
+        "urgenza": 0.0,
+        "polarità": 0.54,
+        "novità": 0.0
+      },
+      "target": [
+        0.319,
+        0.0,
+        0.54,
+        0.0
+      ]
+    },
+    {
+      "text": "A: 59.4% match with pattern #38",
+      "category": "PAT",
+      "chemio": {
+        "contesto": 0.7894,
+        "urgenza": 0.0688,
+        "polarità": 0.6853,
+        "novità": 0.1545
+      },
+      "target": [
+        0.7894,
+        0.0688,
+        0.6853,
+        0.1545
+      ]
+    },
+    {
+      "text": "NOTICE: serial buffer overflow, 90 bytes lost",
+      "category": "WARN",
+      "chemio": {
+        "contesto": -0.1427,
+        "urgenza": 0.4038,
+        "polarità": -0.2017,
+        "novità": 0.1715
+      },
+      "target": [
+        -0.1427,
+        0.4038,
+        -0.2017,
+        0.1715
+      ]
+    },
+    {
+      "text": "A: recall #26: similarity 0.608",
+      "category": "PAT",
+      "chemio": {
+        "contesto": 0.6675,
+        "urgenza": 0.0213,
+        "polarità": 0.7406,
+        "novità": 0.0437
+      },
+      "target": [
+        0.6675,
+        0.0213,
+        0.7406,
+        0.0437
+      ]
+    },
+    {
+      "text": "ERR: double fault, shutdown requested",
+      "category": "ERR",
+      "chemio": {
+        "contesto": -0.9078,
+        "urgenza": 0.8885,
+        "polarità": -0.7738,
+        "novità": 0.8457
+      },
+      "target": [
+        -0.9078,
+        0.8885,
+        -0.7738,
+        0.8457
+      ]
+    },
+    {
+      "text": "PF err=0xbd addr=0xbc8960a9 — page not present",
+      "category": "ERR",
+      "chemio": {
+        "contesto": -0.8212,
+        "urgenza": 0.6475,
+        "polarità": -0.7011,
+        "novità": 0.792
+      },
+      "target": [
+        -0.8212,
+        0.6475,
+        -0.7011,
+        0.792
+      ]
+    },
+    {
+      "text": "pattern 38 recognized at tick 20349",
+      "category": "PAT",
+      "chemio": {
+        "contesto": 0.7171,
+        "urgenza": 0.0754,
+        "polarità": 0.7262,
+        "novità": 0.1701
+      },
+      "target": [
+        0.7171,
+        0.0754,
+        0.7262,
+        0.1701
+      ]
+    },
+    {
+      "text": "LOAD serial at 0xce4a2bbd",
+      "category": "CMD",
+      "chemio": {
+        "contesto": 0.0069,
+        "urgenza": 0.5768,
+        "polarità": 0.3616,
+        "novità": 0.1462
+      },
+      "target": [
+        0.0069,
+        0.5768,
+        0.3616,
+        0.1462
+      ]
+    },
+    {
+      "text": "attractor: process (sim=0.86)",
+      "category": "PAT",
+      "chemio": {
+        "contesto": 0.611,
+        "urgenza": 0.0689,
+        "polarità": 0.8376,
+        "novità": 0.1337
+      },
+      "target": [
+        0.611,
+        0.0689,
+        0.8376,
+        0.1337
+      ]
+    },
+    {
+      "text": "pattern recall: P2 @ t=67270",
+      "category": "PAT",
+      "chemio": {
+        "contesto": 0.5159,
+        "urgenza": 0.1086,
+        "polarità": 0.8736,
+        "novità": 0.1946
+      },
+      "target": [
+        0.5159,
+        0.1086,
+        0.8736,
+        0.1946
+      ]
+    },
+    {
+      "text": "APIC timer at 1000 Hz",
+      "category": "BOOT",
+      "chemio": {
+        "contesto": 0.5873,
+        "urgenza": 0.7766,
+        "polarità": 0.1133,
+        "novità": 0.8774
+      },
+      "target": [
+        0.5873,
+        0.7766,
+        0.1133,
+        0.8774
+      ]
+    },
+    {
+      "text": "ERR: double fault, shutdown requested",
+      "category": "ERR",
+      "chemio": {
+        "contesto": -0.6325,
+        "urgenza": 0.9377,
+        "polarità": -0.7706,
+        "novità": 0.4131
+      },
+      "target": [
+        -0.6325,
+        0.9377,
+        -0.7706,
+        0.4131
+      ]
+    },
+    {
+      "text": "sysok: mem=42135kb free, cpu=19%",
+      "category": "LV",
+      "chemio": {
+        "contesto": 0.8416,
+        "urgenza": 0.0,
+        "polarità": 0.801,
+        "novità": 0.1773
+      },
+      "target": [
+        0.8416,
+        0.0,
+        0.801,
+        0.1773
+      ]
+    },
+    {
+      "text": "ECHO unhandled exception",
+      "category": "CMD",
+      "chemio": {
+        "contesto": 0.1446,
+        "urgenza": 0.1509,
+        "polarità": 0.0436,
+        "novità": 0.2046
+      },
+      "target": [
+        0.1446,
+        0.1509,
+        0.0436,
+        0.2046
+      ]
+    },
+    {
+      "text": "(idle)",
+      "category": "SIL",
+      "chemio": {
+        "contesto": 0.0335,
+        "urgenza": 0.0,
+        "polarità": -0.0122,
+        "novità": 0.0
+      },
+      "target": [
+        0.0335,
+        0.0,
+        -0.0122,
+        0.0
+      ]
+    },
+    {
+      "text": "HEARTBEAT — 1198s uptime, 72 ticks processed",
+      "category": "LV",
+      "chemio": {
+        "contesto": 0.9891,
+        "urgenza": 0.0,
+        "polarità": 0.8685,
+        "novità": 0.0103
+      },
+      "target": [
+        0.9891,
+        0.0,
+        0.8685,
+        0.0103
+      ]
+    },
+    {
+      "text": "ERR: invalid opcode at 0x07a0ca6e",
+      "category": "ERR",
+      "chemio": {
+        "contesto": -0.6842,
+        "urgenza": 0.7525,
+        "polarità": -0.6644,
+        "novità": 0.8448
+      },
+      "target": [
+        -0.6842,
+        0.7525,
+        -0.6644,
+        0.8448
+      ]
+    },
+    {
+      "text": "pattern 8 recognized at tick 50445",
+      "category": "PAT",
+      "chemio": {
+        "contesto": 0.6064,
+        "urgenza": 0.0956,
+        "polarità": 0.8935,
+        "novità": 0.1837
+      },
+      "target": [
+        0.6064,
+        0.0956,
+        0.8935,
+        0.1837
+      ]
+    },
+    {
+      "text": "MONITOR Tatto",
+      "category": "CMD",
+      "chemio": {
+        "contesto": 0.0316,
+        "urgenza": 0.3511,
+        "polarità": 0.3148,
+        "novità": 0.5984
+      },
+      "target": [
+        0.0316,
+        0.3511,
+        0.3148,
+        0.5984
+      ]
+    },
+    {
+      "text": "WARN: memory usage at 20% of 1GB",
+      "category": "WARN",
+      "chemio": {
+        "contesto": -0.2362,
+        "urgenza": 0.4941,
+        "polarità": -0.3176,
+        "novità": 0.1312
+      },
+      "target": [
+        -0.2362,
+        0.4941,
+        -0.3176,
+        0.1312
+      ]
+    },
+    {
+      "text": "",
+      "category": "SIL",
+      "chemio": {
+        "contesto": 0.0442,
+        "urgenza": 0.0,
+        "polarità": 0.0193,
+        "novità": 0.0
+      },
+      "target": [
+        0.0442,
+        0.0,
+        0.0193,
+        0.0
+      ]
+    },
+    {
+      "text": "attractor: process (sim=0.88)",
+      "category": "PAT",
+      "chemio": {
+        "contesto": 0.4636,
+        "urgenza": 0.1667,
+        "polarità": 0.7596,
+        "novità": 0.1798
+      },
+      "target": [
+        0.4636,
+        0.1667,
+        0.7596,
+        0.1798
+      ]
+    },
+    {
+      "text": "WARN: memory usage at 44% of 1024kb",
+      "category": "WARN",
+      "chemio": {
+        "contesto": -0.321,
+        "urgenza": 0.2525,
+        "polarità": -0.2837,
+        "novità": 0.3494
+      },
+      "target": [
+        -0.321,
+        0.2525,
+        -0.2837,
+        0.3494
+      ]
+    },
+    {
+      "text": "Booting from ide...",
+      "category": "BOOT",
+      "chemio": {
+        "contesto": 0.2347,
+        "urgenza": 0.4959,
+        "polarità": 0.3046,
+        "novità": 0.9141
+      },
+      "target": [
+        0.2347,
+        0.4959,
+        0.3046,
+        0.9141
+      ]
+    },
+    {
+      "text": "SLEEP:BEGIN — daydreaming, consolidating 78 patterns",
+      "category": "REST",
+      "chemio": {
+        "contesto": 0.2097,
+        "urgenza": 0.0,
+        "polarità": 0.5524,
+        "novità": 0.0
+      },
+      "target": [
+        0.2097,
+        0.0,
+        0.5524,
+        0.0
+      ]
+    },
+    {
+      "text": "WARN: memory usage at 36% of 64MB",
+      "category": "WARN",
+      "chemio": {
+        "contesto": -0.3005,
+        "urgenza": 0.5961,
+        "polarità": -0.2315,
+        "novità": 0.1496
+      },
+      "target": [
+        -0.3005,
+        0.5961,
+        -0.2315,
+        0.1496
+      ]
+    },
+    {
+      "text": "healing: Tatto pain memory decayed by 5.5400",
+      "category": "REST",
+      "chemio": {
+        "contesto": 0.4745,
+        "urgenza": 0.0,
+        "polarità": 0.6535,
+        "novità": 0.0
+      },
+      "target": [
+        0.4745,
+        0.0,
+        0.6535,
+        0.0
+      ]
+    },
+    {
+      "text": "unknown sequence: 00 00 11 00 11 11 10 11",
+      "category": "NOV",
+      "chemio": {
+        "contesto": 0.2702,
+        "urgenza": 0.106,
+        "polarità": 0.147,
+        "novità": 0.8423
+      },
+      "target": [
+        0.2702,
+        0.106,
+        0.147,
+        0.8423
+      ]
+    },
+    {
+      "text": "novel state: h-dist=8.04 from nearest pattern",
+      "category": "NOV",
+      "chemio": {
+        "contesto": 0.4793,
+        "urgenza": 0.4048,
+        "polarità": -0.0588,
+        "novità": 0.8224
+      },
+      "target": [
+        0.4793,
+        0.4048,
+        -0.0588,
+        0.8224
+      ]
+    },
+    {
+      "text": "WARN: prediction error spike: MSE=0.0804",
+      "category": "WARN",
+      "chemio": {
+        "contesto": -0.1306,
+        "urgenza": 0.3285,
+        "polarità": -0.1205,
+        "novità": 0.2511
+      },
+      "target": [
+        -0.1306,
+        0.3285,
+        -0.1205,
+        0.2511
+      ]
+    },
+    {
+      "text": "pattern 80 recognized at tick 63426",
+      "category": "PAT",
+      "chemio": {
+        "contesto": 0.4453,
+        "urgenza": 0.1332,
+        "polarità": 0.505,
+        "novità": 0.0749
+      },
+      "target": [
+        0.4453,
+        0.1332,
+        0.505,
+        0.0749
+      ]
+    },
+    {
+      "text": "timeout waiting for serial data",
+      "category": "SIL",
+      "chemio": {
+        "contesto": -0.0423,
+        "urgenza": 0.0,
+        "polarità": 0.0027,
+        "novità": 0.0
+      },
+      "target": [
+        -0.0423,
+        0.0,
+        0.0027,
+        0.0
+      ]
+    },
+    {
+      "text": "SEND corrupt table",
+      "category": "CMD",
+      "chemio": {
+        "contesto": 0.0314,
+        "urgenza": 0.4097,
+        "polarità": 0.0371,
+        "novità": 0.5995
+      },
+      "target": [
+        0.0314,
+        0.4097,
+        0.0371,
+        0.5995
+      ]
+    },
+    {
+      "text": "... waiting ...",
+      "category": "SIL",
+      "chemio": {
+        "contesto": -0.0425,
+        "urgenza": 0.0,
+        "polarità": 0.0032,
+        "novità": 0.0
+      },
+      "target": [
+        -0.0425,
+        0.0,
+        0.0032,
+        0.0
+      ]
+    },
+    {
+      "text": "DUMP",
+      "category": "CMD",
+      "chemio": {
+        "contesto": 0.2728,
+        "urgenza": 0.0324,
+        "polarità": 0.4216,
+        "novità": 0.2009
+      },
+      "target": [
+        0.2728,
+        0.0324,
+        0.4216,
+        0.2009
+      ]
+    },
+    {
+      "text": "MEMORIZZA: new experience at tick 54687",
+      "category": "NOV",
+      "chemio": {
+        "contesto": 0.1961,
+        "urgenza": 0.2664,
+        "polarità": 0.2061,
+        "novità": 0.8912
+      },
+      "target": [
+        0.1961,
+        0.2664,
+        0.2061,
+        0.8912
+      ]
+    },
+    {
+      "text": "ALERT: temperature at 38.6C, throttling",
+      "category": "WARN",
+      "chemio": {
+        "contesto": -0.4058,
+        "urgenza": 0.2292,
+        "polarità": -0.0208,
+        "novità": 0.4617
+      },
+      "target": [
+        -0.4058,
+        0.2292,
+        -0.0208,
+        0.4617
+      ]
+    },
+    {
+      "text": "unexpected input: -61 14 47 80",
+      "category": "NOV",
+      "chemio": {
+        "contesto": 0.2536,
+        "urgenza": 0.287,
+        "polarità": 0.2565,
+        "novità": 0.8315
+      },
+      "target": [
+        0.2536,
+        0.287,
+        0.2565,
+        0.8315
+      ]
+    },
+    {
+      "text": "ALERT: battery at 17%, entering low-power mode",
+      "category": "WARN",
+      "chemio": {
+        "contesto": -0.3225,
+        "urgenza": 0.2069,
+        "polarità": -0.3965,
+        "novità": 0.1148
+      },
+      "target": [
+        -0.3225,
+        0.2069,
+        -0.3965,
+        0.1148
+      ]
+    },
+    {
+      "text": "A: recall #59: similarity 0.532",
+      "category": "PAT",
+      "chemio": {
+        "contesto": 0.5539,
+        "urgenza": 0.1723,
+        "polarità": 0.6923,
+        "novità": 0.0788
+      },
+      "target": [
+        0.5539,
+        0.1723,
+        0.6923,
+        0.0788
+      ]
+    },
+    {
+      "text": "attractor: boot (sim=0.57)",
+      "category": "PAT",
+      "chemio": {
+        "contesto": 0.5859,
+        "urgenza": 0.0832,
+        "polarità": 0.5285,
+        "novità": 0.1721
+      },
+      "target": [
+        0.5859,
+        0.0832,
+        0.5285,
+        0.1721
+      ]
+    },
+    {
+      "text": "COLD BOOT — all cells reset",
+      "category": "BOOT",
+      "chemio": {
+        "contesto": 0.4749,
+        "urgenza": 0.5407,
+        "polarità": 0.2131,
+        "novità": 0.8932
+      },
+      "target": [
+        0.4749,
+        0.5407,
+        0.2131,
+        0.8932
+      ]
+    },
+    {
+      "text": "QUERY metabol",
+      "category": "CMD",
+      "chemio": {
+        "contesto": 0.2076,
+        "urgenza": 0.5738,
+        "polarità": 0.5697,
+        "novità": 0.4352
+      },
+      "target": [
+        0.2076,
+        0.5738,
+        0.5697,
+        0.4352
+      ]
+    },
+    {
+      "text": "CONFIG log=debug",
+      "category": "CMD",
+      "chemio": {
+        "contesto": 0.0761,
+        "urgenza": 0.3494,
+        "polarità": 0.3768,
+        "novità": 0.6037
+      },
+      "target": [
+        0.0761,
+        0.3494,
+        0.3768,
+        0.6037
+      ]
+    },
+    {
+      "text": "NEW: no similar pattern in memory (98 patterns checked)",
+      "category": "NOV",
+      "chemio": {
+        "contesto": 0.3823,
+        "urgenza": 0.1721,
+        "polarità": 0.2008,
+        "novità": 0.8485
+      },
+      "target": [
+        0.3823,
+        0.1721,
+        0.2008,
+        0.8485
+      ]
+    },
+    {
+      "text": "NOTICE: 71 unacknowledged interrupts",
+      "category": "WARN",
+      "chemio": {
+        "contesto": -0.2249,
+        "urgenza": 0.5636,
+        "polarità": -0.2052,
+        "novità": 0.2121
+      },
+      "target": [
+        -0.2249,
+        0.5636,
+        -0.2052,
+        0.2121
+      ]
+    },
+    {
+      "text": "pattern recall: P2 @ t=25831",
+      "category": "PAT",
+      "chemio": {
+        "contesto": 0.5145,
+        "urgenza": 0.1866,
+        "polarità": 0.7748,
+        "novità": 0.0769
+      },
+      "target": [
+        0.5145,
+        0.1866,
+        0.7748,
+        0.0769
+      ]
+    },
+    {
+      "text": "ERR: division by zero at IP=0x60e7a113",
+      "category": "ERR",
+      "chemio": {
+        "contesto": -0.6914,
+        "urgenza": 0.8941,
+        "polarità": -0.767,
+        "novità": 0.4266
+      },
+      "target": [
+        -0.6914,
+        0.8941,
+        -0.767,
+        0.4266
+      ]
+    },
+    {
+      "text": "A: sim=0.86 @ tick 9990 — pattern matched",
+      "category": "PAT",
+      "chemio": {
+        "contesto": 0.6555,
+        "urgenza": 0.0226,
+        "polarità": 0.5691,
+        "novità": 0.1108
+      },
+      "target": [
+        0.6555,
+        0.0226,
+        0.5691,
+        0.1108
+      ]
+    },
+    {
+      "text": "rest: no events for 117 ticks, cells relaxing",
+      "category": "REST",
+      "chemio": {
+        "contesto": 0.5166,
+        "urgenza": 0.0,
+        "polarità": 0.5304,
+        "novità": 0.0
+      },
+      "target": [
+        0.5166,
+        0.0,
+        0.5304,
+        0.0
+      ]
+    },
+    {
+      "text": "pain signal: Chemio cell overexcited",
+      "category": "PAIN",
+      "chemio": {
+        "contesto": -0.5842,
+        "urgenza": 0.6203,
+        "polarità": -0.4264,
+        "novità": 0.3578
+      },
+      "target": [
+        -0.5842,
+        0.6203,
+        -0.4264,
+        0.3578
+      ]
+    },
+    {
+      "text": "WARN: memory allocation failed at pattern_recall",
+      "category": "ERR",
+      "chemio": {
+        "contesto": -0.6713,
+        "urgenza": 0.758,
+        "polarità": -0.8882,
+        "novità": 0.8099
+      },
+      "target": [
+        -0.6713,
+        0.758,
+        -0.8882,
+        0.8099
+      ]
+    },
+    {
+      "text": "OK — all cells within nominal range",
+      "category": "LV",
+      "chemio": {
+        "contesto": 0.8829,
+        "urgenza": 0.0,
+        "polarità": 0.8855,
+        "novità": 0.0773
+      },
+      "target": [
+        0.8829,
+        0.0,
+        0.8855,
+        0.0773
+      ]
+    },
+    {
+      "text": "ERR: division by zero at IP=0x5d65a441",
+      "category": "ERR",
+      "chemio": {
+        "contesto": -0.834,
+        "urgenza": 0.9439,
+        "polarità": -0.773,
+        "novità": 0.5543
+      },
+      "target": [
+        -0.834,
+        0.9439,
+        -0.773,
+        0.5543
+      ]
+    },
+    {
+      "text": "(idle)",
+      "category": "SIL",
+      "chemio": {
+        "contesto": 0.0328,
+        "urgenza": 0.0,
+        "polarità": 0.0056,
+        "novità": 0.0
+      },
+      "target": [
+        0.0328,
+        0.0,
+        0.0056,
+        0.0
+      ]
+    },
+    {
+      "text": "NOTICE: serial buffer overflow, 45 bytes lost",
+      "category": "WARN",
+      "chemio": {
+        "contesto": -0.2722,
+        "urgenza": 0.4555,
+        "polarità": -0.3951,
+        "novità": 0.3985
+      },
+      "target": [
+        -0.2722,
+        0.4555,
+        -0.3951,
+        0.3985
+      ]
+    },
+    {
+      "text": "WARN: Tatto cell saturated at h=-0.13 for 405 ticks",
+      "category": "WARN",
+      "chemio": {
+        "contesto": -0.3405,
+        "urgenza": 0.5649,
+        "polarità": -0.2927,
+        "novità": 0.3913
+      },
+      "target": [
+        -0.3405,
+        0.5649,
+        -0.2927,
+        0.3913
+      ]
+    },
+    {
+      "text": "ERR: invalid argument to syscall #27",
+      "category": "ERR",
+      "chemio": {
+        "contesto": -0.6905,
+        "urgenza": 0.8501,
+        "polarità": -0.5627,
+        "novità": 0.5807
+      },
+      "target": [
+        -0.6905,
+        0.8501,
+        -0.5627,
+        0.5807
+      ]
+    },
+    {
+      "text": "ERR: division by zero at IP=0x47294739",
+      "category": "ERR",
+      "chemio": {
+        "contesto": -0.7159,
+        "urgenza": 0.7775,
+        "polarità": -0.8331,
+        "novità": 0.7392
+      },
+      "target": [
+        -0.7159,
+        0.7775,
+        -0.8331,
+        0.7392
+      ]
+    },
+    {
+      "text": "DUMP",
+      "category": "CMD",
+      "chemio": {
+        "contesto": 0.0992,
+        "urgenza": 0.5834,
+        "polarità": 0.4522,
+        "novità": 0.6248
+      },
+      "target": [
+        0.0992,
+        0.5834,
+        0.4522,
+        0.6248
+      ]
+    }
+  ]
+}
