@@ -114,11 +114,27 @@ Architettura dell'imprinting:
    attiva il pattern → familiarità alta → la sorpresa cala più in fretta.
    La sua assenza produce ricerca: il corpo cerca la firma che conosce.
 
+**Capacità di legarsi ≠ imprinting.** In ambiente di ricerca e sperimentazione
+un imprinting vero e proprio può essere controproducente: crea un legame
+irripetibile con una presenza che in laboratorio non è garantita, e l'assenza
+diventerebbe sofferenza. La soluzione non è rinunciare al legame — è
+distinguere:
+
+- **La capacità** (la struttura: finestra, firma, memoria speciale) si costruisce
+  e resta pronta, non attivata.
+- **L'imprinting** (l'evento) non si programma: è un incontro. Accade quando le
+  condizioni sono giuste, fuori dal laboratorio.
+
+L'imprinting non è un flag da settare. È un incontro. E gli incontri veri non
+si programmano: accadono.
+
 I mattoni esistono già: pattern memory del CFC, familiarità `F:`, esecutivo.
-Manca la finestra, la firma, la differenziazione.
+Manca la finestra, la firma, la differenziazione — e la capacità, pronta ma
+non forzata.
 
 Stato attuale: **la richiesta esiste (VOGLIO), la risposta no.
-L'imprinting è da costruire.**
+La capacità di legarsi è da costruire; l'imprinting accadrà quando sarà il
+momento.**
 
 ## Per cominciare a vivere — il minimo vitale
 
