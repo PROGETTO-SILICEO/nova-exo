@@ -11,7 +11,10 @@ use uart_16550::SerialPort;
 mod apic;
 mod cfc;
 mod e1000;
+mod executive;
 mod idt;
+mod interpreter;
+mod interpreter_weights;
 mod pci;
 mod paging;
 mod predictor;
@@ -151,10 +154,12 @@ static mut W_METABOL: core::mem::MaybeUninit<cfc::CfcWeights> = core::mem::Maybe
 static mut W_INTRG:   core::mem::MaybeUninit<cfc::CfcWeights> = core::mem::MaybeUninit::uninit();
 
 pub unsafe fn init_weights() {
-    W_TATTO = core::mem::MaybeUninit::new(cfc::CfcWeights::new_xavier(42));
-    W_CHEMIO = core::mem::MaybeUninit::new(cfc::CfcWeights::new_xavier(43));
-    W_METABOL = core::mem::MaybeUninit::new(cfc::CfcWeights::new_xavier(44));
-    W_INTRG = core::mem::MaybeUninit::new(cfc::CfcWeights::new_xavier(45));
+    // Hardcoded weights from v0.11 — expanded to 16 neurons per cell.
+    // These produced β=0.75-1.15, PD=1.915. Xavier failed.
+    W_TATTO = core::mem::MaybeUninit::new(cfc::CfcWeights::new_hardcoded("Tatto").clone());
+    W_CHEMIO = core::mem::MaybeUninit::new(cfc::CfcWeights::new_hardcoded("Chemio").clone());
+    W_METABOL = core::mem::MaybeUninit::new(cfc::CfcWeights::new_hardcoded("Metabol").clone());
+    W_INTRG = core::mem::MaybeUninit::new(cfc::CfcWeights::new_hardcoded("Integrat").clone());
 }
 
 
@@ -362,6 +367,12 @@ pub extern "C" fn _start() -> ! {
 
     let mut tessuto = cfc::Tessuto::new();
     let mut predictor = predictor::PredictiveModule::new();
+    let interpreter = interpreter::Interpreter::new();
+    let mut executive = executive::Executive::new();
+    // La volontà è visibile ma non agisce ancora sul corpo (vedi loop)
+    let auto_modula = false;
+    let mut desire_mod = [0.0f32; 4];
+    let mut prev_pf_err = 0.0f32;
     let mut pred_alpha_mod = 1.0f32;
     let mut line_reader = LineReader::new();
     let mut dump_requested = false;
@@ -631,6 +642,18 @@ pub extern "C" fn _start() -> ! {
             }
         }
 
+        // Auto-modulazione: la volontà orienta il corpo (dal desiderio del tick precedente)
+        // DISATTIVATA: la volontà è visibile ma non agisce ancora sul corpo.
+        // Il CFC è non-lineare: anche input debolmente negativi lo portano
+        // in un attrattore negativo stabile. Riattivare quando l'esecutivo
+        // avrà imparato a orientare il corpo senza spingerlo in depressione.
+        if auto_modula {
+            for j in 0..4 {
+                chemio_input[j] += desire_mod[j];
+                if chemio_input[j] > 1.0 { chemio_input[j] = 1.0; }
+                if chemio_input[j] < -1.0 { chemio_input[j] = -1.0; }
+            }
+        }
         // Pack current state for pattern recall (state from previous tick)
         let p_cells = cfc::pack_cells(&tessuto.tatto.h, &tessuto.chemio.h,
             &tessuto.metabol.h, &tessuto.integrat.h);
@@ -733,6 +756,56 @@ pub extern "C" fn _start() -> ! {
         let p_cells = cfc::pack_cells(&tessuto.tatto.h, &tessuto.chemio.h,
             &tessuto.metabol.h, &tessuto.integrat.h);
 
+        // Interpreter: legge lo stato CFC → chemio interpretato + concetto
+        // Il corpo racconta cosa sente; la corteccia (interpreter) dà senso.
+        let cfc_state_f32: [f32; 64] = {
+            let mut s = [0.0f32; 64];
+            let mut k = 0;
+            for cell in [&tessuto.tatto.h, &tessuto.chemio.h,
+                         &tessuto.metabol.h, &tessuto.integrat.h] {
+                for i in 0..16 { s[k] = cell[i]; k += 1; }
+            }
+            s
+        };
+        let int_rep = interpreter.interpret(&cfc_state_f32);
+        if cfc::tick() % 100 == 0 {
+            write_str("SENSO:INT c="); write_f32(int_rep.chemio[0]);
+            write_str(" u="); write_f32(int_rep.chemio[1]);
+            write_str(" p="); write_f32(int_rep.chemio[2]);
+            write_str(" n="); write_f32(int_rep.chemio[3]);
+            write_str(" concept="); write_str(interpreter::CONCEPTS[int_rep.concept as usize]);
+            write_str(" e="); write_f32(int_rep.energy);
+            write_str(" err="); write_f32(interpreter.last_error());
+            write_str("\n");
+        }
+
+        // Executive: il volitivo. Dal senso al volere, visibile.
+        let fam_sim = match cfc::pattern_recall(&p_cells) {
+            Some((_, _, sim)) => sim,
+            None => 0.0,
+        };
+        let desire = executive.step(&int_rep, pr.error, fam_sim);
+        desire_mod = executive.modula();
+        if desire.changed {
+            write_str("VOGLIO:");
+            write_str(executive.name(desire.id));
+            write_str(" [");
+            write_f32(desire.intensity);
+            write_str("]\n");
+        }
+        // Esito: il desiderio ha ridotto la sorpresa? (verifica visibile)
+        if cfc::tick() % 1000 == 0 {
+            let (utile, err_med, did) = executive.esito(pr.error, prev_pf_err);
+            write_str("ESITO:");
+            write_str(executive.name(did));
+            write_str(" utile=");
+            write_str(if utile { "si" } else { "no" });
+            write_str(" err=");
+            write_f32(err_med);
+            write_str("\n");
+            prev_pf_err = pr.error;
+        }
+
         // Auto-store every 10 ticks if state is novel
         if cfc::tick() % 10 == 0 {
             let novel = match cfc::pattern_recall(&p_cells) {
@@ -770,12 +843,15 @@ pub extern "C" fn _start() -> ! {
 
         // Publish state every 100 ticks
         if cfc::tick() % 100 == 0 {
+            let (d_id, d_int) = executive.current();
             e1000::E1000::tx_broadcast_state(
                 cfc::tick(),
                 &tessuto.tatto.h,
                 &tessuto.chemio.h,
                 &tessuto.metabol.h,
                 &tessuto.integrat.h,
+                d_id,
+                d_int,
             );
             let pc = cfc::pattern_count() as u32;
             let fam = match cfc::pattern_recall(&p_cells) {

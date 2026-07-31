@@ -271,6 +271,8 @@ impl E1000 {
         chemio: &[f32; 16],
         metabol: &[f32; 16],
         integrat: &[f32; 16],
+        desire_id: u8,
+        desire_int: f32,
     ) {
         let base = Self::mmio_base();
         unsafe {
@@ -311,6 +313,17 @@ impl E1000 {
                 }
                 buf[pos] = b']'; pos += 1;
             }
+            buf[pos] = b']'; pos += 1;
+            // Volontà: "w":[desire_id, intensity]
+            buf[pos] = b','; pos += 1;
+            buf[pos] = b'"'; pos += 1;
+            buf[pos] = b'w'; pos += 1;
+            buf[pos] = b'"'; pos += 1;
+            buf[pos] = b':'; pos += 1;
+            buf[pos] = b'['; pos += 1;
+            Self::write_u32_buf(buf, &mut pos, desire_id as u32);
+            buf[pos] = b','; pos += 1;
+            Self::write_f32_buf(buf, &mut pos, desire_int);
             buf[pos] = b']'; pos += 1;
             buf[pos] = b'}'; pos += 1;
 
