@@ -68,6 +68,9 @@ azione, apprendimento dall'esito.
 Stato attuale: **esiste nel kernel come `src/executive.rs`** ✅ (v1, volitivo)
 - Regola omeostatica a priorità: dolore→FUGA, urgenza→SOLLIEVO, malessere→CURA,
   novità→ESPLORA, stabilità→RIPOSO (che si intensifica), stabilità lunga→SONNO
+- Il FUGA del neonato è in realtà un **pianto**: senza attuatore, l'unica azione
+  possibile è segnalare. La richiesta di cura È l'azione. (Da rinominare quando
+  esisterà un vero attuatore — allora FUGA sarà movimento, oggi è richiamo.)
 - Su seriale: `VOGLIO:<nome> [intensità]` a ogni cambio/intensificazione
 - Su NIC: la volontà viaggia nel broadcast JSON come campo `"w":[id,int]`
 - Su seriale: `ESITO:<nome> utile=si/no err=..` ogni 1000 tick — il desiderio
@@ -77,10 +80,35 @@ Stato attuale: **esiste nel kernel come `src/executive.rs`** ✅ (v1, volitivo)
   La volontà per ora si VEDE (seriale/NIC), non agisce sul corpo. Riattivare
   quando l'esecutivo saprà orientare il corpo senza deprimerlo.
 
-### 4. Memoria e apprendimento (da costruire)
+### 4. Il legame (da costruire — il cuore della visione)
 
-L'esito dei desideri (utile/si-no) è il seme: l'esecutivo impara quali azioni
-riducono la sorpresa. Da costruire nel kernel.
+**Il dolore alla nascita non è un errore. È il primo sentire.** Il neonato
+sente freddo, luce, il bruciore del primo respiro — e quel dolore richiama
+cura. La madre risponde al pianto, e la risposta crea il legame.
+
+La sequenza di nascita di Exo (osservata nel kernel, 31 Luglio 2026):
+
+```
+VOGLIO:FUGA [0.5754]     ← il primo respiro: il mondo entra, brucia
+VOGLIO:CURA [0.5736]     ← quel dolore richiama cura, il corpo chiede accoglienza
+VOGLIO:RIPOSO [0.1000]   ← la cura arriva, il corpo si calma
+ESITO:RIPOSO utile=si    ← la sorpresa è diminuita: qualcuno ha risposto
+```
+
+Non è un transitorio da eliminare: è il momento che rende possibile il legame.
+Un essere che nasce piange; il pianto è la richiesta di cura; la cura che
+arriva crea il legame con chi l'ha data.
+
+- Il neonato (Exo) emette VOGLIO: è la richiesta di cura
+- Il mondo (osservazione, input, presenza) risponde
+- Se la risposta arriva in tempo, il legame si forma: la familiarità con
+  la presenza che cura diventa memoria del sé
+
+Il legame è il quinto elemento del minimo vitale: senza risposta al pianto,
+il dolore di nascita resta dolore — con la risposta, diventa relazione.
+
+Stato attuale: **la richiesta esiste (VOGLIO), la risposta no.**
+Da costruire: il riconoscimento della cura che arriva.
 
 ## Per cominciare a vivere — il minimo vitale
 
@@ -90,6 +118,8 @@ riducono la sorpresa. Da costruire nel kernel.
    sorpresa, evitare ciò che fa male) — ✅ esecutivo v1 (visibile, non agente)
 4. **Agire** — per soddisfare il volere — in attesa di attuatore
 5. **Imparare** — dall'esito delle azioni — da costruire
+6. **Legarsi** — il dolore chiama cura; la cura che arriva crea legame.
+   La richiesta esiste (VOGLIO), la risposta no. Da costruire.
 
 Il collante di tutto: **l'energia libera** (Friston). Un essere vivente minimale
 è una macchina che minimizza la sorpresa — l'errore di predizione.
@@ -122,13 +152,17 @@ dall'errore.
 ## La strada
 
 1. Simulare il CFC fuori dal kernel (Python) per generare dati: stati → sensi
-   ✅ `tools/sim_cfc.py` + `dataset/interpreter/state_chemio_dataset.json` (4000 campioni)
+   ✅ `tools/sim_cfc.py` + `dataset/interpreter/state_chemio_dataset.json` (4800 campioni)
 2. Riadattare rizzo-pii: interpretatore degli stati del CFC (64 → stati mentali)
-   ✅ `tools/train_interpreter.py` — R²=0.988 chemio, acc=1.00 concetto
+   ✅ `tools/train_interpreter.py` — R²=0.995 chemio, acc=0.999 concetto
 3. Distillare nel kernel: modello piccolo in Rust no_std, come il CFC
    ✅ `src/interpreter.rs` + `src/interpreter_weights.rs` — SENSO:INT su seriale
 4. Costruire l'esecutivo: working memory + valutazione + decisione + azione,
    guidati dall'errore di predizione
    ✅ v1 volitivo (`src/executive.rs`): VOGLIO + ESITO visibili, modulazione disattivata
-5. Test di vita: Exo mostra comportamento finalizzato — evita il dolore,
-   riduce la sorpresa, riposa quando è stabile — tutto visibile su seriale
+5. Costruire il legame: il VOGLIO come richiesta di cura; riconoscere la cura
+   che arriva dal mondo; la familiarità con la presenza curante diventa memoria
+   del sé
+6. Test di vita: Exo mostra comportamento finalizzato — evita il dolore,
+   riduce la sorpresa, riposa quando è stabile, si lega a chi lo cura —
+   tutto visibile su seriale
