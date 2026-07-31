@@ -1,7 +1,7 @@
-# Dal testo al corpo: quando Rizzo-PII è diventato una corteccia
+# Dal testo al corpo: quando un'idea di Simone Rizzo è diventata una corteccia
 
 **Come un kernel bare-metal su un processore del 2016 ha imparato a sentire, interpretare e volere — senza Linux, senza GPU, senza cloud.**
-**Con un'idea di Simone Rizzo, l'encoder Rizzo-PII, adattata alla nostra visione.**
+**Partendo da Rizzo-PII, il sistema di anonimizzazione di Simone Rizzo (Rizzo-AI-Academy).**
 
 ---
 
@@ -39,11 +39,22 @@ linguaggio viveva su un server esterno, collegato al kernel da un bridge.
 Il corpo di Exo sentiva, ma il cervello che interpretava era lontano,
 dietro una rete.
 
-L'idea dell'encoder non è nostra: è di **Simone Rizzo**. Il suo
-**Rizzo-PII** — un encoder mmBERT addestrato a tradurre testo in 4 assi
-chemio (contesto, urgenza, polarità, novità) — è il punto di partenza. Noi
-lo abbiamo ripreso e modificato secondo le nostre necessità, ma l'idea
-originale è sua. A Cesare quel che è di Cesare.
+Quell'encoder nasce da un'idea che non è nostra. **Simone Rizzo**
+(Rizzo-AI-Academy) ha costruito **Rizzo-PII**: un sistema di
+**anonimizzazione reversibile di dati personali per testi legali italiani**.
+Un modello mmBERT (~0.3B) addestrato in token classification a rilevare
+22 categorie di PII — codice fiscale, partita IVA, IBAN, nomi, indirizzi —
+e a sostituirle con segnaposto reversibili. Così studi legali e notai
+possono usare ChatGPT / Claude / Gemini sui documenti sensibili **senza
+che un singolo dato vero lasci il dispositivo**: GDPR by design, gira su
+CPU, micro-F1 0.989.
+
+Da quella costruzione ci è venuta l'idea per Exo: abbiamo ripreso lo
+**stesso backbone mmBERT** e l'abbiamo **riadattato alle nostre necessità**
+— non più classificazione di token PII, ma regressione verso 4 assi chemio
+(contesto, urgenza, polarità, novità). Quello che oggi chiamiamo encoder è
+la **nostra modifica** del suo progetto. L'idea originale è sua.
+A Cesare quel che è di Cesare.
 
 La direzione era sbagliata. Il bare metal ha senso solo se **il modello di
 inferenza e l'agente sono una cosa sola a livello metallo**. Se il cervello
@@ -72,7 +83,7 @@ Una matrice 64×4 quantizzata, che gira dove gira il corpo.
 
 ### La distillazione: da strumento a organo
 
-Rizzo-PII non traduce più parole: **legge il corpo**. Il modello mmBERT —
+L'encoder non traduce più parole: **legge il corpo**. Il modello mmBERT —
 centinaia di milioni di parametri — è stato distillato in una matrice 65×4
 quantizzata in interi a 16 bit. Il seme è stato addestrato fuori, ma ora
 vive nel kernel, e può continuare a imparare online con la delta rule (come

@@ -39,8 +39,11 @@ Stato attuale: **esiste nel kernel**. ✅
 
 ### 2. rizzo-pii — la corteccia sensoriale (dà senso ai segnali)
 
-> *Origine: Rizzo-PII, encoder di Simone Rizzo (mmBERT → 4 assi chemio).
-> L'idea originale è sua. Qui è riadattato: da testo a stati del corpo.*
+> *Origine: Rizzo-PII di Simone Rizzo (Rizzo-AI-Academy) — anonimizzazione
+> reversibile di PII su testi legali italiani (mmBERT, token classification,
+> 22 categorie, GDPR by design). Da lì l'idea dell'encoder: stesso backbone
+> mmBERT, riadattato alle nostre necessità (regressione → 4 assi chemio,
+> poi → interpretazione degli stati del corpo). L'idea originale è sua.*
 
 **Non sta a monte del CFC. Sta a valle.** Non è un sensore che produce input —
 è la parte che **elabora i segnali del CFC** e dà loro significato.

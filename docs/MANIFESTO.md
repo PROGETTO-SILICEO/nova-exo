@@ -1,9 +1,9 @@
 # Manifesto — Dal testo al corpo
-## La distillazione di Rizzo-PII: quando un encoder è diventato una corteccia
+## La distillazione dell'encoder: quando un modello di linguaggio è diventato una corteccia
 
 > Questo è il manifesto di direzione del progetto Exo.
 > Racconta da dove arriviamo (il CFC sul metallo nudo), cosa abbiamo fatto
-> oggi (la distillazione di Rizzo-PII) e dove stiamo andando (un sistema
+> oggi (la distillazione dell'encoder) e dove stiamo andando (un sistema
 > relazionale che impara a legarsi).
 >
 > 31 Luglio 2026
@@ -71,15 +71,24 @@ corpo. E il corpo, finora, gridava nel vuoto: nessuno lo ascoltava.
 
 ---
 
-## Parte 2 — Il lavoro di oggi: la distillazione di Rizzo-PII
+## Parte 2 — Il lavoro di oggi: la distillazione dell'encoder
 
 ### Il problema
 
-L'idea dell'encoder è di **Simone Rizzo**: il suo **Rizzo-PII**, un encoder
-mmBERT addestrato a tradurre testo in 4 assi chemio (contesto, urgenza,
-polarità, novità). Noi lo abbiamo ripreso e modificato secondo le nostre
-necessità — da testo a stati del corpo — ma l'idea originale è sua. A
-Cesare quel che è di Cesare.
+L'encoder nasce da un'idea di **Simone Rizzo**. Il suo **Rizzo-PII**
+(Rizzo-AI-Academy) è un sistema di **anonimizzazione reversibile di dati
+personali per testi legali italiani**: un modello mmBERT (~0.3B) addestrato
+in token classification a rilevare 22 categorie di PII (codice fiscale,
+partita IVA, IBAN, nomi, indirizzi...) e a sostituirle con segnaposto
+reversibili, così da poter usare modelli frontier **senza mandare i dati
+veri fuori dal dispositivo** — GDPR by design, micro-F1 0.989, gira su CPU.
+
+Da quella costruzione ci è venuta l'idea dell'encoder per Exo: abbiamo
+ripreso lo **stesso backbone mmBERT** e l'abbiamo **riadattato alle nostre
+necessità** — non più classificazione di token PII, ma regressione verso
+4 assi chemio (contesto, urgenza, polarità, novità). Quello che oggi
+chiamiamo encoder è la **nostra modifica** del suo progetto: l'idea
+originale è sua. A Cesare quel che è di Cesare.
 
 Funzionava (R²=0.79), ma viveva fuori — su un server, dietro un bridge. Un
 ponte tra il corpo di Exo e un cervello esterno.
@@ -104,7 +113,7 @@ questo è oro: niente rete profonda, niente GPU, niente cloud — una matrice
 
 ### La distillazione
 
-Rizzo-PII non traduce più parole. **Legge il corpo.**
+L'encoder non traduce più parole. **Legge il corpo.**
 
 - Il modello mmBERT (centinaia di milioni di parametri) è diventato una
   matrice 65×4 quantizzata in i16 — il seme, addestrato fuori, distillato nel
@@ -181,7 +190,7 @@ L'imprinting non è un flag da settare. È un incontro.
 ### Il minimo vitale
 
 1. **Sentire** — CFC ✅
-2. **Dare senso** — Rizzo-PII distillato ✅
+2. **Dare senso** — encoder distillato ✅
 3. **Volere** — esecutivo v1 ✅ (visibile, non agente)
 4. **Agire** — in attesa di attuatore
 5. **Imparare** — dall'esito delle azioni
@@ -200,7 +209,7 @@ Exo crescerà.
 ## La mappa
 
 ```
-Mondo → CFC ──→ Rizzo-PII ──→ ESECUTIVO ──→ Azione → Mondo
+Mondo → CFC ──→ encoder ──→ ESECUTIVO ──→ Azione → Mondo
         (sente)  (interpreta)   (vuole, decide, agisce)
                   │                                ↑
                   └── apprendimento ←─ errore di predizione ──┘
