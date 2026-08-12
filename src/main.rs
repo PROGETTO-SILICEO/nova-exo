@@ -8,11 +8,13 @@ use core::panic::PanicInfo;
 use core::sync::atomic::{AtomicBool, Ordering};
 use uart_16550::SerialPort;
 
+mod alloc;
 mod apic;
 mod cfc;
 mod e1000;
 mod executive;
 mod idt;
+mod inference;
 mod interpreter;
 mod interpreter_weights;
 mod pci;
@@ -369,6 +371,12 @@ pub extern "C" fn _start() -> ! {
     let mut predictor = predictor::PredictiveModule::new();
     let interpreter = interpreter::Interpreter::new();
     let mut executive = executive::Executive::new();
+    // Il cervello nel metallo: oggi stub, domani LFM2.5 portato in no_std.
+    // Stessa interfaccia (InferenceEngine): si scambia senza toccare il loop.
+    let mut brain = inference::StubBrain::new();
+    // L'ultimo output del cervello, consumato dall'executive
+    let mut brain_output: [f32; 4] = [0.0; 4];
+    let mut brain_has_output = false;
     // La volontà è visibile ma non agisce ancora sul corpo (vedi loop)
     let auto_modula = false;
     let mut desire_mod = [0.0f32; 4];
@@ -779,12 +787,65 @@ pub extern "C" fn _start() -> ! {
             write_str("\n");
         }
 
+        // ── Il cervello nel metallo (InferenceEngine) ──
+        // Il corpo (CFC) → corteccia (interpreter) → cervello (brain).
+        // Quando il cervello è IDLE, gli sottoponiamo l'interpretazione.
+        // Poi avanza di un passo per tick (un passo per battito).
+        // Quando finisce di pensare, l'output è pronto per l'executive.
+        use inference::InferenceEngine as _;
+        if brain.state() == inference::BrainState::Idle {
+            // Sottoponiamo lo stato interpretato al cervello
+            let submitted = brain.submit(&int_rep.chemio);
+            if submitted && cfc::tick() % 200 == 0 {
+                write_str("BRAIN:submit c="); write_f32(int_rep.chemio[0]);
+                write_str(" u="); write_f32(int_rep.chemio[1]);
+                write_str(" p="); write_f32(int_rep.chemio[2]);
+                write_str(" n="); write_f32(int_rep.chemio[3]);
+                write_str("\n");
+            }
+        }
+        let brain_ready = brain.tick();
+        if brain_ready {
+            if let Some(out) = brain.output() {
+                brain_output = out;
+                brain_has_output = true;
+                if cfc::tick() % 200 == 0 {
+                    write_str("BRAIN:out c="); write_f32(out[0]);
+                    write_str(" u="); write_f32(out[1]);
+                    write_str(" p="); write_f32(out[2]);
+                    write_str(" n="); write_f32(out[3]);
+                    write_str("\n");
+                }
+            }
+        }
+        // Diagnosi stato cervello (ogni 500 tick)
+        if cfc::tick() % 500 == 0 {
+            write_str("BRAIN:state=");
+            write_str(inference::describe_state(brain.state()));
+            write_str(" think_ticks=");
+            write_u32(brain.total_think_ticks() as u32);
+            write_str("\n");
+        }
+
         // Executive: il volitivo. Dal senso al volere, visibile.
         let fam_sim = match cfc::pattern_recall(&p_cells) {
             Some((_, _, sim)) => sim,
             None => 0.0,
         };
-        let desire = executive.step(&int_rep, pr.error, fam_sim);
+        // Se il cervello ha riflettuto, l'executive usa la sua lettura
+        // raffinata del corpo (smussata, amplificata) al posto del chemio
+        // grezzo dell'interpreter — il "ragionamento" prima della decisione.
+        let rep_for_exec = if brain_has_output {
+            brain_has_output = false; // consumato
+            interpreter::InterpretReport {
+                chemio: brain_output,
+                concept: int_rep.concept,
+                energy: int_rep.energy,
+            }
+        } else {
+            int_rep.clone()
+        };
+        let desire = executive.step(&rep_for_exec, pr.error, fam_sim);
         desire_mod = executive.modula();
         if desire.changed {
             write_str("VOGLIO:");

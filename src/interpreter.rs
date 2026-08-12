@@ -17,6 +17,7 @@ use crate::interpreter_weights::{W_CHEMIO_Q, W_CONCEPT_Q};
 pub const INTERP_IN: usize = 65;
 pub const CONCEPTS: [&str; 4] = ["errore", "vita", "riposo", "novita"];
 
+#[derive(Clone)]
 pub struct InterpretReport {
     /// Valori chemio interpretati (c, u, p, n) in [-1, 1]
     pub chemio: [f32; 4],
