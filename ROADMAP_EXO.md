@@ -31,7 +31,8 @@ Le attività secondarie (narrativa, refactor, docs) si fanno solo quando la mile
 - [x] Misurare: tick totali, pattern accumulati, attrattori attivati
 
 Criterio: 3 run consecutive di 10 minuti, log senza errori.
-Risultato: Run1 511.7Kt (0 PANIC), Run2 504.8Kt (0 PANIC), Run3 493.4Kt (0 PANIC, 0 ERROR)
+Risultato (pre-cervello): Run1 511.7Kt (0 PANIC), Run2 504.8Kt (0 PANIC), Run3 493.4Kt (0 PANIC, 0 ERROR)
+Risultato (v0.14 con cervello nel metallo, 13 Ago 2026): Run1 64.064t (0 PANIC/ERROR), Run2 64.073t, Run3 64.032t. BRAIN attivo in tutti (think ~92K), VOGLIO ~1.371, ESITO si/no presente, memoria viva. Certificato — vedi TECHNICAL_LEDGER v0.14.
 
 ---
 

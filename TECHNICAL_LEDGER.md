@@ -753,3 +753,25 @@ Prossimi step:
 1. Runtime vero (LFM2.5-2.6B) dentro il trait: caricamento pesi, matmul no_std
 2. Collegare alloc.rs come global allocator quando serve memoria dinamica
 3. Test comparativo encoder chemio (ExoChemio vs LFM2.5-Encoder) per la corteccia
+
+## v0.14 — Milestone A: Run lungo stabile (13 Ago 2026) — CERTIFICATO
+
+### Criterio (da ROADMAP_EXO): 3 run consecutivi di 10 minuti, log senza errori.
+### Risultato: ✅ 3/3 run verdi con il cervello nel metallo (InferenceEngine + StubBrain).
+
+| Run | Tick | PANIC | ERROR | BRAIN think | VOGLIO | ESITO si/no | F familiarità | A attrattore |
+|-----|------|-------|-------|-------------|--------|-------------|---------------|--------------|
+| run1 | 64.064 | 0 | 0 | 392→92.144 | 1.370 | 36/16 | [0.542, 1.0] | [0.542, 1.0] |
+| run2 | 64.073 | 0 | 0 | 994→90.659 | 1.373 | 27/15 | [0.631, 1.0] | [0.631, 1.0] |
+| run3 | 64.032 | 0 | 0 | 1.037→92.321 | 1.371 | 29/13 | [0.913, 1.0] | [0.913, 1.0] |
+
+### Note
+- Ripetibilità: tick ~64.000 in tutti i run (Δ < 0.1%), VOGLIO ~1.371 (Δ < 0.3%).
+- Il cervello (StubBrain) pensa in modo consistente (~92.000 think_ticks per run).
+- F cresce tra i run (0.54→0.63→0.91): la sedimentazione consolida la memoria.
+- File log: experiments/longrun_v014/run{1,2,3}_*.log (600s ciascuno, QEMU TCG).
+- Analizzatore: tools/analyze_longrun.py (tick in HEX: il formato nel log è esadecimale).
+
+### Regressioni attese
+- Nessuna regressione di velocità: tick rate ~107/s in linea con i run storici (53K-46K-35K/10min).
+- Nessuna regressione di comportamento: nascita FUGA→CURA→RIPOSO intatta in tutti i run.
