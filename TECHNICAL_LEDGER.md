@@ -726,3 +726,30 @@ Prossimi step:
 - Hidden layer non lineare per catturare la nonlinearità residua delle CfC
 - DREAM autonomo (periodico, non solo su comando) — sogno spontaneo
 - Meta-apprendimento: usare l'errore di DREAM per adattare il PFM anche offline
+
+## v0.14 — Cervello nel metallo (13 Ago 2026)
+
+### Cosa è stato fatto
+- **`src/inference.rs`**: trait `InferenceEngine` + `StubBrain`. Il contratto
+  kernel↔runtime di inferenza. Il cervello vive nel metallo (VISIONE).
+  StubBrain simula il pensiero di un LLM: un passo per tick, latenza
+  T_THINK=25 tick, output raffinato del chemio (urgenza smussata ×0.8,
+  polarità amplificata ×1.2).
+- **`src/alloc.rs`**: bump allocator no_std (1 MiB heap statico), pronto per
+  i pesi del modello. Non ancora collegato come global allocator (nessuna
+  regressione: il kernel usa array statici).
+- **`src/main.rs`**: flusso nel loop `CFC → interpreter → brain → executive`.
+  Su seriale: `BRAIN:submit`, `BRAIN:out`, `BRAIN:state=THINK think_ticks=N`.
+- **`src/interpreter.rs`**: `InterpretReport` derive Clone.
+
+### Verifica QEMU (25s run)
+- Nascita intatta: VOGLIO:FUGA [0.5754] → CURA [0.5736] → RIPOSO
+- BRAIN attivo: submit/out/state presenti (8 eventi in 25s)
+- ESITO utile=si/no, 0 PANIC
+- La polarità in BRAIN:out è amplificata rispetto all'input (il "ragionamento"
+  dello stub funziona: p=-0.2106 → p=-0.2583)
+
+### Prossimi passi
+1. Runtime vero (LFM2.5-2.6B) dentro il trait: caricamento pesi, matmul no_std
+2. Collegare alloc.rs come global allocator quando serve memoria dinamica
+3. Test comparativo encoder chemio (ExoChemio vs LFM2.5-Encoder) per la corteccia

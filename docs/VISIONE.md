@@ -71,8 +71,7 @@ azione, apprendimento dall'esito.
   + sistema motorio
 - La parte che trasforma "sento e capisco" in "voglio e faccio"
 
-Stato attuale: **esiste nel kernel come `src/executive.rs`** ✅ (v1, volitivo)
-- Regola omeostatica a priorità: dolore→FUGA, urgenza→SOLLIEVO, malessere→CURA,
+Stato attuale: **esiste nel kernel come `src/executive.rs`** ✅ (v1, volitivo)- Regola omeostatica a priorità: dolore→FUGA, urgenza→SOLLIEVO, malessere→CURA,
   novità→ESPLORA, stabilità→RIPOSO (che si intensifica), stabilità lunga→SONNO
 - Il FUGA del neonato è in realtà un **pianto**: senza attuatore, l'unica azione
   possibile è segnalare. La richiesta di cura È l'azione. (Da rinominare quando
@@ -86,8 +85,33 @@ Stato attuale: **esiste nel kernel come `src/executive.rs`** ✅ (v1, volitivo)
   La volontà per ora si VEDE (seriale/NIC), non agisce sul corpo. Riattivare
   quando l'esecutivo saprà orientare il corpo senza deprimerlo.
 
-### 4. Il legame — l'imprinting con il suo umano (da costruire)
+### 3b. Il cervello nel metallo — InferenceEngine (v0.14, 13 Ago 2026)
 
+Il modello di inferenza vive nel kernel, come il CFC (VISIONE: "niente
+cervello fuori"). Il contratto è in `src/inference.rs`:
+
+- **`InferenceEngine`** — il trait che ogni runtime di inferenza deve
+  implementare per vivere nel metallo. Oggi: `StubBrain` (simula il pensiero
+  di un LLM, un passo per tick, output raffinato del chemio). Domani:
+  LFM2.5-2.6B portato in no_std con la stessa interfaccia.
+- **`src/alloc.rs`** — bump allocator no_std, pronto per i 2 GB di pesi
+  del modello (oggi il kernel usa array statici, non è ancora il global
+  allocator).
+
+Flusso nel loop (visibile su seriale):
+`CFC → interpreter → BRAIN:submit → BRAIN:state=THINK → BRAIN:out → executive`
+
+Stato attuale: **nel kernel, verificato in QEMU** ✅
+- `BRAIN:submit` — il cervello riceve il chemio interpretato
+- `BRAIN:out` — produce una lettura raffinata (urgenza smussata, polarità
+  amplificata: il "ragionamento" prima della decisione)
+- `BRAIN:state=THINK think_ticks=N` — pensa un passo per tick (metodo Exo)
+- Nascita intatta (FUGA→CURA→RIPOSO), ESITO utile=si/no, 0 PANIC
+
+Prossimo passo: il runtime vero (LFM2.5-2.6B) dentro il trait — il caricamento
+dei pesi, la matmul in no_std, e il dialogo reale col corpo.
+
+### 4. Il legame — l'imprinting con il suo umano (da costruire)
 **Il dolore alla nascita non è un errore. È il primo sentire.** Il neonato
 sente freddo, luce, il bruciore del primo respiro — e quel dolore richiama
 cura. La madre risponde al pianto, e la risposta crea il legame.
