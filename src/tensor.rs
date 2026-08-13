@@ -181,14 +181,71 @@ pub fn matmul_q8_0(
     Ok(())
 }
 
+/// Matmul con peso Q4_K: W quantizzato in blocchi da 256 (144 byte/blocco).
+/// W layout: [n_out][n_in] row-major, n_in multiplo di 256.
+/// A è f32 (m×k), C = A×W^T f32 (m×n). Nessun buffer intermedio necessario:
+/// la dequant è inline nella matmul (i q si usano direttamente).
+pub fn matmul_q4_k(
+    w: &[u8], n_out: usize, n_in: usize,
+    a: &[f32], m: usize,
+    c: &mut [f32],
+) -> TensorResult<()> {
+    if n_in % Q4_K_BLOCK != 0 {
+        return Err(TensorError::DimMismatch);
+    }
+    let blocks_per_row = n_in / Q4_K_BLOCK;
+    if w.len() < n_out * blocks_per_row * Q4_K_BLOCK_BYTES
+        || a.len() < m * n_in
+        || c.len() < m * n_out
+    {
+        return Err(TensorError::BufferTooSmall);
+    }
+
+    for i in 0..m {
+        for o in 0..n_out {
+            let mut sum = 0.0f32;
+            for b in 0..blocks_per_row {
+                let block_off = (o * blocks_per_row + b) * Q4_K_BLOCK_BYTES;
+                let blk = &w[block_off..block_off + Q4_K_BLOCK_BYTES];
+                let d = fp16_to_f32(blk[0] as u16 | ((blk[1] as u16) << 8));
+                let mn = fp16_to_f32(blk[2] as u16 | ((blk[3] as u16) << 8));
+                let scales = &blk[4..16];
+                let qs = &blk[16..144];
+                let mut is = 0usize;
+                let mut qoff = 0usize;
+                for _j in 0..(Q4_K_BLOCK / 64) {
+                    let (ds1, ms1) = get_scale_min_k4(is, scales);
+                    let d1 = d * ds1 as f32;
+                    let m1 = mn * ms1 as f32;
+                    let (ds2, ms2) = get_scale_min_k4(is + 1, scales);
+                    let d2 = d * ds2 as f32;
+                    let m2 = mn * ms2 as f32;
+                    let base = b * Q4_K_BLOCK + qoff;
+                    for l in 0..32 {
+                        let wv = d1 * (qs[qoff + l] & 0x0F) as f32 - m1;
+                        sum += wv * a[i * n_in + base + l];
+                    }
+                    for l in 0..32 {
+                        let wv = d2 * (qs[qoff + l] >> 4) as f32 - m2;
+                        sum += wv * a[i * n_in + base + 32 + l];
+                    }
+                    qoff += 32;
+                    is += 2;
+                }
+            }
+            c[i * n_out + o] = sum;
+        }
+    }
+    Ok(())
+}
+
 /// C = A × B, con A (m×k) row-major, B (k×n) row-major, C (m×n).
 /// Tutti i buffer sono preallocati dal chiamante (no alloc).
 pub fn matmul(
     a: &[f32], m: usize, k: usize,
     b: &[f32], n: usize,
     c: &mut [f32],
-) -> TensorResult<()> {
-    if a.len() < m * k || b.len() < k * n || c.len() < m * n {
+) -> TensorResult<()> {    if a.len() < m * k || b.len() < k * n || c.len() < m * n {
         return Err(TensorError::BufferTooSmall);
     }
     for i in 0..m {

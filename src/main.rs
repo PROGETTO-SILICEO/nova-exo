@@ -499,6 +499,17 @@ pub extern "C" fn _start() -> ! {
                 }
                 Err(_) => { write_str("Q4K:ERR\n"); }
             }
+            // matmul Q4_K: la stessa W × a (a[0]=1) → c = w0 = 5
+            let mut q4a = [0.0f32; tensor::Q4_K_BLOCK];
+            q4a[0] = 1.0;
+            let mut q4c = [0.0f32; 1];
+            match tensor::matmul_q4_k(q4data, 1, tensor::Q4_K_BLOCK, &q4a, 1, &mut q4c) {
+                Ok(()) => {
+                    write_str("Q4K:matmul c0="); write_f32(q4c[0]);
+                    write_str("\n");
+                }
+                Err(_) => { write_str("Q4K:MATMUL_ERR\n"); }
+            }
         }
     }
 
