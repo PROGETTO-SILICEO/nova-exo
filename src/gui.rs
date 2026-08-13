@@ -81,10 +81,11 @@ static mut CURSOR_Y: usize = 0;
 /// Font 8x8 (2048 byte: 256 glyph × 8 byte, LSB sinistra)
 static FONT: &[u8] = include_bytes!("../font.bin");
 
-/// Colori RGB 24bpp → pixel 32bpp
+/// Colori RGB → pixel 32bpp. Il framebuffer VBE è BGR in memoria
+/// (byte0=blu, byte1=verde, byte2=rosso, byte3=alpha) su little-endian.
 #[inline]
 const fn px(r: u8, g: u8, b: u8) -> u32 {
-    ((r as u32) << 16) | ((g as u32) << 8) | (b as u32)
+    ((b as u32) << 16) | ((g as u32) << 8) | (r as u32)
 }
 
 /// Inizializza il framebuffer dalla risposta Limine.
@@ -127,29 +128,34 @@ pub unsafe fn init() -> bool {
     true
 }
 
-/// Scrive un pixel a (x,y) nel framebuffer
+/// Scrive un pixel a (x,y) nel framebuffer.
+/// Il colore è il valore px() (BGR-aware); il framebuffer vuole
+/// byte0=blu, byte1=verde, byte2=rosso (VBE 32bpp little-endian).
 #[inline]
 pub unsafe fn put_pixel(x: usize, y: usize, color: u32) {
     if !FB_READY || x >= FB_WIDTH || y >= FB_HEIGHT {
         return;
     }
-    let off = y * FB_PITCH + x * 4; // 32bpp
-    FB_ADDR.add(off).write_volatile(color as u8);
-    FB_ADDR.add(off + 1).write_volatile((color >> 8) as u8);
-    FB_ADDR.add(off + 2).write_volatile((color >> 16) as u8);
-    FB_ADDR.add(off + 3).write_volatile(0xFF);
+    let off = y * FB_PITCH + x * 4;
+    // color = (b<<16)|(g<<8)|r  →  byte0=r, byte1=g, byte2=b, byte3=alpha
+    // ma il FB vuole byte0=b → scriviamo i byte nell'ordine corretto
+    FB_ADDR.add(off).write_volatile((color >> 16) as u8);     // blu
+    FB_ADDR.add(off + 1).write_volatile((color >> 8) as u8);  // verde
+    FB_ADDR.add(off + 2).write_volatile(color as u8);         // rosso
+    FB_ADDR.add(off + 3).write_volatile(0xFF);                // alpha
 }
 
-/// Riempi tutto lo schermo di un colore
+/// Riempi tutto lo schermo di un colore (byte order come put_pixel: b,g,r,a)
 pub unsafe fn clear_screen(color: u32) {
     if !FB_READY { return; }
     for y in 0..FB_HEIGHT {
+        let row_off = y * FB_PITCH;
         for x in 0..FB_WIDTH {
-            let off = y * FB_PITCH + x * 4;
-            FB_ADDR.add(off).write_volatile(color as u8);
-            FB_ADDR.add(off + 1).write_volatile((color >> 8) as u8);
-            FB_ADDR.add(off + 2).write_volatile((color >> 16) as u8);
-            FB_ADDR.add(off + 3).write_volatile(0xFF);
+            let off = row_off + x * 4;
+            FB_ADDR.add(off).write_volatile((color >> 16) as u8);     // blu
+            FB_ADDR.add(off + 1).write_volatile((color >> 8) as u8);  // verde
+            FB_ADDR.add(off + 2).write_volatile(color as u8);         // rosso
+            FB_ADDR.add(off + 3).write_volatile(0xFF);                // alpha
         }
     }
 }
@@ -275,6 +281,9 @@ pub unsafe fn render_vitals(
     brain_state: &str,
 ) {
     if !FB_READY { return; }
+
+    // Pulizia: senza questo i caratteri si accumulano e si sovrappongono
+    clear_screen(COL_BG);
 
     // Titolo
     set_cursor(10, 10);
