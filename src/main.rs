@@ -511,6 +511,30 @@ pub extern "C" fn _start() -> ! {
                 Err(_) => { write_str("Q4K:MATMUL_ERR\n"); }
             }
         }
+
+        // ── Test Q4_K REALE: primo blocco di LFM2.5 (blk.0.ffn_gate) ──
+        // Estratto dal file LFM2.5-2.6B-Q4_K_M.gguf. Il kernel dequantizza
+        // dati veri del modello: std deve essere ~0.015 (come Python).
+        let real_blk: &[u8] = include_bytes!("../testdata/lfm25_blk0_q4k.bin");
+        let mut real_out = [0.0f32; tensor::Q4_K_BLOCK];
+        match tensor::dequant_q4_k(real_blk, &mut real_out) {
+            Ok(()) => {
+                // media e dev std dei 256 valori
+                let mut mean = 0.0f32;
+                for &v in real_out.iter() { mean += v; }
+                mean /= tensor::Q4_K_BLOCK as f32;
+                let mut var = 0.0f32;
+                for &v in real_out.iter() { let d = v - mean; var += d * d; }
+                var /= (tensor::Q4_K_BLOCK - 1) as f32;
+                let std = libm::sqrtf(var);
+                write_str("LFM:dequant mean="); write_f32(mean);
+                write_str(" std="); write_f32(std);
+                write_str(" v0="); write_f32(real_out[0]);
+                write_str(" v1="); write_f32(real_out[1]);
+                write_str("\n");
+            }
+            Err(_) => { write_str("LFM:ERR\n"); }
+        }
     }
 
     idt::init();
