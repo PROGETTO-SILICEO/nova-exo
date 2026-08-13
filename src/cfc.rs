@@ -627,6 +627,21 @@ pub fn inc_tick() {
     unsafe { core::ptr::write_volatile(&raw mut TICK, TICK + 1); }
 }
 
+/// Vero quando il tick ha superato il prossimo marcatore di `interval`.
+/// Pattern a soglie: robusto a passi di tick irregolari (i moduli
+/// `tick % N == 0` falliscono se il tick avanza a passi variabili).
+/// `next` è il prossimo marcatore (si aggiorna in-place).
+pub fn tick_passed(interval: u64, next: &mut u64) -> bool {
+    let t = tick();
+    if t >= *next {
+        // salta al prossimo marcatore futuro (gestisce grandi salti)
+        *next = (t / interval + 1) * interval;
+        true
+    } else {
+        false
+    }
+}
+
 // ── Daydreaming: experience buffer ──────────────────────────────────
 // Buffer duraturo di esperienze per consolidamento offline.
 // Separato dal log circolare (che è per debug).

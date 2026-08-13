@@ -9,6 +9,7 @@ libm = "0.2"
 
 [features]
 demo_pf = []
+boot_tests = []
 
 [profile.release]
 opt-level = 2

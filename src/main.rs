@@ -372,6 +372,13 @@ pub extern "C" fn _start() -> ! {
 
     unsafe { init_weights(); }
 
+    // ── TEST DI BOOT (feature "boot_tests") ──────────────────────────
+    // GGUF, dequant, attention, FFN, shortconv su pesi reali.
+    // Attivi solo con --features boot_tests: gonfiano _start a 58KB e
+    // rallentano il boot (~28s). Il kernel di produzione li esclude.
+    // cfg!() è sempre bilanciato sintatticamente; il ramo morto sparisce
+    // con le ottimizzazioni (opt-level 2 + LTO).
+    if cfg!(feature = "boot_tests") {
     // ── GGUF: prova del modello nel metallo ──
     // Oggi: file di test embedded (336 byte). Domani: file letto da disco.
     // Il parser è no_std, senza alloc: legge header, KV e tensori.
@@ -715,7 +722,8 @@ pub extern "C" fn _start() -> ! {
             }
             Err(_) => { write_str("SC:ERR\n"); }
         }
-    }
+    } // chiude match SC
+    } // fine boot_tests (if cfg)
 
     idt::init();
     serial_println!("IDT loaded. 4 cellulae: tatto, chemio, metabol, integrat.");
@@ -748,6 +756,12 @@ pub extern "C" fn _start() -> ! {
     let mut predictor = predictor::PredictiveModule::new();
     let interpreter = interpreter::Interpreter::new();
     let mut executive = executive::Executive::new();
+    // Marcatori per stampe periodiche (pattern a soglie — robusto a passi
+    // di tick irregolari; i moduli tick%N falliscono con passi ~26)
+    let mut mark_senso = 100u64;
+    let mut mark_brain_state = 500u64;
+    let mut mark_brain_submit = 200u64;
+    let mut mark_window = 500u64;
     // Il cervello nel metallo: oggi stub, domani LFM2.5 portato in no_std.
     // Stessa interfaccia (InferenceEngine): si scambia senza toccare il loop.
     let mut brain = inference::StubBrain::new();
@@ -1153,7 +1167,7 @@ pub extern "C" fn _start() -> ! {
             s
         };
         let int_rep = interpreter.interpret(&cfc_state_f32);
-        if cfc::tick() % 100 == 0 {
+        if cfc::tick_passed(100, &mut mark_senso) {
             write_str("SENSO:INT c="); write_f32(int_rep.chemio[0]);
             write_str(" u="); write_f32(int_rep.chemio[1]);
             write_str(" p="); write_f32(int_rep.chemio[2]);
@@ -1173,7 +1187,7 @@ pub extern "C" fn _start() -> ! {
         if brain.state() == inference::BrainState::Idle {
             // Sottoponiamo lo stato interpretato al cervello
             let submitted = brain.submit(&int_rep.chemio);
-            if submitted && cfc::tick() % 200 == 0 {
+            if submitted && cfc::tick_passed(200, &mut mark_brain_submit) {
                 write_str("BRAIN:submit c="); write_f32(int_rep.chemio[0]);
                 write_str(" u="); write_f32(int_rep.chemio[1]);
                 write_str(" p="); write_f32(int_rep.chemio[2]);
@@ -1186,7 +1200,7 @@ pub extern "C" fn _start() -> ! {
             if let Some(out) = brain.output() {
                 brain_output = out;
                 brain_has_output = true;
-                if cfc::tick() % 200 == 0 {
+                if cfc::tick_passed(200, &mut mark_brain_submit) {
                     write_str("BRAIN:out c="); write_f32(out[0]);
                     write_str(" u="); write_f32(out[1]);
                     write_str(" p="); write_f32(out[2]);
@@ -1196,7 +1210,7 @@ pub extern "C" fn _start() -> ! {
             }
         }
         // Diagnosi stato cervello (ogni 500 tick)
-        if cfc::tick() % 500 == 0 {
+        if cfc::tick_passed(500, &mut mark_brain_state) {
             write_str("BRAIN:state=");
             write_str(inference::describe_state(brain.state()));
             write_str(" think_ticks=");
@@ -1211,7 +1225,7 @@ pub extern "C" fn _start() -> ! {
         // Mappatura: fin = 16 - round(u * 16)  → u=0 → 16, u=1 → 0
         // (quando l'attention vera entrerà nel trait, questa finestra
         //  sarà il parametro — oggi è visibile e misurata)
-        if cfc::tick() % 500 == 0 {
+        if cfc::tick_passed(500, &mut mark_window) {
             let u = int_rep.chemio[1].clamp(0.0, 1.0);
             // arrotondamento manuale (round non è in no_std)
             let fin = 16usize.saturating_sub(((u * 16.0) + 0.5) as usize);
