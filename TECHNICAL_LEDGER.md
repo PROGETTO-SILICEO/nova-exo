@@ -854,3 +854,45 @@ Prossimi step:
   probabilmente la macchina q35 con VGA cambia la dinamica del CFC.
 - La GUI (render ogni 200 tick) non altera il battito.
 - Log: experiments/longrun_v016/run{1,2,3}_*.log
+
+## v0.18-0.20 — Quantizzazione nel metallo: Q8_0, Q4_K, LFM2.5 reale (13 Ago 2026)
+
+### v0.18: dequantizzazione Q4_K (formato reale di LFM2.5)
+- tensor.rs: dequant_q4_k (256 elem/blocco, 144 byte) + get_scale_min_k4
+- Formula dal sorgente ggml-quants.c ufficiale:
+  `x = d * d_s * q - dmin * m_s` con q unsigned 0-15 (NON centrato su 8!)
+- Verificato contro il file REALE: std=0.015162, identico a Python
+- Lezione: Q4_K ≠ Q4_0 (niente (q-8)), scale pattern 12-bit via get_scale_min_k4
+
+### v0.19: matmul Q4_K
+- matmul_q4_k: dequant inline nella matmul, nessun buffer intermedio
+- Test host: c=16.0 esatto. Test QEMU: Q4K:matmul c0=5.0
+- Bug nel test (non nel codice): scales[1]=0 azzerava il sub-block high
+
+### v0.20: LFM2.5 REALE nel kernel
+- Estratto il primo blocco Q4_K di blk.0.ffn_gate dal file LFM2.5-2.6B-Q4_K_M.gguf
+- Il kernel dequantizza i pesi veri: LFM:dequant mean=0.0001 std=0.0152
+  IDENTICO a Python (std=0.015162) — bit-perfect
+
+### La catena completa per LFM2.5 nel metallo
+GGUF parser → dequant Q4_K → matmul quantizzata → output
+Tutti i pezzi verificati singolarmente e in QEMU.
+
+### Prossimi passi
+1. Caricare più layer (non solo un blocco) — embedding, norm, attention
+2. Driver AHCI per leggere il file GGUF da disco (non embedded)
+3. Architettura vera: tokenizer + attention + forward pass completa
+
+## v0.17 — Milestone A ricertificata con GUI fix (13 Ago 2026)
+
+### Criterio: 3 run consecutivi di 10 minuti, log senza errori, GUI attiva.
+### Risultato: ✅ 3/3 verdi.
+
+| Run | Tick | PANIC | ERROR | BRAIN think | VOGLIO | ESITO si/no |
+|-----|------|-------|-------|-------------|--------|-------------|
+| run1 | 63.954 | 0 | 0 | 263→94.325 | 2.841 | 51/22 |
+| run2 | 64.037 | 0 | 0 | 236→95.480 | 2.912 | 44/28 |
+| run3 | 64.445 | 0 | 0 | 946→99.967 | 2.937 | 55/24 |
+
+Ripetibilità: tick Δ<0.8%, VOGLIO Δ<4%. GUI stabile.
+Log: experiments/longrun_v017/run{1,2,3}_*.log
