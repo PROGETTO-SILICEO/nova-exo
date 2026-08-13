@@ -3,7 +3,7 @@
 pub const NEURONS_PER_CELL: usize = 16;
 pub const TOTAL_NEURONS: usize = 4 * NEURONS_PER_CELL;
 
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 pub struct CfcWeights {
     pub w_f: [[f32; NEURONS_PER_CELL]; NEURONS_PER_CELL],
     pub w_f_in: [[f32; 4]; NEURONS_PER_CELL],
@@ -63,16 +63,16 @@ impl CfcWeights {
 }
 
 /// Simple LCG for deterministic random floats in [0, 1)
-struct Lcg {
+pub struct Lcg {
     state: u64,
 }
 
 impl Lcg {
-    fn new(seed: u64) -> Self {
+    pub fn new(seed: u64) -> Self {
         Self { state: seed }
     }
 
-    fn uniform(&mut self) -> f32 {
+    pub fn uniform(&mut self) -> f32 {
         self.state = self.state.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
         ((self.state >> 11) as f32) * (1.0 / 9007199254740992.0) // 0..1
     }

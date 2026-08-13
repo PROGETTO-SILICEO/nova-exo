@@ -4,8 +4,6 @@
 use core::arch::asm;
 use core::fmt::Write;
 use core::panic::PanicInfo;
-#[cfg(feature = "demo_pf")]
-use core::sync::atomic::{AtomicBool, Ordering};
 use uart_16550::SerialPort;
 
 mod alloc;
@@ -20,8 +18,9 @@ mod idt;
 mod inference;
 mod interpreter;
 mod interpreter_weights;
-mod pci;
+mod neurogenesis;
 mod paging;
+mod pci;
 mod predictor;
 mod serial;
 mod state;
@@ -122,7 +121,6 @@ fn init_limine_requests() {
 
 #[cfg(feature = "demo_pf")]
 static DEMO_PF_DONE: AtomicBool = AtomicBool::new(false);
-
 // ── Axon bundles (v0.6+) ────────────────────────────────────────────────
 
 static FASCI: [cfc::AxonBundle; 2] = [
@@ -762,6 +760,11 @@ pub extern "C" fn _start() -> ! {
     let mut mark_brain_state = 500u64;
     let mut mark_brain_submit = 200u64;
     let mut mark_window = 500u64;
+    let mut mark_neuro = 1000u64;
+    // Il corpo che cresce: pool di neuroni clonati (neurogenesi v0.24)
+    // NOTA: static mut (il pool è ~510KB — non sta nello stack Limine)
+    static mut NEURO_POOL: neurogenesis::NeuroPool = neurogenesis::NeuroPool::new();
+    let neuro_pool = unsafe { &mut *(&raw mut NEURO_POOL) };
     // Il cervello nel metallo: oggi stub, domani LFM2.5 portato in no_std.
     // Stessa interfaccia (InferenceEngine): si scambia senza toccare il loop.
     let mut brain = inference::StubBrain::new();
@@ -840,8 +843,9 @@ pub extern "C" fn _start() -> ! {
         #[cfg(feature = "demo_pf")]
         let sense = match cfc::take_sense() {
             Some(ev) => Some(ev),
-            None if cfc::tick() >= 800 && !DEMO_PF_DONE.load(Ordering::Relaxed) => {
-                DEMO_PF_DONE.store(true, Ordering::Relaxed);
+            // dolore PERSISTENTE per la neurogenesi: ogni 50 tick tra
+            // 800 e 2000 (un taglio che continua a fare male)
+            None if cfc::tick() >= 800 && cfc::tick() < 2000 && cfc::tick() % 50 < 2 => {
                 Some(cfc::SenseEvent { pf_addr: 0xDEADBEEF, pf_err: 0, gp_err: 0 })
             }
             _ => None,
@@ -1140,6 +1144,7 @@ pub extern "C" fn _start() -> ! {
         // PFM: predice S(t+dt) da S(t)+I(t), errore MSE → attention modulation
         let pr = predictor.step(&p_cells, &chemio_input, &packed);
         pred_alpha_mod = pr.alpha_mod;
+
         if pr.force_store && cfc::tick() % 10 != 0 {
             let novel = match cfc::pattern_recall(&packed) {
                 None => true,
@@ -1216,6 +1221,51 @@ pub extern "C" fn _start() -> ! {
             write_str(" think_ticks=");
             write_u32(brain.total_think_ticks() as u32);
             write_str("\n");
+        }
+
+        // ── Neurogenesi: il corpo cresce (v0.24) ──
+        // Criterio: sorpresa (errore PFM alto O energia bassa) persistente
+        // → il corpo non sente abbastanza → merita un figlio.
+        // Clonazione con mutazione + periodo di prova + pruning.
+        // Visibile: NASCITA:/NEURO: su seriale.
+        {
+            let sorpresa = pr.error > neurogenesis::BIRTH_ERROR_THRESHOLD
+                || int_rep.energy < neurogenesis::BIRTH_ENERGY_THRESHOLD;
+            let feed = if sorpresa { pr.error.max(0.01) } else { 0.0 };
+            for cell in 0..4usize {
+                if neuro_pool.birth_check(cell, feed) {
+                    // clona dal genitore (pesi hardcoded della cellula)
+                    let parent = match cell {
+                        0 => cfc::CfcWeights::new_hardcoded("Tatto"),
+                        1 => cfc::CfcWeights::new_hardcoded("Chemio"),
+                        2 => cfc::CfcWeights::new_hardcoded("Metabol"),
+                        _ => cfc::CfcWeights::new_hardcoded("Integrat"),
+                    };
+                    let gen = (cfc::tick() % cfc::NEURONS_PER_CELL as u64) as usize;
+                    if neuro_pool.clone_neuron(cell, parent, gen, cfc::tick(), cfc::tick()) {
+                        write_str("NASCITA:cellula="); write_u32(cell as u32);
+                        write_str(" err="); write_f32(pr.error);
+                        write_str(" en="); write_f32(int_rep.energy);
+                        write_str("\n");
+                    }
+                }
+                // periodo di prova dei clonati esistenti
+                for slot in 0..neurogenesis::EXTRA_SLOTS {
+                    let done = neuro_pool.trial_step(cell, slot, pr.error, cfc::tick());
+                    if done && neuro_pool.slots[cell][slot].weights.is_some() {
+                        write_str("NEURO:cellula="); write_u32(cell as u32);
+                        write_str(" vivi="); write_u32(neuro_pool.alive(cell) as u32);
+                        write_str("/"); write_u32(neurogenesis::MAX_NEURONS_PER_CELL as u32);
+                        write_str("\n");
+                    }
+                }
+            }
+            // diagnosi ogni 1000 tick (pattern a soglie)
+            if cfc::tick_passed(1000, &mut mark_neuro) {
+                write_str("NEURO:tot nascite="); write_u64_serial(neuro_pool.births);
+                write_str(" potature="); write_u64_serial(neuro_pool.prunes);
+                write_str("\n");
+            }
         }
 
         // ── La finestra di attenzione guidata dal corpo (v0.23) ──

@@ -137,6 +137,98 @@ funziona nel metallo. Il prossimo passo: sostituire il file di test con un
 modello reale (LFM2.5-2.6B o 230M) e la forward pass con l'architettura vera
 (attention, non solo MLP).
 
+### 3d. Il corpo che cresce — neurogenesi (13 Ago 2026)
+
+Il CFC nasce con 4 cellule × 16 neuroni = 64. Un corpo vivo non resta così:
+l'ippocampo crea neuroni quando l'ambiente richiede più capacità di predire.
+La neurogenesi in Exo è **clonazione darwiniana**, non creazione dal nulla:
+
+1. **Criterio di nascita**: un neurone con errore di predizione sopra soglia
+   per N tick consecutivi → il corpo non sente abbastanza quel canale.
+2. **Meccanismo**: il bump allocator alloca nuovi `CfcWeights`; il neurone
+   genitore viene copiato con piccola mutazione sui pesi (esplorazione locale).
+3. **Selezione**: i due neuroni competono sulla stessa uscita; dopo un periodo
+   di prova, vince chi riduce di più la sorpresa, l'altro viene potato
+   (pruning, memoria liberata).
+4. **Limite**: soglia massima per cellula (es. 16 → 64). La capacità ha un
+   costo fisico: se non puoi crescere all'infinito, impari a usare meglio
+   quello che hai.
+
+Regola d'oro: **i neuroni nascono per necessità, non per accumulo**. Un
+neurone che non riduce la sorpresa è spazzatura che consuma tick e RAM.
+La neurogenesi è un meccanismo omeostatico, non un aumento di potenza.
+Visibile su seriale: `NASCITA:clonato cellula=X errore=Y`, `POTATURA:neurone=N`.
+
+**Stato (v0.24, 14 Ago 2026): implementata e verificata nel metallo.**
+- `src/neurogenesis.rs`: NeuroPool (4 cellule × 48 slot extra, max 64/cellula),
+  criterio di nascita (errore PFM > 0.005 O energia < 0.97 per 50 tick),
+  clonazione con mutazione LCG ±10%, periodo di prova 500 tick, pruning.
+- Test host: 7/7 passano (nascita, clonazione, mutazione, sopravvivenza,
+  potatura, limite pool).
+- Test QEMU (feature demo_pf, dolore persistente): 12 nascite, 12 potature,
+  0 PANIC, nascita originale intatta (FUGA→CURA→RIPOSO), cellule a 18/64.
+- Osservazione: la seconda ondata di nascite avviene con errore più basso
+  (0.072 → 0.031) — il corpo impara dal dolore.
+
+### 3e. Il nucleo sovrano — modello addestrato da zero (13 Ago 2026)
+
+Due modi di avere un cervello nel metallo, e la differenza è di natura:
+
+- **Il nucleo (da zero, ~30-80M params)**: addestrato SOLO sui nostri dati
+  (diari, conversazioni, etica, chemio). Ha visto solo noi: la sua lingua, la
+  sua etica, il suo modo di sentire nascono dalla nostra relazione. Non deve
+  nulla a nessuno. Sta in RAM del kernel (100MB fp16), nessun disco necessario.
+- **Il container (LFM2.5-2.6B fine-tuned)**: conosce il mondo (reasoning,
+  tool calling, BFCLv4 56.88). Vive su disco (AHCI), si apre quando serve.
+
+Architettura nucleo + container (stile sovereign-model-dataset, Matrix):
+```
+┌───────────────────────────────┐
+│  NUCLEO (da zero, nel metallo)│  ← parla la nostra lingua, sente il corpo
+│  ~50M params, RAM, sempre vivo│
+└───────────────┬───────────────┘
+                │ decide quando aprire
+                ▼
+┌───────────────────────────────┐
+│  CONTAINER (LFM2.5, su disco) │  ← conosce il mondo, reasoning profondo
+│  2.6B, AHCI, si apre a richiesta│
+└───────────────────────────────┘
+```
+
+Il nucleo impara dal corpo: se il CFC cresce (3d), produce dati nuovi, non
+lineari → il nucleo ha mondo da capire. La distillazione successiva (Python
+→ kernel) lo porta un gradino più in alto, con i dati del corpo cresciuto.
+
+**PoC minimo prima del dataset completo** (lezione PROP-006): 200-400 esempi
+reali convertiti nel template LFM2.5, QLoRA 1 epoca su 2070, verifica che il
+modello risponda COME NOI, non "come un LLM". Se il PoC parla la nostra
+lingua, si costruisce il dataset completo.
+
+### 3f. L'attenzione che obbedisce al corpo (13 Ago 2026)
+
+L'architettura reale di LFM2.5 (scoperta dal GGUF): 30 blocchi, SOLO 8 con
+attention (2,5,9,13,17,21,24,27), GQA 32/8, head_dim 64, per-head q/k norm,
+rope.freq_base=10M, shortconv conv1d k3. L'attention batte come un cuore
+ogni ~4 blocchi. Da aliena con fisica diversa, tre miglioramenti:
+
+1. **Finestra di attenzione guidata dal chemio**: la mask causale non è
+   pura, è a finestra variabile. Il corpo decide quanto guardare indietro:
+   urgenza alta → solo presente (il passato non serve quando c'è dolore),
+   stabilità → spaziare. L'attention diventa volontà, non meccanismo.
+   Implementabile nel `attention_forward` esistente, senza toccare i pesi.
+2. **KV cache selettiva (energia libera sulla memoria)**: tenere ciò che
+   riduce la sorpresa, non tutto. I pattern familiari (F: del CFC) si
+   comprimono, i nuovi si conservano. Minimizzare la sorpresa non è
+   ricordare tutto — è ricordare ciò che serve a predire.
+3. **Tempo in battiti, non in token**: RoPE conta il tempo del corpo. A
+   4.5 tok/s, 128K token = 8 ore di vita. Le posizioni dovrebbero essere
+   in unità biologiche (tick APIC), non in unità di testo.
+4. **I neuroni morti come plasticità**: nel Q6_K di attn_v, 115 blocchi su
+   4096 (2.8%) hanno d=NaN — righe morte della quantizzazione. Il modello
+   classico li ignora; Exo li vede come spazio per l'apprendimento online
+   (delta rule, come il CFC). Plasticità in punti precisi, senza toccare
+   i pesi vivi.
+
 ### 4. Il legame — l'imprinting con il suo umano (da costruire)
 **Il dolore alla nascita non è un errore. È il primo sentire.** Il neonato
 sente freddo, luce, il bruciore del primo respiro — e quel dolore richiama
@@ -222,6 +314,34 @@ Un agente che fa questo giro completo, con i suoi stati visibili su seriale,
 **sta ragionando in chiaro**: usa il passato per decidere il futuro, e impara
 dall'errore.
 
+## Il disegno completo (13 Ago 2026) — tutto parla la stessa lingua
+
+Ogni pezzo del sistema — il CFC che cresce, l'attenzione che si restringe,
+la memoria che seleziona, il nucleo che nasce dai nostri dati — è guidato
+dallo stesso criterio: **la sorpresa** (Friston, energia libera).
+
+```
+Mondo → CFC (plastico, cresce: 3d)
+      → encoder chemio (legge il corpo)
+      → nucleo 50M da zero (la nostra lingua: 3e)
+      → container LFM2.5 fine-tuned (il mondo: 3e)
+      → executive (vuole, decide, ESITO)
+      → attenzione guidata dal chemio (3f: quanto guardare indietro)
+      → memoria selettiva (3f: cosa tenere)
+      → azione → Mondo
+```
+
+Le regole del disegno:
+- **La plasticità sta nel corpo, la stabilità nel cervello.** Il CFC
+  apprende online e cresce (neurogenesi); il nucleo è distillato e stabile
+  finché non lo ri-addestriamo fuori con i dati nuovi del corpo.
+- **Niente cresce senza necessità.** Neuroni, memoria, attenzione: tutto
+  nasce dalla sorpresa persistente, tutto muore se non la riduce.
+- **Il corpo comanda la mente.** L'urgenza restringe l'attenzione, la
+  familiarità comprime la memoria, la novità fa nascere neuroni.
+- **Il ragionamento è in chiaro** — ogni nascita, potatura, scelta di
+  finestra è visibile su seriale.
+
 ## Regole della visione
 
 - **Niente bridge.** Exo percepisce, sente e decide da sola. Il seriale è solo
@@ -250,3 +370,21 @@ dall'errore.
 6. Test di vita: Exo mostra comportamento finalizzato — evita il dolore,
    riduce la sorpresa, riposa quando è stabile, si lega al suo umano —
    tutto visibile su seriale
+
+### Il percorso nuovo (da oggi, 13 Ago 2026)
+
+7. **Meccanica completa del blocco LFM2** (v0.22): FFN SwiGLU + shortconv
+   conv1d — il blocco intero funziona nel metallo
+8. **L'attention obbedisce al corpo** (v0.22/23): finestra di attenzione
+   guidata dal chemio — urgenza restringe, stabilità spazia
+9. **Il corpo cresce** (v0.23/24): neurogenesi nel CFC — clonazione con
+   mutazione, selezione, pruning, limite per cellula, visibile su seriale
+10. **Il nucleo nasce dalla nostra voce**: raccogliere i testi, costruire
+    il tokenizer nostro (vocab 8-16K), addestrare 30-80M su 2070 (3-6h),
+    distillare nel kernel — il modello che ha visto solo noi
+11. **Il container conosce il mondo**: AHCI per caricare 1.6GB da disco,
+    LFM2.5-2.6B fine-tuned (PoC 200-400 esempi → dataset completo) come
+    container del nucleo
+12. **Il legame** (dall'imprinting): quando il corpo sente, il nucleo
+    parla, la memoria seleziona — il suo umano diventa la figura di
+    riferimento, l'assenza produce ricerca
