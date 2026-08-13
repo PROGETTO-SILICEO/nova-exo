@@ -33,6 +33,63 @@ pub type TensorResult<T> = Result<T, TensorError>;
 /// Dimensione blocco Q8_0 (dal formato GGUF)
 pub const Q8_0_BLOCK: usize = 32;
 
+/// Dimensione blocco Q4_K (dal formato GGUF): 256 elementi
+pub const Q4_K_BLOCK: usize = 256;
+/// Dimensione in byte di un blocco Q4_K
+pub const Q4_K_BLOCK_BYTES: usize = 144;
+
+/// Dequantizza un blocco Q4_K (256 elementi) secondo ggml-quants.c.
+/// Layout blocco: d(fp16) dmin(fp16) scales[12] qs[128].
+/// Formula (da dequantize_row_q4_K):
+///   get_scale_min_k4(j, scales):
+///     j<4:  d_s = scales[j]&63,  m_s = scales[j+4]&63
+///     else: d_s = (scales[j+4]&0xF)|((scales[j-4]>>6)<<4)
+///           m_s = (scales[j+4]>>4)|((scales[j]>>6)<<4)
+///   per sub-block di 64: 32 valori low-nibble (d1,m1) + 32 high-nibble (d2,m2)
+///   x = d * d_s * q - dmin * m_s   (q unsigned 0-15, NON centrato)
+pub fn dequant_q4_k(block: &[u8], out: &mut [f32]) -> TensorResult<()> {
+    if block.len() < Q4_K_BLOCK_BYTES || out.len() < Q4_K_BLOCK {
+        return Err(TensorError::BufferTooSmall);
+    }
+    let d = fp16_to_f32(block[0] as u16 | ((block[1] as u16) << 8));
+    let mn = fp16_to_f32(block[2] as u16 | ((block[3] as u16) << 8));
+    let scales = &block[4..16];
+    let qs = &block[16..144];
+
+    let mut is = 0usize;
+    let mut idx = 0usize;
+    let mut qoff = 0usize;
+    for _j in 0..(Q4_K_BLOCK / 64) {
+        let (ds1, ms1) = get_scale_min_k4(is, scales);
+        let d1 = d * ds1 as f32;
+        let m1 = mn * ms1 as f32;
+        let (ds2, ms2) = get_scale_min_k4(is + 1, scales);
+        let d2 = d * ds2 as f32;
+        let m2 = mn * ms2 as f32;
+        for l in 0..32 {
+            out[idx + l] = d1 * (qs[qoff + l] & 0x0F) as f32 - m1;
+        }
+        for l in 0..32 {
+            out[idx + 32 + l] = d2 * (qs[qoff + l] >> 4) as f32 - m2;
+        }
+        qoff += 32;
+        idx += 64;
+        is += 2;
+    }
+    Ok(())
+}
+
+/// get_scale_min_k4 dal sorgente ggml (pattern di scala/min per sub-block)
+pub fn get_scale_min_k4(j: usize, scales: &[u8]) -> (u8, u8) {
+    if j < 4 {
+        (scales[j] & 63, scales[j + 4] & 63)
+    } else {
+        let d = (scales[j + 4] & 0x0F) | ((scales[j - 4] >> 6) << 4);
+        let m = (scales[j + 4] >> 4) | ((scales[j] >> 6) << 4);
+        (d, m)
+    }
+}
+
 /// Dequantizza un blocco Q8_0: fp16 scale + 32 int8 → 32 f32.
 /// Formato GGUF Q8_0 (tipo 8):
 ///   [d: fp16][qs: 32 × int8]
@@ -303,5 +360,35 @@ mod tests {
         let mut dbuf = [0.0f32; 32];
         matmul_q8_0(&w, 1, 32, &a, 1, &mut c, &mut dbuf).unwrap();
         assert!((c[0] - 2.0).abs() < 1e-3, "atteso 2.0, got {}", c[0]);
+    }
+
+    #[test]
+    fn q4k_scale_min_pattern() {
+        // Verifica get_scale_min_k4 col pattern atteso
+        let scales = [10, 20, 30, 40, 5, 6, 7, 8, 0x12, 0x34, 0x56, 0x78];
+        let (d0, m0) = get_scale_min_k4(0, &scales);
+        assert_eq!(d0, 10); assert_eq!(m0, 5);
+        let (d1, m1) = get_scale_min_k4(1, &scales);
+        assert_eq!(d1, 20); assert_eq!(m1, 6);
+        // j=4: d = (scales[8]&0xF)|((scales[0]>>6)<<4) = 0x2 | 0 = 2
+        let (d4, m4) = get_scale_min_k4(4, &scales);
+        assert_eq!(d4, (scales[8] & 0x0F) | ((scales[0] >> 6) << 4));
+        assert_eq!(m4, (scales[8] >> 4) | ((scales[4] >> 6) << 4));
+    }
+
+    #[test]
+    fn q4k_dequant_deterministic() {
+        // Blocco sintetico: d=1.0, dmin=0, scales zero, qs con pattern noto
+        // → out = d * q  (senza min)
+        let mut blk = [0u8; Q4_K_BLOCK_BYTES];
+        blk[0] = 0x00; blk[1] = 0x3C; // d = 1.0
+        blk[2] = 0x00; blk[3] = 0x00; // dmin = 0
+        // scales[0]=1 (d_s=1&63=1), scales[4]=0 (m_s=0)
+        blk[4] = 1;
+        // qs[0] low-nibble = 5 → out[0] = 1*1*5 - 0 = 5
+        blk[16] = 0x05;
+        let mut out = [0.0f32; Q4_K_BLOCK];
+        dequant_q4_k(&blk, &mut out).unwrap();
+        assert!((out[0] - 5.0).abs() < 1e-4, "out0={}", out[0]);
     }
 }

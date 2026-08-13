@@ -484,6 +484,22 @@ pub extern "C" fn _start() -> ! {
                 }
             }
         }
+
+        // ── Test Q4_K: dequantizzazione del formato reale di LFM2.5 ──
+        // File testdata/test_q4k.gguf: 1 tensore Q4_K (256×1, 1 blocco 144B).
+        let gguf_q4k: &[u8] = include_bytes!("../testdata/test_q4k.gguf");
+        if let Ok(q4s) = gguf::parse_summary(gguf_q4k) {
+            let q4data = &gguf_q4k[q4s.data_offset..];
+            let mut q4out = [0.0f32; tensor::Q4_K_BLOCK];
+            match tensor::dequant_q4_k(q4data, &mut q4out) {
+                Ok(()) => {
+                    write_str("Q4K:dequant out0="); write_f32(q4out[0]);
+                    write_str(" out1="); write_f32(q4out[1]);
+                    write_str("\n");
+                }
+                Err(_) => { write_str("Q4K:ERR\n"); }
+            }
+        }
     }
 
     idt::init();
