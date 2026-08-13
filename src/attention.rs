@@ -126,6 +126,7 @@ pub fn attention_forward(
     q_norm_w: &[f32], k_norm_w: &[f32],
     start_pos: usize,
     n_out_q: usize, n_out_kv: usize, wo_n_in: usize,
+    window: usize,
     q_buf: &mut [f32], k_buf: &mut [f32], v_buf: &mut [f32],
     scores: &mut [f32], out_buf: &mut [f32], ctx_buf: &mut [f32],
     y: &mut [f32],
@@ -191,17 +192,24 @@ pub fn attention_forward(
     }
 
     // 4. Attenzione per ogni query head (GQA: nel subset h % n_kv_heads)
+    //    Mask causale a finestra: j > s (futuro) o j < s - window (passato
+    //    remoto) → -inf. Il corpo decide window: urgenza → piccola.
     for h in 0..n_q_heads {
         let g = h % n_kv_heads; // kv head condiviso
         for s in 0..seq {
             let q_off = s * n_out_q + h * HEAD_DIM;
+            let lo = s.saturating_sub(window);
             for j in 0..seq {
                 let k_off = j * n_out_kv + g * HEAD_DIM;
                 let mut dot = 0.0f32;
                 for d in 0..HEAD_DIM {
                     dot += q_buf[q_off + d] * k_buf[k_off + d];
                 }
-                scores[s * seq + j] = if j > s { f32::NEG_INFINITY } else { dot / libm::sqrtf(HEAD_DIM as f32) };
+                scores[s * seq + j] = if j > s || j < lo {
+                    f32::NEG_INFINITY
+                } else {
+                    dot / libm::sqrtf(HEAD_DIM as f32)
+                };
             }
         }
         // softmax su ogni riga (in-place su scores)

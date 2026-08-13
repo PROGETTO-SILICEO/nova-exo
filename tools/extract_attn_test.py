@@ -253,46 +253,48 @@ def main():
             off = h * HEAD_DIM
             k[s, off:off + HEAD_DIM] = rope_vec(k[s, off:off + HEAD_DIM], s)
 
-    # 4. attention GQA + causal (test: head h usa kv head h % N_KV_TEST)
-    out = np.zeros((SEQ, Q_OUT), dtype=np.float32)
-    scale = np.float32(1.0 / np.sqrt(HEAD_DIM))
-    for h in range(N_HEAD_TEST):
-        g = h % N_KV_TEST
-        for s in range(SEQ):
-            qh = q[s, h * HEAD_DIM:(h + 1) * HEAD_DIM]
-            scores = np.zeros(SEQ, dtype=np.float32)
-            for j in range(SEQ):
-                if j > s:
-                    scores[j] = np.float32(-1e30)
-                else:
-                    kh = k[j, g * HEAD_DIM:(g + 1) * HEAD_DIM]
-                    scores[j] = np.float32(np.dot(qh, kh) * scale)
-            # softmax stabile
-            mx = np.float32(np.max(scores))
-            e = np.exp((scores - mx).astype(np.float32)).astype(np.float32)
-            e = e / np.float32(np.sum(e))
-            for j in range(SEQ):
-                out[s, h * HEAD_DIM:(h + 1) * HEAD_DIM] += np.float32(e[j] * v[j, g * HEAD_DIM:(g + 1) * HEAD_DIM])
+    # 4-5. attention GQA + mask causale a finestra (come il kernel v0.23)
+    # window: il token s guarda j con s-window <= j <= s
+    def attn_window(window):
+        out = np.zeros((SEQ, Q_OUT), dtype=np.float32)
+        scale = np.float32(1.0 / np.sqrt(HEAD_DIM))
+        for h in range(N_HEAD_TEST):
+            g = h % N_KV_TEST
+            for s in range(SEQ):
+                qh = q[s, h * HEAD_DIM:(h + 1) * HEAD_DIM]
+                lo = max(0, s - window)
+                scores = np.zeros(SEQ, dtype=np.float32)
+                for j in range(SEQ):
+                    if j > s or j < lo:
+                        scores[j] = np.float32(-1e30)
+                    else:
+                        kh = k[j, g * HEAD_DIM:(g + 1) * HEAD_DIM]
+                        scores[j] = np.float32(np.dot(qh, kh) * scale)
+                # softmax stabile
+                mx = np.float32(np.max(scores))
+                e = np.exp((scores - mx).astype(np.float32)).astype(np.float32)
+                e = e / np.float32(np.sum(e))
+                for j in range(SEQ):
+                    out[s, h * HEAD_DIM:(h + 1) * HEAD_DIM] += np.float32(e[j] * v[j, g * HEAD_DIM:(g + 1) * HEAD_DIM])
+        return out @ Wo.T   # (SEQ, Q_OUT)
 
-    # 5. output proiezione
-    y = out @ Wo.T   # (SEQ, Q_OUT)
-
-    # salva atteso
+    # attesi per finestre multiple: 4 (full), 2, 1, 0
     with open(OUT_EXP, "w") as f:
         f.write(f"SEQ={SEQ} DIM={DIM} Q_OUT={Q_OUT} K_OUT={K_OUT}\n")
-        for s in range(SEQ):
-            vals = " ".join(f"{v:.6f}" for v in y[s, :8])
-            f.write(f"y[{s}][0:8] {vals}\n")
-        # anche qualche valore in coda (per verifica non banale)
-        for s in range(SEQ):
-            vals = " ".join(f"{v:.6f}" for v in y[s, Q_OUT-8:Q_OUT])
-            f.write(f"y[{s}][{Q_OUT-8}:{Q_OUT}] {vals}\n")
-        # statistiche per controllo robusto
-        f.write(f"y mean={np.mean(y):.6f} std={np.std(y):.6f}\n")
-        f.write(f"y[0][0]={y[0][0]:.6f} y[3][7]={y[3][7]:.6f}\n")
-    print(f"Atteso: {OUT_EXP}")
-    print(f"y mean={np.mean(y):.6f} std={np.std(y):.6f}")
-    print(f"y[0][0]={y[0][0]:.6f} y[3][7]={y[3][7]:.6f}")
+        for w in [4, 2, 1, 0]:
+            y = attn_window(w)
+            f.write(f"WINDOW={w}\n")
+            for s in range(SEQ):
+                vals = " ".join(f"{v:.6f}" for v in y[s, :8])
+                f.write(f"y[{s}][0:8] {vals}\n")
+            for s in range(SEQ):
+                vals = " ".join(f"{v:.6f}" for v in y[s, Q_OUT-8:Q_OUT])
+                f.write(f"y[{s}][{Q_OUT-8}:{Q_OUT}] {vals}\n")
+            f.write(f"y[0][0]={y[0][0]:.6f} y[3][7]={y[3][7]:.6f} bits00={y[0][0].view(np.uint32):08X} bits37={y[3][7].view(np.uint32):08X}\n")
+    print(f"Atteso multi-window: {OUT_EXP}")
+    for w in [4, 2, 1, 0]:
+        y = attn_window(w)
+        print(f"  w={w}: y[0][0]={y[0][0]:.6f} ({y[0][0].view(np.uint32):08X}) y[3][7]={y[3][7]:.6f} ({y[3][7].view(np.uint32):08X})")
     print("OK")
 
 if __name__ == "__main__":

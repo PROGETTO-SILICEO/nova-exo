@@ -599,6 +599,7 @@ pub extern "C" fn _start() -> ! {
 
         match attention::attention_forward(
             x, seq, wq, wk, wv, wo, &qn, &kn, 0, Q_OUT, K_OUT, WO_N_IN,
+            4, // finestra piena (causale) — test di regressione
             q_buf, k_buf, v_buf,
             scores, out_buf, ctx_buf, y,
         ) {
@@ -620,6 +621,30 @@ pub extern "C" fn _start() -> ! {
                     attention::AttnError::Tensor(_) => "tensor",
                 });
                 write_str("\n");
+            }
+        }
+
+        // ── Test FINESTRA DI ATTENZIONE (v0.23): il corpo decide ──────
+        // Stesso input, finestre diverse. Attesi da extract_attn_test.py:
+        //   w=2: y[3][7]=4C19A304, w=1: y[3][7]=4BB5D246, w=0: y[3][7]=CA949510
+        // (w=4 full già verificato sopra). y[0][0] invariato (primo token).
+        for w in [2usize, 1, 0] {
+            // reset dei buffer di output (il resto si riusa)
+            for v in out_buf.iter_mut() { *v = 0.0; }
+            for v in ctx_buf.iter_mut() { *v = 0.0; }
+            for v in y.iter_mut() { *v = 0.0; }
+            match attention::attention_forward(
+                x, seq, wq, wk, wv, wo, &qn, &kn, 0, Q_OUT, K_OUT, WO_N_IN,
+                w, q_buf, k_buf, v_buf,
+                scores, out_buf, ctx_buf, y,
+            ) {
+                Ok(()) => {
+                    write_str("WIN:"); write_u32(w as u32);
+                    write_str(" y0="); write_hex32(y[0].to_bits());
+                    write_str(" y[3][7]="); write_hex32(y[3 * Q_OUT + 7].to_bits());
+                    write_str("\n");
+                }
+                Err(_) => { write_str("WIN:ERR\n"); }
             }
         }
 
@@ -1176,6 +1201,22 @@ pub extern "C" fn _start() -> ! {
             write_str(inference::describe_state(brain.state()));
             write_str(" think_ticks=");
             write_u32(brain.total_think_ticks() as u32);
+            write_str("\n");
+        }
+
+        // ── La finestra di attenzione guidata dal corpo (v0.23) ──
+        // L'urgenza del chemio decide quanto guardare indietro:
+        //   u=0 (stabilità) → finestra lunga (guarda il passato)
+        //   u=1 (urgenza)   → finestra corta (solo il presente)
+        // Mappatura: fin = 16 - round(u * 16)  → u=0 → 16, u=1 → 0
+        // (quando l'attention vera entrerà nel trait, questa finestra
+        //  sarà il parametro — oggi è visibile e misurata)
+        if cfc::tick() % 500 == 0 {
+            let u = int_rep.chemio[1].clamp(0.0, 1.0);
+            // arrotondamento manuale (round non è in no_std)
+            let fin = 16usize.saturating_sub(((u * 16.0) + 0.5) as usize);
+            write_str("WINDOW:u="); write_f32(u);
+            write_str(" fin="); write_u32(fin as u32);
             write_str("\n");
         }
 
