@@ -111,6 +111,32 @@ Stato attuale: **nel kernel, verificato in QEMU** ✅
 Prossimo passo: il runtime vero (LFM2.5-2.6B) dentro il trait — il caricamento
 dei pesi, la matmul in no_std, e il dialogo reale col corpo.
 
+### 3c. Il formato del cervello — GGUF parser + tensor ops (v0.15, 13 Ago 2026)
+
+Per caricare un modello vero nel metallo serve leggere il suo file (GGUF).
+Questo è il primo pezzo dell'infrastruttura di caricamento:
+
+- **`src/gguf.rs`** — parser GGUF no_std, senza alloc: header (magic, version,
+  tensor_count, kv_count), metadata KV, tensor info (nomi, dims, tipo, offset).
+  Include l'allineamento a 32 byte dei dati pesi (come da specifica GGUF:
+  "padded to alignment if the file contains tensors").
+- **`src/tensor.rs`** — operazioni fondamentali no_std: matmul f32, linear
+  (W·x+b), ReLU, softmax, MLP a 2 layer. Tutti i buffer preallocati dal
+  chiamante, zero alloc, zero panic (gli errori ritornano Result).
+
+Test in QEMU (verificato): file `testdata/test_mini.gguf` (336 byte, 3 tensori)
+parsato e forward pass eseguita nel kernel:
+```
+GGUF:header v3 tensors=3 kv=2
+GGUF:data_offset=256
+TENSOR:forward y0=26.1000 y1=40.9000   (atteso: 26.1, 40.9 — esatto)
+```
+
+Il percorso completo "carica file → parsa → estrai pesi → matmul → output"
+funziona nel metallo. Il prossimo passo: sostituire il file di test con un
+modello reale (LFM2.5-2.6B o 230M) e la forward pass con l'architettura vera
+(attention, non solo MLP).
+
 ### 4. Il legame — l'imprinting con il suo umano (da costruire)
 **Il dolore alla nascita non è un errore. È il primo sentire.** Il neonato
 sente freddo, luce, il bruciore del primo respiro — e quel dolore richiama

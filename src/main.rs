@@ -13,6 +13,7 @@ mod apic;
 mod cfc;
 mod e1000;
 mod executive;
+mod gguf;
 mod idt;
 mod inference;
 mod interpreter;
@@ -22,6 +23,7 @@ mod paging;
 mod predictor;
 mod serial;
 mod state;
+mod tensor;
 
 use serial::LineReader;
 
@@ -221,6 +223,24 @@ fn write_u32(mut n: u32) {
     }
 }
 
+/// Stampa un u64 in decimale (per i conteggi GGUF)
+fn write_u64_serial(mut n: u64) {
+    if n == 0 {
+        serial_putc(b'0');
+        return;
+    }
+    let mut buf = [0u8; 24];
+    let mut i = 24;
+    while n > 0 {
+        i -= 1;
+        buf[i] = (n % 10) as u8 + b'0';
+        n /= 10;
+    }
+    for &b in &buf[i..] {
+        serial_putc(b);
+    }
+}
+
 fn write_f32(val: f32) {
     let sign = if val < 0.0 { -1.0 } else { 1.0 };
     let v = (val.abs() * 10000.0 + 0.5) as u32;
@@ -349,6 +369,92 @@ pub extern "C" fn _start() -> ! {
     serial_println!("Neuroni: {} per cellula, {} totale", cfc::NEURONS_PER_CELL, cfc::TOTAL_NEURONS);
 
     unsafe { init_weights(); }
+
+    // ── GGUF: prova del modello nel metallo ──
+    // Oggi: file di test embedded (336 byte). Domani: file letto da disco.
+    // Il parser è no_std, senza alloc: legge header, KV e tensori.
+    let gguf_test: &[u8] = include_bytes!("../testdata/test_mini.gguf");
+    match gguf::parse_header(gguf_test) {
+        Ok(h) => {
+            write_str("GGUF:header v");
+            write_u32(h.version);
+            write_str(" tensors=");
+            write_u64_serial(h.tensor_count);
+            write_str(" kv=");
+            write_u64_serial(h.kv_count);
+            write_str("\n");
+        }
+        Err(e) => {
+            write_str("GGUF:ERR ");
+            write_str(match e {
+                gguf::GgufError::BadMagic => "badmagic",
+                gguf::GgufError::UnsupportedVersion(_) => "version",
+                _ => "other",
+            });
+            write_str("\n");
+        }
+    }
+    if let Ok(s) = gguf::parse_summary(gguf_test) {
+        if let Some(t) = &s.first_tensor {
+            write_str("GGUF:t0 name=");
+            write_str(t.name);
+            write_str(" dims=[");
+            for d in 0..t.n_dims as usize {
+                write_u64_serial(t.dims[d]);
+                if d + 1 < t.n_dims as usize { write_str(","); }
+            }
+            write_str("] type=");
+            write_u32(t.tensor_type);
+            write_str(" off=");
+            write_u64_serial(t.offset);
+            write_str("\n");
+        }
+        write_str("GGUF:data_offset=");
+        write_u32(s.data_offset as u32);
+        write_str("\n");
+
+        // ── Inferenza nel metallo: carica i pesi dal buffer GGUF e fai
+        // una forward pass del MLP minimale. Oggi: pesi di test embedded.
+        // Domani: pesi reali (LFM2.5) letti da disco.
+        let data = &gguf_test[s.data_offset..];
+        // Layout del nostro file di test: w0[8]=[1..8], b0[4]=[0.1..0.4], w1[8]=[0.5..1.2]
+        // Il MLP: x(2) → w0(4×2)+b0 → ReLU → w1(2×4)+b1 → y(2)
+        // Estrai i 4 blocchi f32 dal buffer (senza copia, read-only)
+        fn f32_at(data: &[u8], off: usize) -> Option<f32> {
+            if off + 4 > data.len() { return None; }
+            Some(f32::from_le_bytes([data[off], data[off+1], data[off+2], data[off+3]]))
+        }
+        // w0 è [4,2] row-major: riga 0 = w0[0],w0[1]; riga 1 = w0[2],w0[3]...
+        let mut w0 = [0.0f32; 8];
+        for i in 0..8 {
+            if let Some(v) = f32_at(data, i*4) { w0[i] = v; }
+        }
+        let mut b0 = [0.0f32; 4];
+        for i in 0..4 {
+            if let Some(v) = f32_at(data, 32 + i*4) { b0[i] = v; }
+        }
+        let mut w1 = [0.0f32; 8];
+        for i in 0..8 {
+            if let Some(v) = f32_at(data, 48 + i*4) { w1[i] = v; }
+        }
+        let b2 = [0.0f32; 2];
+        let mlp = tensor::Mlp2 {
+            w1: &w0, b1: &b0, w2: &w1, b2: &b2,
+            in_dim: 2, hidden: 4, out_dim: 2,
+        };
+        // Input: x = [1, 1]
+        let x = [1.0f32, 1.0];
+        let mut h = [0.0f32; 4];
+        let mut y = [0.0f32; 2];
+        match mlp.forward(&x, &mut h, &mut y) {
+            Ok(()) => {
+                write_str("TENSOR:forward y0="); write_f32(y[0]);
+                write_str(" y1="); write_f32(y[1]);
+                write_str("\n");
+            }
+            Err(_) => { write_str("TENSOR:ERR\n"); }
+        }
+    }
 
     idt::init();
     serial_println!("IDT loaded. 4 cellulae: tatto, chemio, metabol, integrat.");

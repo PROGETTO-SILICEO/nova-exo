@@ -775,3 +775,35 @@ Prossimi step:
 ### Regressioni attese
 - Nessuna regressione di velocità: tick rate ~107/s in linea con i run storici (53K-46K-35K/10min).
 - Nessuna regressione di comportamento: nascita FUGA→CURA→RIPOSO intatta in tutti i run.
+
+## v0.15 — GGUF parser + tensor ops nel kernel (13 Ago 2026)
+
+### Cosa è stato fatto
+- **`src/gguf.rs`**: parser GGUF no_std senza alloc. Header (magic/version/
+  tensor_count/kv_count), metadata KV, tensor info. Allineamento dati a 32
+  byte se tensor_count > 0 (specifica GGUF). 4 test unitari.
+- **`src/tensor.rs`**: matmul f32, linear (W·x+b), ReLU, softmax, Mlp2.
+  Zero alloc, zero panic, Result sugli errori. 4 test unitari.
+- **`testdata/test_mini.gguf`**: file GGUF v3 minimale (336 byte, 3 tensori
+  f32, 2 KV) per test embedded via include_bytes!.
+- **`src/main.rs`**: al boot parsa il GGUF embedded e fa una forward pass
+  MLP con i pesi estratti dal buffer. Output su seriale.
+
+### Bug trovato e fixato
+- **Allineamento GGUF**: la prima versione leggeva i dati pesi all'offset
+  grezzo (227) invece di quello allineato a 32 (256) → forward pass dava
+  y0=-429496.7 (spazzatura da padding). Fix: data_offset = align_up(32)
+  se ci sono tensori (come gguf_get_data_offset). Dopo il fix: y0=26.1,
+  y1=40.9 — identico al calcolo Python di riferimento.
+
+### Verifica
+- Test unitari host: GGUF parser OK, matmul OK, softmax OK (harness in /tmp)
+- QEMU: GGUF parsato, forward pass esatta (26.1/40.9), nascita intatta,
+  BRAIN attivo, 0 PANIC
+- Long run Milestone A: in corso (3×600s, experiments/longrun_v015/)
+
+### Prossimi passi
+1. Long run v0.15: certificare Milestone A con parser attivo
+2. Modello reale (LFM2.5-2.6B o 230M): sostituire test_mini.gguf
+3. Architettura vera (attention, non solo MLP)
+4. Driver disco (AHCI) per leggere il modello dal block device, non embedded
