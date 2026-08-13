@@ -622,6 +622,74 @@ pub extern "C" fn _start() -> ! {
                 write_str("\n");
             }
         }
+
+        // ── Test FFN SwiGLU REALE: blk.2 di LFM2.5 (subset N_FF=2048) ──
+        // File: header "FFNS"(4) + version u32 + n_in u32 + n_ff u32 + flags u32 = 20
+        //   + wg (n_ff×n_in Q4_K) + wu (n_ff×n_in Q4_K) + wd (n_ff×n_ff Q6_K/Q4_K)
+        let ffn_test: &[u8] = include_bytes!("../testdata/lfm25_ffn.bin");
+        const N_FF: usize = 2048;
+        const FFN_IN: usize = attention::DIM;
+        let wg = &ffn_test[20..20 + N_FF * 8 * 144];
+        let wu = &ffn_test[20 + N_FF * 8 * 144..20 + N_FF * 8 * 288];
+        let wd = &ffn_test[20 + N_FF * 8 * 288..20 + N_FF * 8 * 288 + N_FF * 8 * 210]; // Q6_K
+        static mut FG: [f32; N_FF] = [0.0; N_FF];
+        static mut FU: [f32; N_FF] = [0.0; N_FF];
+        static mut FH: [f32; N_FF] = [0.0; N_FF];
+        static mut FY: [f32; FFN_IN] = [0.0; FFN_IN];
+        static mut FX: [f32; FFN_IN] = [0.0; FFN_IN];
+        let fgate = unsafe { &mut *(&raw mut FG) };
+        let fup = unsafe { &mut *(&raw mut FU) };
+        let fhid = unsafe { &mut *(&raw mut FH) };
+        let fy = unsafe { &mut *(&raw mut FY) };
+        let fx = unsafe { &mut *(&raw mut FX) };
+        for i in 0..FFN_IN {
+            fx[i] = libm::sinf(0.0 * 0.7 + i as f32 * 0.001) * 0.5;
+        }
+        match tensor::ffn_swiglu(wg, wu, wd, true, FFN_IN, N_FF, fx, fgate, fup, fhid, fy) {
+            Ok(()) => {
+                write_str("FFN:ok y0="); write_hex32(fy[0].to_bits());
+                write_str(" y100="); write_hex32(fy[100].to_bits());
+                write_str(" y2047="); write_hex32(fy[2047].to_bits());
+                write_str("\n");
+            }
+            Err(_) => { write_str("FFN:ERR\n"); }
+        }
+
+        // ── Test ShortConv REALE: blk.0 di LFM2.5 (subset 512 canali) ──
+        // File: header "SCNV"(4) + version u32 + n_embd u32 = 12
+        //   + kernel (n_embd×3 f32) + in_proj (3n×n Q4_K) + out_proj (n×n Q4_K)
+        let sc_test: &[u8] = include_bytes!("../testdata/lfm25_shortconv.bin");
+        const N_EMB: usize = 512;
+        let sc_conv = &sc_test[12..12 + N_EMB * 3 * 4];
+        let sc_inp = &sc_test[12 + N_EMB * 3 * 4..12 + N_EMB * 3 * 4 + 3 * N_EMB * 8 * 144];
+        let sc_out = &sc_test[12 + N_EMB * 3 * 4 + 3 * N_EMB * 8 * 144..];
+        static mut SX: [f32; 4 * FFN_IN] = [0.0; 4 * FFN_IN];
+        static mut SBCX: [f32; 4 * 3 * N_EMB] = [0.0; 4 * 3 * N_EMB];
+        static mut SBX: [f32; 4 * N_EMB] = [0.0; 4 * N_EMB];
+        static mut SY: [f32; 4 * N_EMB] = [0.0; 4 * N_EMB];
+        static mut SCONV: [f32; N_EMB * 3] = [0.0; N_EMB * 3];
+        let sx = unsafe { &mut *(&raw mut SX) };
+        let sbcx = unsafe { &mut *(&raw mut SBCX) };
+        let sbx = unsafe { &mut *(&raw mut SBX) };
+        let sy = unsafe { &mut *(&raw mut SY) };
+        let sconv = unsafe { &mut *(&raw mut SCONV) };
+        for i in 0..N_EMB * 3 {
+            sconv[i] = f32::from_le_bytes([sc_conv[i * 4], sc_conv[i * 4 + 1], sc_conv[i * 4 + 2], sc_conv[i * 4 + 3]]);
+        }
+        for s in 0..4usize {
+            for i in 0..FFN_IN {
+                sx[s * FFN_IN + i] = libm::sinf(s as f32 * 0.7 + i as f32 * 0.001) * 0.5;
+            }
+        }
+        match tensor::shortconv_forward(sc_inp, sconv, sc_out, FFN_IN, N_EMB, sx, 4, sbcx, sbx, sy) {
+            Ok(()) => {
+                write_str("SC:ok y00="); write_hex32(sy[0].to_bits());
+                write_str(" y3_511="); write_hex32(sy[3 * N_EMB + 511].to_bits());
+                write_str(" y1_100="); write_hex32(sy[N_EMB + 100].to_bits());
+                write_str("\n");
+            }
+            Err(_) => { write_str("SC:ERR\n"); }
+        }
     }
 
     idt::init();

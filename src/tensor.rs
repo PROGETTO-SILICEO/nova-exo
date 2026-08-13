@@ -394,6 +394,91 @@ pub fn relu_inplace(x: &mut [f32]) {
     }
 }
 
+/// SiLU (swish): x * sigmoid(x) = x / (1 + e^-x)
+pub fn silu(x: f32) -> f32 {
+    x / (1.0 + libm::expf(-x))
+}
+
+/// ShortConv (LFM2.5, blocco ricorrente): gate element-wise + conv1d causale.
+/// Architettura reale (da llama.cpp lfm2.cpp):
+///   bcx = x @ in_proj^T          # 2048 → 6144 (3 chunk da 2048: b, c, xc)
+///   bx  = b * xc                 # gate
+///   conv_out[t][c] = sum_k kernel[k][c] * bx[t-1+k][c]   # causale, kernel 3
+///   y   = c * conv_out           # gate finale
+///   out = y @ out_proj^T         # 2048 → 2048
+/// Il caso base (senza stato ricorrente, inizio sequenza) tratta i passati
+/// come zero: conv_out[t][c] = kernel[1][c]*bx[t][c] + kernel[2][c]*bx[t+1][c]
+/// (kernel[0] = passato → 0 se t=0).
+pub fn shortconv_forward(
+    in_proj: &[u8], conv: &[f32], out_proj: &[u8],
+    n_in: usize, n_embd: usize,
+    x: &[f32], seq: usize,
+    bcx_buf: &mut [f32], bx_buf: &mut [f32], y: &mut [f32],
+) -> TensorResult<()> {
+    if x.len() < seq * n_in || bcx_buf.len() < seq * 3 * n_embd
+        || bx_buf.len() < seq * n_embd || y.len() < seq * n_embd
+        || conv.len() < 3 * n_embd {
+        return Err(TensorError::BufferTooSmall);
+    }
+    // 1. in_proj: x (seq×n_in) @ in_proj^T → bcx (seq×3*n_embd)
+    //    in_proj nel GGUF: (3*n_embd, n_in) → matmul n_out=3*n_embd, n_in=n_in
+    matmul_q4_k(in_proj, 3 * n_embd, n_in, x, seq, bcx_buf)?;
+    // 2. split in b (chunk 0), c (chunk 1), xc (chunk 2) e bx = b * xc
+    for s in 0..seq {
+        for i in 0..n_embd {
+            let b = bcx_buf[s * 3 * n_embd + i];
+            let xc = bcx_buf[s * 3 * n_embd + 2 * n_embd + i];
+            bx_buf[s * n_embd + i] = b * xc;
+        }
+    }
+    // 3. conv1d causale: conv_out[s][c] = k0*bx[s-1] + k1*bx[s] + k2*bx[s+1]
+    //    conv nel file: (3, n_embd) = conv[k*n_embd + c] (timestep × canale,
+    //    formato ggml: kernel ne0=d_conv=3, ne1=d_inner=n_embd)
+    //    il passato (t-1) è zero all'inizio della sequenza
+    for s in 0..seq {
+        for c in 0..n_embd {
+            let cur = bx_buf[s * n_embd + c];
+            let next = if s + 1 < seq { bx_buf[(s + 1) * n_embd + c] } else { 0.0 };
+            let past = if s > 0 { bx_buf[(s - 1) * n_embd + c] } else { 0.0 };
+            let cv = conv[0 * n_embd + c] * past + conv[1 * n_embd + c] * cur + conv[2 * n_embd + c] * next;
+            let cc = bcx_buf[s * 3 * n_embd + n_embd + c];
+            y[s * n_embd + c] = cc * cv;
+        }
+    }
+    // 4. out_proj: y (seq×n_embd) @ out_proj^T → y (seq×n_embd)
+    bx_buf[..seq * n_embd].copy_from_slice(&y[..seq * n_embd]);
+    matmul_q4_k(out_proj, n_embd, n_embd, bx_buf, seq, y)
+}
+
+/// FFN SwiGLU (LFM2 dense): y = silu(x·Wg^T) ⊙ (x·Wu^T), out = y·Wd^T
+/// wg, wu: (n_ff × n_in) Q4_K; wd: (n_in × n_ff) Q4_K o Q6_K.
+/// Buffer: gate_buf, up_buf (n_ff), hidden (n_ff) per il prodotto.
+pub fn ffn_swiglu(
+    wg: &[u8], wu: &[u8], wd: &[u8],
+    wd_is_q6: bool,
+    n_in: usize, n_ff: usize,
+    x: &[f32],
+    gate_buf: &mut [f32], up_buf: &mut [f32], hidden: &mut [f32],
+    y: &mut [f32],
+) -> TensorResult<()> {
+    if gate_buf.len() < n_ff || up_buf.len() < n_ff || hidden.len() < n_ff || y.len() < n_in {
+        return Err(TensorError::BufferTooSmall);
+    }
+    // gate e up in parallelo (pesi Q4_K, n_in multiplo di 256)
+    matmul_q4_k(wg, n_ff, n_in, x, 1, gate_buf)?;
+    matmul_q4_k(wu, n_ff, n_in, x, 1, up_buf)?;
+    // hidden[i] = silu(gate[i]) * up[i]
+    for i in 0..n_ff {
+        hidden[i] = silu(gate_buf[i]) * up_buf[i];
+    }
+    // down: y = hidden @ wd^T (n_in × n_ff)
+    if wd_is_q6 {
+        matmul_q6_k(wd, n_in, n_ff, hidden, 1, y)
+    } else {
+        matmul_q4_k(wd, n_in, n_ff, hidden, 1, y)
+    }
+}
+
 /// Softmax semplice su un vettore (in-place, esito in `out`)
 pub fn softmax(x: &[f32], out: &mut [f32]) -> TensorResult<()> {
     if out.len() < x.len() { return Err(TensorError::BufferTooSmall); }
