@@ -836,3 +836,21 @@ Prossimi step:
 1. Long run Milestone A con GUI (600s, certificare che il render non degrada)
 2. Miglioramenti GUI: grafico storico, più righe, testo dinamico
 3. Driver AHCI per leggere il modello GGUF dal disco
+
+## v0.16 — Milestone A ricertificata con GUI (13 Ago 2026)
+
+### Criterio: 3 run consecutivi di 10 minuti, log senza errori, GUI attiva.
+### Risultato: ✅ 3/3 verdi.
+
+| Run | Tick | PANIC | ERROR | BRAIN think | VOGLIO | ESITO si/no |
+|-----|------|-------|-------|-------------|--------|-------------|
+| run1 | 64.600 | 0 | 0 | 263→103.341 | 3.057 | 58/22 |
+| run2 | 64.555 | 0 | 0 | 1.237→103.519 | 3.037 | 60/33 |
+| run3 | 64.575 | 0 | 0 | 1.046→103.273 | 3.002 | 62/24 |
+
+### Note
+- Tick Δ < 0.1% tra run (64.555-64.600) — ripetibilità perfetta.
+- VOGLIO ~3.000/run (Δ<2%) — raddoppiato rispetto a v0.15 (1.300):
+  probabilmente la macchina q35 con VGA cambia la dinamica del CFC.
+- La GUI (render ogni 200 tick) non altera il battito.
+- Log: experiments/longrun_v016/run{1,2,3}_*.log
