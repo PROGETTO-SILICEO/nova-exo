@@ -374,8 +374,7 @@ pub extern "C" fn _start() -> ! {
     // ── GGUF: prova del modello nel metallo ──
     // Oggi: file di test embedded (336 byte). Domani: file letto da disco.
     // Il parser è no_std, senza alloc: legge header, KV e tensori.
-    let gguf_test: &[u8] = include_bytes!("../testdata/test_mini.gguf");
-    match gguf::parse_header(gguf_test) {
+    let gguf_test: &[u8] = include_bytes!("../testdata/test_mini.gguf");    match gguf::parse_header(gguf_test) {
         Ok(h) => {
             write_str("GGUF:header v");
             write_u32(h.version);
@@ -454,6 +453,36 @@ pub extern "C" fn _start() -> ! {
                 write_str("\n");
             }
             Err(_) => { write_str("TENSOR:ERR\n"); }
+        }
+
+        // ── Test Q8_0: dequantizzazione + matmul quantizzata ──
+        // File testdata/test_q8.gguf: 1 tensore Q8_0 (4×32).
+        // Il kernel carica i byte quantizzati e li dequantizza nel metallo.
+        let gguf_q8: &[u8] = include_bytes!("../testdata/test_q8.gguf");
+        if let Ok(q8s) = gguf::parse_summary(gguf_q8) {
+            let q8data = &gguf_q8[q8s.data_offset..];
+            // Il tensore è 1 riga (4×32 row-major): un blocco Q8_0 (34 byte)
+            let mut a_in = [0.0f32; 32];
+            a_in[0] = 1.0; a_in[1] = 0.5; a_in[31] = 2.0;
+            let mut c_out = [0.0f32; 4];
+            let mut dbuf = [0.0f32; 32];
+            match tensor::matmul_q8_0(q8data, 4, 32, &a_in, 1, &mut c_out, &mut dbuf) {
+                Ok(()) => {
+                    write_str("Q8:matmul y0="); write_f32(c_out[0]);
+                    write_str(" y1="); write_f32(c_out[1]);
+                    write_str(" y2="); write_f32(c_out[2]);
+                    write_str(" y3="); write_f32(c_out[3]);
+                    write_str("\n");
+                }
+                Err(e) => {
+                    write_str("Q8:ERR ");
+                    write_str(match e {
+                        tensor::TensorError::DimMismatch => "dims",
+                        tensor::TensorError::BufferTooSmall => "buf",
+                    });
+                    write_str("\n");
+                }
+            }
         }
     }
 
