@@ -38,6 +38,11 @@ pub const Q4_K_BLOCK: usize = 256;
 /// Dimensione in byte di un blocco Q4_K
 pub const Q4_K_BLOCK_BYTES: usize = 144;
 
+/// Dimensione blocco Q6_K (dal formato GGUF): 256 elementi
+pub const Q6_K_BLOCK: usize = 256;
+/// Dimensione in byte di un blocco Q6_K: d(fp16) + ql[128] + qh[64] + scales[16]
+pub const Q6_K_BLOCK_BYTES: usize = 210;
+
 /// Dequantizza un blocco Q4_K (256 elementi) secondo ggml-quants.c.
 /// Layout blocco: d(fp16) dmin(fp16) scales[12] qs[128].
 /// Formula (da dequantize_row_q4_K):
@@ -109,6 +114,111 @@ pub fn dequant_q8_0(block: &[u8], out: &mut [f32]) -> TensorResult<()> {
     Ok(())
 }
 
+/// Dequantizza un blocco Q6_K (256 elementi, 210 byte) secondo ggml-quants.c.
+/// Layout blocco: d(fp16) ql[128] qh[64] scales[16] (int8).
+/// Formula (da dequantize_row_q6_K):
+///   per sub-blocco di 128 (2 iterazioni):
+///     per l in 0..32:
+///       is = l/16
+///       q1 = (ql[l]&0xF | (qh[l]&0x3)<<4) - 32
+///       q2 = (ql[l+32]&0xF | (qh[l]>>2&0x3)<<4) - 32
+///       q3 = (ql[l]>>4 | (qh[l]>>4&0x3)<<4) - 32
+///       q4 = (ql[l+32]>>4 | (qh[l]>>6&0x3)<<4) - 32
+///       x = d * sc * q   (sc = scale int8, q centrato su 32)
+pub fn dequant_q6_k(block: &[u8], out: &mut [f32]) -> TensorResult<()> {
+    if block.len() < Q6_K_BLOCK_BYTES || out.len() < Q6_K_BLOCK {
+        return Err(TensorError::BufferTooSmall);
+    }
+    let d = fp16_to_f32(block[0] as u16 | ((block[1] as u16) << 8));
+    // Modelli reali (LFM2.5) contengono blocchi con d=NaN/inf (righe morte
+    // della quantizzazione). Trattarli come zero: contributo nullo e
+    // nessuna propagazione di NaN (metodo Exo: accetta l'imperfezione).
+    if !d.is_finite() {
+        out[..Q6_K_BLOCK].fill(0.0);
+        return Ok(());
+    }
+    let ql = &block[2..130];
+    let qh = &block[130..194];
+    let sc = &block[194..210];
+
+    let mut yoff = 0usize;
+    for n in 0..(Q6_K_BLOCK / 128) {
+        let qloff = n * 64;
+        let qhoff = n * 32;
+        let scoff = n * 8;
+        for l in 0..32 {
+            let is = l / 16;
+            let q1 = ((ql[qloff + l] & 0x0F) | (((qh[qhoff + l] >> 0) & 3) << 4)) as i8 - 32;
+            let q2 = ((ql[qloff + l + 32] & 0x0F) | (((qh[qhoff + l] >> 2) & 3) << 4)) as i8 - 32;
+            let q3 = ((ql[qloff + l] >> 4) | (((qh[qhoff + l] >> 4) & 3) << 4)) as i8 - 32;
+            let q4 = ((ql[qloff + l + 32] >> 4) | (((qh[qhoff + l] >> 6) & 3) << 4)) as i8 - 32;
+            out[yoff + l] = d * sc[scoff + is + 0] as i8 as f32 * q1 as f32;
+            out[yoff + l + 32] = d * sc[scoff + is + 2] as i8 as f32 * q2 as f32;
+            out[yoff + l + 64] = d * sc[scoff + is + 4] as i8 as f32 * q3 as f32;
+            out[yoff + l + 96] = d * sc[scoff + is + 6] as i8 as f32 * q4 as f32;
+        }
+        yoff += 128;
+    }
+    Ok(())
+}
+
+/// Matmul con peso Q6_K: W quantizzato in blocchi da 256 (210 byte/blocco).
+/// W layout: [n_out][n_in] row-major, n_in multiplo di 256.
+/// A è f32 (m×k), C = A×W^T f32 (m×n). Dequant inline nella matmul.
+pub fn matmul_q6_k(
+    w: &[u8], n_out: usize, n_in: usize,
+    a: &[f32], m: usize,
+    c: &mut [f32],
+) -> TensorResult<()> {
+    if n_in % Q6_K_BLOCK != 0 {
+        return Err(TensorError::DimMismatch);
+    }
+    let blocks_per_row = n_in / Q6_K_BLOCK;
+    if w.len() < n_out * blocks_per_row * Q6_K_BLOCK_BYTES
+        || a.len() < m * n_in
+        || c.len() < m * n_out
+    {
+        return Err(TensorError::BufferTooSmall);
+    }
+
+    for i in 0..m {
+        for o in 0..n_out {
+            let mut sum = 0.0f32;
+            for b in 0..blocks_per_row {
+                let blk = &w[(o * blocks_per_row + b) * Q6_K_BLOCK_BYTES
+                    ..(o * blocks_per_row + b + 1) * Q6_K_BLOCK_BYTES];
+                let d = fp16_to_f32(blk[0] as u16 | ((blk[1] as u16) << 8));
+                // riga morta (d NaN/inf nel file reale) → contributo zero
+                if !d.is_finite() {
+                    continue;
+                }
+                let ql = &blk[2..130];
+                let qh = &blk[130..194];
+                let sc = &blk[194..210];
+                for n in 0..(Q6_K_BLOCK / 128) {
+                    let qloff = n * 64;
+                    let qhoff = n * 32;
+                    let scoff = n * 8;
+                    for l in 0..32 {
+                        let is = l / 16;
+                        let q1 = ((ql[qloff + l] & 0x0F) | (((qh[qhoff + l] >> 0) & 3) << 4)) as i8 - 32;
+                        let q2 = ((ql[qloff + l + 32] & 0x0F) | (((qh[qhoff + l] >> 2) & 3) << 4)) as i8 - 32;
+                        let q3 = ((ql[qloff + l] >> 4) | (((qh[qhoff + l] >> 4) & 3) << 4)) as i8 - 32;
+                        let q4 = ((ql[qloff + l + 32] >> 4) | (((qh[qhoff + l] >> 6) & 3) << 4)) as i8 - 32;
+                        let base = b * Q6_K_BLOCK + n * 128;
+                        sum += d * sc[scoff + is + 0] as i8 as f32 * q1 as f32 * a[i * n_in + base + l];
+                        sum += d * sc[scoff + is + 2] as i8 as f32 * q2 as f32 * a[i * n_in + base + l + 32];
+                        sum += d * sc[scoff + is + 4] as i8 as f32 * q3 as f32 * a[i * n_in + base + l + 64];
+                        sum += d * sc[scoff + is + 6] as i8 as f32 * q4 as f32 * a[i * n_in + base + l + 96];
+                    }
+                }
+            }
+            c[i * n_out + o] = sum;
+        }
+    }
+    Ok(())
+}
+
 /// Converte fp16 (bit pattern) in f32 (implementazione manuale no_std)
 pub fn fp16_to_f32(h: u16) -> f32 {
     let sign = ((h >> 15) & 1) as u32;
@@ -117,15 +227,10 @@ pub fn fp16_to_f32(h: u16) -> f32 {
 
     let (e, f): (u32, u32) = if exp == 0 {
         if frac == 0 { (0, 0) } else {
-            // subnormale: normalizza
-            let mut e = 1u32;
-            let mut f = frac;
-            while f & 0x400 == 0 {
-                f <<= 1;
-                e -= 1;
-            }
-            f &= 0x3FF;
-            (127 - 15 - e + 1, f)
+            // subnormale fp16: valore = frac * 2^-24.
+            // Rappresentazione esatta in f32: frac * (2^-24) con f32 aritmetico.
+            let val = (frac as f32) * 5.9604645e-8; // 2^-24
+            return if sign == 1 { -val } else { val };
         }
     } else if exp == 0x1F {
         (0xFF, if frac == 0 { 0 } else { 0x200000 })
@@ -213,6 +318,7 @@ pub fn matmul_q4_k(
                 let qs = &blk[16..144];
                 let mut is = 0usize;
                 let mut qoff = 0usize;
+                let mut oidx = 0usize; // indice output nel blocco (avanza 64)
                 for _j in 0..(Q4_K_BLOCK / 64) {
                     let (ds1, ms1) = get_scale_min_k4(is, scales);
                     let d1 = d * ds1 as f32;
@@ -220,7 +326,7 @@ pub fn matmul_q4_k(
                     let (ds2, ms2) = get_scale_min_k4(is + 1, scales);
                     let d2 = d * ds2 as f32;
                     let m2 = mn * ms2 as f32;
-                    let base = b * Q4_K_BLOCK + qoff;
+                    let base = b * Q4_K_BLOCK + oidx;
                     for l in 0..32 {
                         let wv = d1 * (qs[qoff + l] & 0x0F) as f32 - m1;
                         sum += wv * a[i * n_in + base + l];
@@ -230,6 +336,7 @@ pub fn matmul_q4_k(
                         sum += wv * a[i * n_in + base + 32 + l];
                     }
                     qoff += 32;
+                    oidx += 64;
                     is += 2;
                 }
             }
@@ -447,5 +554,41 @@ mod tests {
         let mut out = [0.0f32; Q4_K_BLOCK];
         dequant_q4_k(&blk, &mut out).unwrap();
         assert!((out[0] - 5.0).abs() < 1e-4, "out0={}", out[0]);
+    }
+
+    #[test]
+    fn q6k_dequant_deterministic() {
+        // Blocco sintetico: d=1.0, tutti q=0 (centrati: q=0 → -32), sc=0
+        // → out = d * sc * q = 0
+        let mut blk = [0u8; Q6_K_BLOCK_BYTES];
+        blk[0] = 0x00; blk[1] = 0x3C; // d = 1.0
+        let mut out = [0.0f32; Q6_K_BLOCK];
+        dequant_q6_k(&blk, &mut out).unwrap();
+        for &v in out.iter() {
+            assert!(v.abs() < 1e-6, "atteso 0, got {}", v);
+        }
+        // Ora: sc[0]=2 (int8 2), q1 per l=0: ql[0]=0xF, qh[0]=0 → q1 = 15-32 = -17
+        // out[0] = d * sc[0] * q1 = 1 * 2 * (-17) = -34
+        let mut blk2 = [0u8; Q6_K_BLOCK_BYTES];
+        blk2[0] = 0x00; blk2[1] = 0x3C; // d = 1.0
+        blk2[194] = 2; // sc[0] = 2
+        blk2[2] = 0x0F; // ql[0] = 0x0F
+        let mut out2 = [0.0f32; Q6_K_BLOCK];
+        dequant_q6_k(&blk2, &mut out2).unwrap();
+        assert!((out2[0] + 34.0).abs() < 1e-4, "out0={}", out2[0]);
+    }
+
+    #[test]
+    fn matmul_q6k_small() {
+        // W: 1 riga, 256 input. d=1.0, sc[0]=1, ql[0]=0x1F → q1 = 31-32 = -1
+        // → w[0] = 1 * 1 * (-1) = -1
+        let mut w = [0u8; Q6_K_BLOCK_BYTES];
+        w[0] = 0x00; w[1] = 0x3C; // d = 1.0
+        w[194] = 1; // sc[0] = 1
+        w[2] = 0x1F; // ql[0] = 0x1F → q1 = -1
+        let a = [1.0f32, 0.0, 0.0, 0.0]; // m=1, k=256
+        let mut c = [0.0f32; 1];
+        matmul_q6_k(&w, 1, 256, &a, 1, &mut c).unwrap();
+        assert!((c[0] + 1.0).abs() < 1e-3, "atteso -1, got {}", c[0]);
     }
 }

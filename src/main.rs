@@ -10,6 +10,7 @@ use uart_16550::SerialPort;
 
 mod alloc;
 mod apic;
+mod attention;
 mod cfc;
 mod e1000;
 mod executive;
@@ -534,6 +535,92 @@ pub extern "C" fn _start() -> ! {
                 write_str("\n");
             }
             Err(_) => { write_str("LFM:ERR\n"); }
+        }
+
+        // ── Test ATTENTION REALE: blk.2 di LFM2.5 (primo con attention) ──
+        // File: header "LFM2"(4) + version u32 + seq u32 + data_offset u64
+        //       + n_out_q u32 + n_out_kv u32 + n_in u32 + wo_n_in u32 = 36
+        //   + attn_q_norm (64 f32) + attn_k_norm (64 f32)
+        //   + attn_q (n_out_q×n_in Q4_K) + attn_k (n_out_kv×n_in Q4_K)
+        //   + attn_v (n_out_kv×n_in Q6_K) + attn_output (n_out_q×wo_n_in Q4_K)
+        // Input x uguale al reference Python (sin deterministica).
+        // Output atteso in testdata/lfm25_blk2_attn_expected.txt
+        let attn_test: &[u8] = include_bytes!("../testdata/lfm25_blk2_attn.bin");
+        let seq = 4usize;
+        const DIM: usize = attention::DIM;
+        const Q_OUT: usize = 512;   // 8 head query
+        const K_OUT: usize = 128;   // 2 head kv
+        const WO_N_IN: usize = 512; // colonne di wo = Q_OUT (subset)
+
+        // header (36 byte): dati da 36
+        let q_norm = &attn_test[36..36 + 64 * 4];
+        let k_norm = &attn_test[36 + 64 * 4..36 + 64 * 8];
+        let mut off = 36 + 64 * 8;
+        let wq = &attn_test[off..off + Q_OUT * 8 * 144];
+        off += Q_OUT * 8 * 144;
+        let wk = &attn_test[off..off + K_OUT * 8 * 144];
+        off += K_OUT * 8 * 144;
+        let wv = &attn_test[off..off + K_OUT * 8 * 210];
+        off += K_OUT * 8 * 210;
+        let wo = &attn_test[off..off + Q_OUT * 2 * 144];
+
+        // input x: seq × 2048, sin(s*0.7 + i*0.001)*0.5 (come Python)
+        // buffer: static mut per evitare overflow dello stack Limine
+        // (x=32KB + q_buf 8KB + altri → ~60KB locali)
+        static mut X_BUF: [f32; 4 * DIM] = [0.0; 4 * DIM];
+        static mut Q_BUF: [f32; 4 * Q_OUT] = [0.0; 4 * Q_OUT];
+        static mut K_BUF: [f32; 4 * K_OUT] = [0.0; 4 * K_OUT];
+        static mut V_BUF: [f32; 4 * K_OUT] = [0.0; 4 * K_OUT];
+        static mut SCORES: [f32; 4 * 4] = [0.0; 16];
+        static mut OUT_BUF: [f32; 4 * Q_OUT] = [0.0; 4 * Q_OUT];
+        static mut CTX_BUF: [f32; 4 * K_OUT] = [0.0; 4 * K_OUT];
+        static mut Y_BUF: [f32; 4 * Q_OUT] = [0.0; 4 * Q_OUT];
+        let x = unsafe { &mut *(&raw mut X_BUF) };
+        let q_buf = unsafe { &mut *(&raw mut Q_BUF) };
+        let k_buf = unsafe { &mut *(&raw mut K_BUF) };
+        let v_buf = unsafe { &mut *(&raw mut V_BUF) };
+        let scores = unsafe { &mut *(&raw mut SCORES) };
+        let out_buf = unsafe { &mut *(&raw mut OUT_BUF) };
+        let ctx_buf = unsafe { &mut *(&raw mut CTX_BUF) };
+        let y = unsafe { &mut *(&raw mut Y_BUF) };
+        for s in 0..seq {
+            for i in 0..DIM {
+                x[s * DIM + i] = libm::sinf(s as f32 * 0.7 + i as f32 * 0.001) * 0.5;
+            }
+        }
+
+        // q_norm/k_norm come f32 slice
+        let mut qn = [0.0f32; 64];
+        let mut kn = [0.0f32; 64];
+        for i in 0..64 {
+            qn[i] = f32::from_le_bytes([q_norm[i * 4], q_norm[i * 4 + 1], q_norm[i * 4 + 2], q_norm[i * 4 + 3]]);
+            kn[i] = f32::from_le_bytes([k_norm[i * 4], k_norm[i * 4 + 1], k_norm[i * 4 + 2], k_norm[i * 4 + 3]]);
+        }
+
+        match attention::attention_forward(
+            x, seq, wq, wk, wv, wo, &qn, &kn, 0, Q_OUT, K_OUT, WO_N_IN,
+            q_buf, k_buf, v_buf,
+            scores, out_buf, ctx_buf, y,
+        ) {
+            Ok(()) => {
+                // y in hex: confronto bit-exact col reference Python
+                // (valori f32 grandi saturano write_f32, quindi hex)
+                write_str("ATTN:ok y0="); write_hex32(y[0].to_bits());
+                write_str(" y1="); write_hex32(y[1].to_bits());
+                write_str(" y7="); write_hex32(y[7].to_bits());
+                write_str(" y504="); write_hex32(y[504].to_bits());
+                write_str(" y[3][7]="); write_hex32(y[3 * Q_OUT + 7].to_bits());
+                write_str("\n");
+            }
+            Err(e) => {
+                write_str("ATTN:ERR ");
+                write_str(match e {
+                    attention::AttnError::BufferTooSmall => "buf",
+                    attention::AttnError::DimMismatch => "dims",
+                    attention::AttnError::Tensor(_) => "tensor",
+                });
+                write_str("\n");
+            }
         }
     }
 
