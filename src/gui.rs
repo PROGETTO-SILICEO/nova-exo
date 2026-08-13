@@ -282,8 +282,19 @@ pub unsafe fn render_vitals(
 ) {
     if !FB_READY { return; }
 
-    // Pulizia: senza questo i caratteri si accumulano e si sovrappongono
-    clear_screen(COL_BG);
+    // Pulizia mirata (veloce): solo le aree usate dalla dashboard,
+    // NON tutto lo schermo (clear pieno = 3.1M write su QEMU TCG = hang).
+    // Aree: y 0-30 (titolo), y 50-170 (cellule+volontà+brain+fam)
+    for y in 0..180 {
+        let row_off = y * FB_PITCH;
+        for x in 0..420 {
+            let off = row_off + x * 4;
+            FB_ADDR.add(off).write_volatile((COL_BG >> 16) as u8);
+            FB_ADDR.add(off + 1).write_volatile((COL_BG >> 8) as u8);
+            FB_ADDR.add(off + 2).write_volatile(COL_BG as u8);
+            FB_ADDR.add(off + 3).write_volatile(0xFF);
+        }
+    }
 
     // Titolo
     set_cursor(10, 10);
