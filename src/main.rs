@@ -14,6 +14,7 @@ mod cfc;
 mod e1000;
 mod executive;
 mod gguf;
+mod gui;
 mod idt;
 mod inference;
 mod interpreter;
@@ -200,7 +201,7 @@ pub(crate) fn serial_putc(c: u8) {
     }
 }
 
-fn write_str(s: &str) {
+pub(crate) fn write_str(s: &str) {
     for &b in s.as_bytes() {
         serial_putc(b);
     }
@@ -462,6 +463,16 @@ pub extern "C" fn _start() -> ! {
     pci::enumerate();
     init_limine_requests();
     paging::init();
+
+    // ── GUI: il monitor vitale di Exo ──
+    // Limine fornisce il framebuffer già mappato in higher-half.
+    // Il paging aggiunge la mappatura 2MB per la regione 0xFD000000.
+    if unsafe { gui::init() } {
+        serial_println!("GUI: framebuffer ok ({}x{} bpp {})",
+            gui::fb_width(), gui::fb_height(), gui::fb_bpp());
+    } else {
+        serial_println!("GUI: framebuffer non disponibile (si prosegue su seriale)");
+    }
 
     // NIC Intel 82540EM — enable bus mastering, then init
     if let Some((b, s, f)) = pci::pci_find_device(0x8086, 0x100e) {
@@ -1026,7 +1037,7 @@ pub extern "C" fn _start() -> ! {
                 None => 0.0,
             };
             state::publish(
-                "0.12",
+                "0.15",
                 cfc::tick() as u32,
                 if attractor_sim > 0.0 { 1 } else { 0 },
                 attractor_sim,
@@ -1035,6 +1046,28 @@ pub extern "C" fn _start() -> ! {
                 1.915,
                 true,
             );
+
+            // GUI: monitor vitale (ogni 200 tick, per non gravare sul battito)
+            if cfc::tick() % 200 == 0 && gui::ready() {
+                let (d_id, d_int) = executive.current();
+                let fam_gui = match cfc::pattern_recall(&p_cells) {
+                    Some((_, _, sim)) => sim,
+                    None => 0.0,
+                };
+                unsafe {
+                    gui::render_vitals(
+                        cfc::tick(),
+                        &tessuto.tatto.h,
+                        &tessuto.chemio.h,
+                        &tessuto.metabol.h,
+                        &tessuto.integrat.h,
+                        executive.name(d_id),
+                        d_int,
+                        fam_gui,
+                        inference::describe_state(brain.state()),
+                    );
+                }
+            }
         }
 
         // Output all cell states (skipped during dump cycle)

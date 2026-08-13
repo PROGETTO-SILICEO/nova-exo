@@ -67,6 +67,9 @@ pub fn init() {
         write_volatile((hhdm + pml2_page + 502 * 8) as *mut u64, 0xFEC0_0000u64 | 0x93);
         // PML2[503] -> 2MB (Local APIC at 0xFEE00000)
         write_volatile((hhdm + pml2_page + 503 * 8) as *mut u64, 0xFEE0_0000u64 | 0x93);
+        // PML2[488] -> 2MB (Framebuffer VBE at 0xFD000000)
+        // 488*2MB = 0x3D000000 → 0xC0000000 + 0x3D000000 = 0xFD000000 ✓
+        write_volatile((hhdm + pml2_page + 488 * 8) as *mut u64, 0xFD00_0000u64 | 0x93);
 
         // Full TLB flush: reload CR3
         asm!("sfence");

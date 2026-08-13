@@ -807,3 +807,32 @@ Prossimi step:
 2. Modello reale (LFM2.5-2.6B o 230M): sostituire test_mini.gguf
 3. Architettura vera (attention, non solo MLP)
 4. Driver disco (AHCI) per leggere il modello dal block device, non embedded
+
+## v0.16 — GUI: monitor vitale su framebuffer (13 Ago 2026)
+
+### Cosa è stato fatto
+- **`src/gui.rs`**: driver framebuffer VBE + rendering testo 8x8 + barre.
+  - Richiesta Limine framebuffer (ID 0x48267fc393f6f0a2/0x58470b2ff4e5145e)
+  - Fallback VBE diretto (Limine BIOS non sempre risponde): 1024x768 32bpp
+  - Font 8x8 embedded (font.bin, ASCII 32-126)
+  - `render_vitals`: dashboard con 4 cellule (barre), volontà, familiarità, stato brain
+- **`src/paging.rs`**: PML2[488] → 0xFD000000 (framebuffer VBE). Bug fix: era PML2[506]
+  (506*2MB=0xFF400000, sbagliato; 488*2MB=0xFD000000, corretto).
+- **`src/main.rs`**: init GUI dopo paging, render ogni 200 tick.
+
+### Bug trovati e fixati
+1. **Duplicated base revision tag**: FB_REQ aveva il magic base revision come ID
+   invece di LIMINE_COMMON_MAGIC → Limine panicked al boot.
+2. **PML2[506] vs PML2[488]**: indice sbagliato nel paging → schermo nero.
+3. **Indirizzo fallback**: non higher-half generico ma mmio_virt_addr() (paging dedicato).
+
+### Verifica
+- Screenshot QEMU (docs/exo_gui_monitor_vitale.png): titolo ciano, barre rosso/verde/
+  viola/ciano, testo bianco — distribuzione spaziale corretta.
+- Run 60s: PANIC=0, ERROR=0, BRAIN attivo, VOGLIO=359, ESITO 10/2.
+- Il render ogni 200 tick non altera il battito (24503 tick/60s ≈ 408/s).
+
+### Prossimi passi
+1. Long run Milestone A con GUI (600s, certificare che il render non degrada)
+2. Miglioramenti GUI: grafico storico, più righe, testo dinamico
+3. Driver AHCI per leggere il modello GGUF dal disco
