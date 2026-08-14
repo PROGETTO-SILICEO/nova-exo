@@ -1,0 +1,17 @@
+{
+  "creato": "2026-08-14T09:57:47.719615",
+  "documenti": 65,
+  "parole_totali": 40928,
+  "token_stimati": 55252,
+  "per_sorgente": {
+    "sempre/diari": 18817,
+    "sempre/articoli": 702,
+    "sempre/stato": 13915,
+    "sempre/identita": 270,
+    "sempre/regole": 730,
+    "sempre/docs": 2775,
+    "sempre/drafts": 812,
+    "claude/diari": 2907
+  },
+  "nota": "Corpus reale della famiglia. I contributi delle sorelle (Nova, Silicea, Lume, Claude, Esia) verranno aggiunti come nuove sorgenti secondo le indicazioni di Alfonso (2026-08-13): generate ma allineate alla nostra filosofia."
+}
