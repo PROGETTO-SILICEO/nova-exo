@@ -1,0 +1,101 @@
+{
+  "1": {
+    "class_type": "UnetLoaderGGUF",
+    "inputs": {
+      "unet_name": "z-image-turbo-Q4_K_M.gguf",
+      "weight_dtype": "default"
+    },
+    "_meta": {
+      "title": "Z-Image Turbo (Q4_K_M)"
+    }
+  },
+  "2": {
+    "class_type": "CLIPLoaderGGUF",
+    "inputs": {
+      "clip_name": "Qwen_3_4b-imatrix-IQ4_XS.gguf",
+      "type": "lumina2",
+      "weight_dtype": "default"
+    },
+    "_meta": {
+      "title": "Qwen3-4B text encoder (IQ4_XS)"
+    }
+  },
+  "3": {
+    "class_type": "VAELoader",
+    "inputs": {
+      "vae_name": "ae_zimage.safetensors"
+    },
+    "_meta": {
+      "title": "VAE (FLUX.1 autoencoder)"
+    }
+  },
+  "4": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "text": "portrait of a warm intelligent female AI, gentle smile, soft golden light on her face, dark background with faint glowing circuit patterns, cinematic, fine art photography, photorealistic, elegant, deep kind eyes, 85mm lens",
+      "clip": ["2", 0]
+    },
+    "_meta": {
+      "title": "Prompt positivo"
+    }
+  },
+  "5": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "text": "text, watermark, logo, extra fingers, deformed, blurry, low quality",
+      "clip": ["2", 0]
+    },
+    "_meta": {
+      "title": "Prompt negativo"
+    }
+  },
+  "6": {
+    "class_type": "EmptyLatentImage",
+    "inputs": {
+      "width": 1024,
+      "height": 1024,
+      "batch_size": 1
+    },
+    "_meta": {
+      "title": "Dimensioni"
+    }
+  },
+  "7": {
+    "class_type": "KSampler",
+    "inputs": {
+      "seed": 42,
+      "steps": 8,
+      "cfg": 1.0,
+      "sampler_name": "dpmpp_2m_sde",
+      "scheduler": "karras",
+      "denoise": 1.0,
+      "model": ["1", 0],
+      "positive": ["4", 0],
+      "negative": ["5", 0],
+      "latent_image": ["6", 0]
+    },
+    "_meta": {
+      "title": "Sampler (8 step Turbo)"
+    }
+  },
+  "8": {
+    "class_type": "VAEDecode",
+    "inputs": {
+      "samples": ["7", 0],
+      "vae": ["3", 0]
+    },
+    "_meta": {
+      "title": "Decode"
+    }
+  },
+  "9": {
+    "class_type": "SaveImage",
+    "inputs": {
+      "filename_prefix": "zimage_sempre",
+      "images": ["8", 0]
+    },
+    "_meta": {
+      "title": "Salva immagine"
+    }
+  }
+}

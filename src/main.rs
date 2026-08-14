@@ -359,16 +359,62 @@ fn write_cell_line(prefix: &str, h: &[f32; 16]) {
 
 // ── Entry point ─────────────────────────────────────────────────────────
 
+/// Beep su PC speaker (porta 0x61/0x42 PIT channel 2).
+/// Funziona su TUTTI i PC x86 — la diagnosi più universale, anche senza
+/// video e senza seriale (i POST code del BIOS usano lo stesso metodo).
+/// `n` beep brevi con pausa: 1=seriale, 2=weights, 3=IDT, 4=PCI, 5=paging,
+/// 6=GUI, 7=loop. Panic = 3 beep lunghi.
+unsafe fn beep(freq: u16, ms: u32) {
+    let divisor = 1193182u32 / freq as u32;
+    asm!("out dx, al", in("dx") 0x43u16, in("al") 0xB6u8);
+    asm!("out dx, al", in("dx") 0x42u16, in("al") (divisor & 0xFF) as u8);
+    asm!("out dx, al", in("dx") 0x42u16, in("al") ((divisor >> 8) & 0xFF) as u8);
+    let mut v: u8;
+    asm!("in al, dx", out("al") v, in("dx") 0x61u16);
+    asm!("out dx, al", in("dx") 0x61u16, in("al") v | 0x03);
+    // delay via porta 0x80 (delay standard del BIOS)
+    for _ in 0..(ms * 50) {
+        let mut _x: u8;
+        asm!("in al, dx", out("al") _x, in("dx") 0x80u16);
+    }
+    asm!("in al, dx", out("al") v, in("dx") 0x61u16);
+    asm!("out dx, al", in("dx") 0x61u16, in("al") v & !0x03);
+    // pausa tra i beep
+    for _ in 0..(ms * 25) {
+        let mut _x: u8;
+        asm!("in al, dx", out("al") _x, in("dx") 0x80u16);
+    }
+}
+
+unsafe fn boot_beep(n: u32) {
+    for _ in 0..n {
+        beep(880, 60); // La4, 60ms
+    }
+}
+
 #[no_mangle]
 pub extern "C" fn _start() -> ! {
+    // CRITICO su hardware reale: UEFI lascia gli interrupt abilitati (IF=1)
+    // e il timer attivo. Senza IDT ancora installata, il primo interrupt
+    // causa triple fault → reboot loop. In QEMU non succede (Limine
+    // disabilita tutto), su hardware vero sì. CLI come PRIMA cosa.
+    unsafe { asm!("cli"); }
     unsafe {
+        // 2 beep DISTINTI (Mi5 1319Hz + La4 880Hz): il nostro segnale.
+        // Un singolo beep all'accensione è il POST code del BIOS —
+        // così distinguiamo il nostro kernel dal firmware.
+        beep(1319, 80);
+        beep(880, 80);
         let serial = &mut *(&raw mut SERIAL);
         serial.init();
+        boot_beep(2); // seriale ok
     }
-    serial_println!("Nova Exo v0.12 -- APIC battito.");
+    serial_println!("Nova Exo v0.24 -- APIC battito.");
     serial_println!("Neuroni: {} per cellula, {} totale", cfc::NEURONS_PER_CELL, cfc::TOTAL_NEURONS);
+    unsafe { boot_beep(3); } // dopo serial_println
 
     unsafe { init_weights(); }
+    unsafe { boot_beep(4); } // weights ok
 
     // ── TEST DI BOOT (feature "boot_tests") ──────────────────────────
     // GGUF, dequant, attention, FFN, shortconv su pesi reali.
@@ -723,12 +769,17 @@ pub extern "C" fn _start() -> ! {
     } // chiude match SC
     } // fine boot_tests (if cfg)
 
+    unsafe { boot_beep(5); } // IDT in arrivo
     idt::init();
     serial_println!("IDT loaded. 4 cellulae: tatto, chemio, metabol, integrat.");
+    unsafe { boot_beep(6); } // IDT ok
 
     pci::enumerate();
     init_limine_requests();
+    unsafe { boot_beep(7); } // PCI+Limine ok
+
     paging::init();
+    unsafe { boot_beep(8); } // paging ok
 
     // ── GUI: il monitor vitale di Exo ──
     // Limine fornisce il framebuffer già mappato in higher-half.
@@ -736,9 +787,11 @@ pub extern "C" fn _start() -> ! {
     if unsafe { gui::init() } {
         serial_println!("GUI: framebuffer ok ({}x{} bpp {})",
             gui::fb_width(), gui::fb_height(), gui::fb_bpp());
+        unsafe { boot_beep(9); } // GUI ok
     } else {
         serial_println!("GUI: framebuffer non disponibile (si prosegue su seriale)");
     }
+    unsafe { boot_beep(10); } // loop in arrivo
 
     // NIC Intel 82540EM — enable bus mastering, then init
     if let Some((b, s, f)) = pci::pci_find_device(0x8086, 0x100e) {
@@ -1496,6 +1549,10 @@ fn panic(info: &PanicInfo) -> ! {
         let _ = write!(serial, "PANIC: ");
         let _ = write!(serial, "{}", info);
         let _ = serial.write_str("\n");
+        // 3 beep lunghi: PANIC (diagnosi acustica su hardware senza video)
+        for _ in 0..3 {
+            beep(440, 300); // La3, 300ms
+        }
     }
     loop {
         unsafe { core::arch::asm!("hlt"); }
