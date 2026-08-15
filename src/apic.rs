@@ -60,3 +60,56 @@ pub fn init_timer(vector: u8) {
 pub fn read_id() -> u32 {
     read_reg(APIC_ID)
 }
+
+// ── Timer PIT + IO-APIC (v0.27) ───────────────────────────────────────
+// Il timer LAPIC su AMD Kabini (Lenovo G50) non genera interrupt: Linux
+// lo evita (usa PIT via IO-APIC, vedi /proc/interrupts). Sostituiamo la
+// sorgente del tick con il PIT 8254 (universale) inoltrato dall'IO-APIC
+// al LAPIC sul vector 32. L'handler IDT resta identico (inc_tick + EOI).
+
+const PIT_CMD: u16 = 0x43;
+const PIT_CH0: u16 = 0x40;
+/// Divisore per ~100 Hz (10 ms/tick): 1193182 / 100 ≈ 11932 = 0x2E9C
+const PIT_DIVISOR: u16 = 11932;
+
+static mut IOAPIC_BASE: *mut u32 = core::ptr::null_mut();
+
+fn outb(port: u16, val: u8) {
+    unsafe { core::arch::asm!("out dx, al", in("dx") port, in("al") val, options(nostack)); }
+}
+
+fn ioapic_write(reg: u8, val: u32) {
+    unsafe {
+        core::ptr::write_volatile(IOAPIC_BASE, reg as u32);
+        core::ptr::write_volatile(IOAPIC_BASE.add(0x10 / 4), val);
+    }
+}
+
+fn ioapic_read(reg: u8) -> u32 {
+    unsafe {
+        core::ptr::write_volatile(IOAPIC_BASE, reg as u32);
+        core::ptr::read_volatile(IOAPIC_BASE.add(0x10 / 4))
+    }
+}
+
+/// Inoltra l'IRQ del PIT (pin 2 su ICH9/Q35 — "IO-APIC 2-edge timer",
+/// vedi /proc/interrupts di Linux) al LAPIC 0 sul vector dato.
+pub fn init_ioapic(mmio_base: u64, vector: u8) {
+    unsafe {
+        IOAPIC_BASE = mmio_base as *mut u32;
+        // Redirection entry 2 = IRQ 0 (PIT): low = vector | fixed | physical | edge
+        ioapic_write(0x14, vector as u32);
+        // high: dest field = 0 (LAPIC 0)
+        ioapic_write(0x15, 0);
+        // Anche entry 0 per i sistemi che cablano il PIT sul pin 0
+        ioapic_write(0x10, vector as u32);
+        ioapic_write(0x11, 0);
+    }
+}
+
+/// Avvia il PIT channel 0 in mode 2 (rate generator) a ~100 Hz.
+pub fn init_pit() {
+    outb(PIT_CMD, 0x34); // ch0, lobyte/hibyte, mode 2, binary
+    outb(PIT_CH0, (PIT_DIVISOR & 0xFF) as u8);
+    outb(PIT_CH0, (PIT_DIVISOR >> 8) as u8);
+}

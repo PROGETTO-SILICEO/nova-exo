@@ -900,11 +900,14 @@ pub extern "C" fn _start() -> ! {
 
     unsafe {
         pic_disable();
-        serial_println!("PIC disabled, enabling APIC timer...");
+        serial_println!("PIC disabled, enabling LAPIC + PIT via IO-APIC...");
         apic::init(paging::mmio_virt_addr(0xFEE0_0000));
         let apic_id = apic::read_id();
         serial_println!("APIC ID check: {}", apic_id);
-        apic::init_timer(32);
+        // v0.27: timer LAPIC inaffidabile su AMD Kabini (Linux lo evita).
+        // Tick dal PIT (8254) inoltrato dall'IO-APIC al LAPIC, vector 32.
+        apic::init_ioapic(paging::mmio_virt_addr(0xFEC0_0000), 32);
+        apic::init_pit();
         serial_println!("Enabling interrupts. Tessuto loop starts.");
         asm!("sti");
     }
