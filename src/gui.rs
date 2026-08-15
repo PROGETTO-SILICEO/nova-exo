@@ -276,6 +276,24 @@ pub fn ready() -> bool {
     unsafe { FB_READY }
 }
 
+/// Espone la creazione colore per i marker di debug
+pub const fn color(r: u8, g: u8, b: u8) -> u32 { px(r, g, b) }
+
+/// Marker di fase: barra orizzontale in alto (x=10, y=6, 120px, 4px alta).
+/// Il colore dice l'ultima fase raggiunta — canale di debug senza seriale.
+pub unsafe fn phase_bar(c: u32) {
+    draw_bar(10, 6, 120, 1.0, c, px(200, 0, 0));
+}
+
+/// Contatore di passi: disegna n segmenti bianchi (20px + 4px gap) da x=10.
+/// Per isolare l'istruzione che blocca dentro apic::init.
+pub unsafe fn phase_steps(n: u8) {
+    for i in 0..n as usize {
+        let x = 10 + i * 24;
+        draw_bar(x, 12, 20, 1.0, px(255, 255, 255), px(200, 0, 0));
+    }
+}
+
 pub fn fb_width() -> usize { unsafe { FB_WIDTH } }
 pub fn fb_height() -> usize { unsafe { FB_HEIGHT } }
 pub fn fb_bpp() -> u16 { unsafe { FB_BPP } }

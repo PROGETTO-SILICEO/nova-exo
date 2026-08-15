@@ -35,19 +35,25 @@ pub fn init(mmio_base: u64) {
 
         let mut apic_base: u64;
         asm!("rdmsr", out("eax") apic_base, out("edx") _, in("ecx") IA32_APIC_BASE_MSR, options(nostack));
+        crate::gui::phase_steps(1); // rdmsr ok
         apic_base |= 1 << 11;
         let low = apic_base as u32;
         let high = (apic_base >> 32) as u32;
         asm!("wrmsr", in("eax") low, in("edx") high, in("ecx") IA32_APIC_BASE_MSR, options(nostack));
+        crate::gui::phase_steps(2); // wrmsr ok
 
         let spurious = read_reg(APIC_SPURIOUS);
+        crate::gui::phase_steps(3); // spurious read ok
         write_reg(APIC_SPURIOUS, spurious | (1 << 8) | 0xFF);
+        crate::gui::phase_steps(4); // spurious write ok
 
         write_reg(APIC_TPR, 0);
+        crate::gui::phase_steps(5); // TPR ok
 
         write_reg(0x330, 1 << 16);
         write_reg(0x340, 1 << 16);
         write_reg(0x370, 1 << 16);
+        crate::gui::phase_steps(6); // LVT ok
     }
 }
 

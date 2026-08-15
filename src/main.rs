@@ -335,6 +335,14 @@ fn write_hex64(val: u64) {
     }
 }
 
+/// Lettura del TSC (timestamp counter) — v0.29, tick in polling
+fn rdtsc() -> u64 {
+    let mut lo: u32;
+    let mut hi: u32;
+    unsafe { core::arch::asm!("rdtsc", out("eax") lo, out("edx") hi, options(nostack)); }
+    ((hi as u64) << 32) | lo as u64
+}
+
 fn write_cell_line(prefix: &str, h: &[f32; 16]) {
     write_str(prefix);
     // Tick number diagnostic (hex, 4 digits)
@@ -846,6 +854,8 @@ pub extern "C" fn _start() -> ! {
     unsafe { gui::diag_paint(200, 0, 0); } // rosso: GUI inizializzata
     unsafe { diag_hold(); }
     unsafe { boot_beep(10); } // loop in arrivo
+    // DBG v0.27 barre di fase: colore = ultima fase viva (vedi gui.rs)
+    unsafe { gui::phase_bar(gui::color(255, 128, 0)); } // arancione: post-paint
 
     // NIC Intel 82540EM — enable bus mastering, then init
     if let Some((b, s, f)) = pci::pci_find_device(0x8086, 0x100e) {
@@ -856,6 +866,7 @@ pub extern "C" fn _start() -> ! {
         let mmio_virt = paging::mmio_virt_addr(mmio_base);
         e1000::E1000::init(mmio_virt);
     }
+    unsafe { gui::phase_bar(gui::color(255, 255, 0)); } // giallo: PCI ok
 
     let mut tessuto = cfc::Tessuto::new();
     let mut predictor = predictor::PredictiveModule::new();
@@ -897,23 +908,43 @@ pub extern "C" fn _start() -> ! {
     let mut dream_pending: bool = false;
     let dt_tatto = 0.001f32;
     let dt_rest = 0.01f32;
+    unsafe { gui::phase_bar(gui::color(0, 255, 0)); } // verde: strutture ok
 
     unsafe {
         pic_disable();
         serial_println!("PIC disabled, enabling LAPIC + PIT via IO-APIC...");
         apic::init(paging::mmio_virt_addr(0xFEE0_0000));
         let apic_id = apic::read_id();
+        unsafe { gui::phase_steps(7); } // read_id ok
         serial_println!("APIC ID check: {}", apic_id);
+        unsafe { gui::phase_steps(8); } // stampa ok
         // v0.27: timer LAPIC inaffidabile su AMD Kabini (Linux lo evita).
         // Tick dal PIT (8254) inoltrato dall'IO-APIC al LAPIC, vector 32.
         apic::init_ioapic(paging::mmio_virt_addr(0xFEC0_0000), 32);
+        unsafe { gui::phase_steps(9); } // ioapic ok
+        unsafe { gui::phase_steps(10); } // prima di init_pit
         apic::init_pit();
+        unsafe { gui::phase_steps(11); } // dopo init_pit
+        unsafe { gui::phase_bar(gui::color(255, 255, 255)); } // bianco: PIT ok
         serial_println!("Enabling interrupts. Tessuto loop starts.");
         asm!("sti");
+        unsafe { gui::phase_steps(12); } // dopo sti
+        unsafe { gui::phase_bar(gui::color(0, 255, 255)); } // ciano: sti ok
     }
 
+    // v0.29: tick guidato dal TSC (polling), non dagli interrupt — su AMD
+    // Kabini né il LAPIC timer né il PIT generano IRQ affidabili. Il TSC è
+    // constant (visto nel report Linux). Stima 2GHz → 20M ticks per 10ms.
+    const TSC_PER_TICK: u64 = 20_000_000;
+    let mut next_tsc: u64 = rdtsc() + TSC_PER_TICK;
+
     loop {
-        unsafe { asm!("hlt"); }
+        // Attesa attiva sul TSC: avanza il tick senza dipendere dagli IRQ
+        let now = rdtsc();
+        if now >= next_tsc {
+            cfc::inc_tick();
+            next_tsc += TSC_PER_TICK;
+        }
 
         // Poll NIC RX (non-blocking) — popola RX_PENDING/RX_DATA
         e1000::E1000::poll_rx();
@@ -939,6 +970,12 @@ pub extern "C" fn _start() -> ! {
         // occhio senza seriale né beep. Su un laptop: se il kernel gira,
         // caps lock lampeggia. kbd_led non blocca mai (timeout interno).
         unsafe { kbd_led(if (cfc::tick() / 50) & 1 == 0 { 0x04 } else { 0x00 }); }
+        // DBG v0.27 heartbeat visivo: seconda barra (x=140) che lampeggia
+        unsafe {
+            gui::draw_bar(140, 6, 60, 1.0,
+                if (cfc::tick() / 50) & 1 == 0 { gui::color(255, 255, 255) } else { gui::color(0, 0, 0) },
+                gui::color(200, 0, 0));
+        }
 
         // Debug: LSR state every 1000 ticks
         if cfc::tick() % 1000 == 0 {

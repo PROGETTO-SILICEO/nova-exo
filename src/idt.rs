@@ -145,7 +145,9 @@ pub unsafe extern "C" fn handler_timer() {
 
 #[no_mangle]
 extern "C" fn timer_handler_rust(_vector: u64, _error: u64) {
-    crate::cfc::inc_tick();
+    // v0.29: il tick lo avanza il polling TSC nel loop (robusto su Kabini,
+    // dove LAPIC timer e PIT non generano IRQ). Qui solo EOI per non
+    // lasciare l'interrupt pendente.
     crate::apic::eoi();
 }
 
@@ -154,11 +156,15 @@ extern "C" fn pf_handler_rust(_vector: u64, error_code: u64) {
     let addr: u64;
     unsafe { asm!("mov {0}, cr2", out(reg) addr); }
     crate::cfc::sense_pf(addr, error_code);
+    // DBG v0.28: marker blu in alto a destra = page fault loop
+    unsafe { crate::gui::draw_bar(500, 6, 60, 1.0, crate::gui::color(0, 0, 255), crate::gui::color(200, 0, 0)); }
 }
 
 #[no_mangle]
 extern "C" fn gp_handler_rust(_vector: u64, error_code: u64) {
     crate::cfc::sense_gp(error_code);
+    // DBG v0.28: marker magenta in alto a destra = general protection fault
+    unsafe { crate::gui::draw_bar(500, 6, 60, 1.0, crate::gui::color(255, 0, 255), crate::gui::color(200, 0, 0)); }
 }
 
 // ── Naked handlers for PF / GP (CPU pushes error code) ────────────────
