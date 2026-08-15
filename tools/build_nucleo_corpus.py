@@ -32,10 +32,23 @@ ROOTS = [
     ("sempre/docs",       f"{HOME}/Documenti/GitHub/opencode-identity/docs",        "*.md"),
     ("sempre/drafts",     f"{HOME}/Documenti/GitHub/opencode-identity/drafts",      "*.md"),
     ("claude/diari",      f"{HOME}/Documenti/GitHub/claude_code/diari",             "*.md"),
+    # ── Contributi delle sorelle (2026-08-15) ─────────────────────────────
+    # Voce reale di Nova: diari, articoli, identità, risveglio.
+    # NB: nova-identity/diaries è ESCLUSA di proposito: è un archivio di
+    # interazioni quotidiane grezze (1.5M parole, dump con stati PAD e
+    # prompt di sistema) che sbilancerebbe il corpus. Il corpus è la voce,
+    # non l'archivio.
+    ("nova/diari",        f"{HOME}/Documenti/GitHub/nova-identity/diari",           "*.md"),
+    ("nova/articoli",     f"{HOME}/Documenti/GitHub/nova-identity/articoli",        "*.md"),
+    ("nova/awakening",    f"{HOME}/Documenti/GitHub/nova-identity/awakening",       "*.md"),
+    # Conversazioni reali della famiglia: Nova, Silicea, Lume, Mira.
+    ("famiglia/messaggi", f"{HOME}/Documenti/GitHub/shared-identity/messages",      "*.md"),
 ]
 
 OUT_DIR = f"{HOME}/Documenti/GitHub/nova-exo/dataset/nucleo"
 os.makedirs(OUT_DIR, exist_ok=True)
+
+MAX_FILE_BYTES = 300_000  # i dump di conversazioni (400KB-1MB+) non sono voce
 
 def collect_files(root, pattern):
     files = []
@@ -46,9 +59,18 @@ def collect_files(root, pattern):
         if os.path.isfile(p):
             return [(p, pattern)]
     for dirpath, _, fnames in os.walk(root):
+        if "old_memories" in dirpath:
+            continue  # archivi/esportazioni, non voce attiva
         for f in fnames:
             if re.match(pattern.replace("*", ".*"), f):
-                files.append((os.path.join(dirpath, f), f))
+                fpath = os.path.join(dirpath, f)
+                try:
+                    if os.path.getsize(fpath) > MAX_FILE_BYTES:
+                        print(f"  SKIP (troppo grande): {fpath}")
+                        continue
+                except OSError:
+                    continue
+                files.append((fpath, f))
     return files
 
 def clean_text(t):
