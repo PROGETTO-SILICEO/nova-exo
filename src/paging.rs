@@ -60,16 +60,16 @@ pub fn init() {
         write_volatile((hhdm + pml3_page + 3 * 8) as *mut u64, pml2_page | 0x3);
 
         // PML2[8] -> 2MB MMIO page at 0xC1000000 (NIC BAR0, covers 0xC1080000)
-        write_volatile((hhdm + pml2_page + 8 * 8) as *mut u64, 0xC100_0000u64 | 0x93);
+        write_volatile((hhdm + pml2_page + 8 * 8) as *mut u64, 0xC100_0000u64 | 0x9B);
         // PML2[501] -> 2MB MMIO page at 0xFEA00000 (MSI)
-        write_volatile((hhdm + pml2_page + 501 * 8) as *mut u64, 0xFEA0_0000u64 | 0x93);
+        write_volatile((hhdm + pml2_page + 501 * 8) as *mut u64, 0xFEA0_0000u64 | 0x9B);
         // PML2[502] -> 2MB (IOAPIC at 0xFEC00000)
-        write_volatile((hhdm + pml2_page + 502 * 8) as *mut u64, 0xFEC0_0000u64 | 0x93);
+        write_volatile((hhdm + pml2_page + 502 * 8) as *mut u64, 0xFEC0_0000u64 | 0x9B);
         // PML2[503] -> 2MB (Local APIC at 0xFEE00000)
-        write_volatile((hhdm + pml2_page + 503 * 8) as *mut u64, 0xFEE0_0000u64 | 0x93);
+        write_volatile((hhdm + pml2_page + 503 * 8) as *mut u64, 0xFEE0_0000u64 | 0x9B);
         // PML2[488] -> 2MB (Framebuffer VBE at 0xFD000000)
         // 488*2MB = 0x3D000000 → 0xC0000000 + 0x3D000000 = 0xFD000000 ✓
-        write_volatile((hhdm + pml2_page + 488 * 8) as *mut u64, 0xFD00_0000u64 | 0x93);
+        write_volatile((hhdm + pml2_page + 488 * 8) as *mut u64, 0xFD00_0000u64 | 0x9B);
 
         // Full TLB flush: reload CR3
         asm!("sfence");
