@@ -107,12 +107,12 @@ pub(crate) fn virt_to_phys(virt: u64) -> u64 {
 fn init_limine_requests() {
     unsafe {
         let hhdm = &raw const HHDM_REQ;
-            if !(*hhdm).response.is_null() {
+        if !(*hhdm).response.is_null() {
             HHDM_OFFSET = (*(*hhdm).response).offset;
         }
 
         let ea = &raw const EXEC_ADDR_REQ;
-            if !(*ea).response.is_null() {
+        if !(*ea).response.is_null() {
             let r = &*(*ea).response;
             KERNEL_SLOT = 0xFFFFFFFF80000000u64.wrapping_sub(r.physical_base);
         }
@@ -392,6 +392,41 @@ unsafe fn boot_beep(n: u32) {
     }
 }
 
+/// Pausa lunga tra le milestone SOLO con --features diag_slow (test visivo
+/// della sequenza colori in QEMU). In produzione: no-op, zero overhead.
+#[cfg(feature = "diag_slow")]
+unsafe fn diag_hold() {
+    for _ in 0..120_000_000u32 {
+        core::hint::spin_loop();
+    }
+}
+#[cfg(not(feature = "diag_slow"))]
+unsafe fn diag_hold() {}
+
+/// Diagnostica LED tastiera via PS/2 (comando 0xED, byte LED).
+/// Su laptop il PC speaker spesso non esiste fisicamente → i beep sono
+/// un canale inaffidabile. I LED di Caps/Num/Scroll invece ci sono sempre.
+/// 0x01=scroll, 0x02=num, 0x04=caps. Timeout su ogni wait: se il
+/// controller PS/2 non c'è o non risponde, NON blocca mai il kernel.
+unsafe fn kbd_led(leds: u8) {
+    let mut ok = false;
+    for _ in 0..10000 {
+        let mut st: u8;
+        asm!("in al, dx", out("al") st, in("dx") 0x64u16);
+        if st & 0x02 == 0 { ok = true; break; }
+    }
+    if !ok { return; }
+    asm!("out dx, al", in("dx") 0x60u16, in("al") 0xEDu8);
+    ok = false;
+    for _ in 0..10000 {
+        let mut st: u8;
+        asm!("in al, dx", out("al") st, in("dx") 0x64u16);
+        if st & 0x02 == 0 { ok = true; break; }
+    }
+    if !ok { return; }
+    asm!("out dx, al", in("dx") 0x60u16, in("al") leds);
+}
+
 #[no_mangle]
 pub extern "C" fn _start() -> ! {
     // CRITICO su hardware reale: UEFI lascia gli interrupt abilitati (IF=1)
@@ -399,6 +434,11 @@ pub extern "C" fn _start() -> ! {
     // causa triple fault → reboot loop. In QEMU non succede (Limine
     // disabilita tutto), su hardware vero sì. CLI come PRIMA cosa.
     unsafe { asm!("cli"); }
+    // Diagnostica schermo a colori: se il boot si blocca, l'ultimo colore
+    // rimasto sul display dice dove è morto. Il PC speaker di un laptop può
+    // non esistere fisicamente → i beep non bastano da soli.
+    unsafe { gui::diag_paint(0, 0, 180); } // blu: _start raggiunto
+    unsafe { diag_hold(); }
     unsafe {
         // 2 beep DISTINTI (Mi5 1319Hz + La4 880Hz): il nostro segnale.
         // Un singolo beep all'accensione è il POST code del BIOS —
@@ -408,6 +448,9 @@ pub extern "C" fn _start() -> ! {
         let serial = &mut *(&raw mut SERIAL);
         serial.init();
         boot_beep(2); // seriale ok
+        gui::diag_paint(0, 140, 0); // verde: seriale ok
+        kbd_led(0x01); // scroll lock on
+        diag_hold();
     }
     serial_println!("Nova Exo v0.24 -- APIC battito.");
     serial_println!("Neuroni: {} per cellula, {} totale", cfc::NEURONS_PER_CELL, cfc::TOTAL_NEURONS);
@@ -415,6 +458,9 @@ pub extern "C" fn _start() -> ! {
 
     unsafe { init_weights(); }
     unsafe { boot_beep(4); } // weights ok
+    unsafe { gui::diag_paint(200, 180, 0); } // giallo: weights ok
+    unsafe { kbd_led(0x02); } // num lock on
+    unsafe { diag_hold(); }
 
     // ── TEST DI BOOT (feature "boot_tests") ──────────────────────────
     // GGUF, dequant, attention, FFN, shortconv su pesi reali.
@@ -773,6 +819,9 @@ pub extern "C" fn _start() -> ! {
     idt::init();
     serial_println!("IDT loaded. 4 cellulae: tatto, chemio, metabol, integrat.");
     unsafe { boot_beep(6); } // IDT ok
+    unsafe { gui::diag_paint(200, 0, 180); } // magenta: IDT ok
+    unsafe { kbd_led(0x04); } // caps lock on
+    unsafe { diag_hold(); }
 
     pci::enumerate();
     init_limine_requests();
@@ -780,6 +829,9 @@ pub extern "C" fn _start() -> ! {
 
     paging::init();
     unsafe { boot_beep(8); } // paging ok
+    unsafe { gui::diag_paint(0, 140, 140); } // ciano: paging ok
+    unsafe { kbd_led(0x06); } // num+caps on
+    unsafe { diag_hold(); }
 
     // ── GUI: il monitor vitale di Exo ──
     // Limine fornisce il framebuffer già mappato in higher-half.
@@ -791,6 +843,8 @@ pub extern "C" fn _start() -> ! {
     } else {
         serial_println!("GUI: framebuffer non disponibile (si prosegue su seriale)");
     }
+    unsafe { gui::diag_paint(200, 0, 0); } // rosso: GUI inizializzata
+    unsafe { diag_hold(); }
     unsafe { boot_beep(10); } // loop in arrivo
 
     // NIC Intel 82540EM — enable bus mastering, then init
@@ -877,6 +931,11 @@ pub extern "C" fn _start() -> ! {
         if !cfc::tick_advanced() {
             continue;
         }
+
+        // Heartbeat LED (CapsLock) ogni 50 tick (~0.5-1s): vita visibile a
+        // occhio senza seriale né beep. Su un laptop: se il kernel gira,
+        // caps lock lampeggia. kbd_led non blocca mai (timeout interno).
+        unsafe { kbd_led(if (cfc::tick() / 50) & 1 == 0 { 0x04 } else { 0x00 }); }
 
         // Debug: LSR state every 1000 ticks
         if cfc::tick() % 1000 == 0 {

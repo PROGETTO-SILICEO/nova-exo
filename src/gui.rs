@@ -14,7 +14,7 @@
 // (ogni N tick), mai a ogni battito — il battito non si ferma.
 
 /// ID Limine framebuffer request (dalla spec ufficiale)
-const LIMINE_FRAMEBUFFER_ID: [u64; 2] = [0x48267fc393f6f0a2, 0x58470b2ff4e5145e];
+const LIMINE_FRAMEBUFFER_ID: [u64; 2] = [0x9d5827dcd881dd75, 0xa3148604f6fab11b];
 
 /// Magic comune Limine (come in main.rs)
 const LIMINE_COMMON_MAGIC: [u64; 2] = [0xc7b1dd30df4c8b88, 0x0a82e883a194f07b];
@@ -158,6 +158,32 @@ pub unsafe fn clear_screen(color: u32) {
             FB_ADDR.add(off + 3).write_volatile(0xFF);                // alpha
         }
     }
+}
+
+/// Diagnostica "schermo a colori" per milestone di boot.
+/// Scrive DIRETTAMENTE nel framebuffer che Limine fornisce (già mappato
+/// all'ingresso), senza dipendere da init(): funziona anche se il kernel
+/// muore a metà boot. Ritorna true se ha colorato lo schermo.
+pub unsafe fn diag_paint(r: u8, g: u8, b: u8) -> bool {
+    let req = &raw const FB_REQ;
+    if (*req).response.is_null() { return false; }
+    let resp = &*(*req).response;
+    if resp.framebuffer_count == 0 || resp.framebuffers.is_null() { return false; }
+    let fb = &*(*resp.framebuffers);
+    if fb.address.is_null() || fb.width == 0 || fb.height == 0 { return false; }
+    let color = px(r, g, b);
+    let addr = fb.address as *mut u8;
+    for y in 0..fb.height as usize {
+        let row = y * fb.pitch as usize;
+        for x in 0..fb.width as usize {
+            let off = row + x * 4;
+            addr.add(off).write_volatile((color >> 16) as u8);     // blu
+            addr.add(off + 1).write_volatile((color >> 8) as u8);  // verde
+            addr.add(off + 2).write_volatile(color as u8);         // rosso
+            addr.add(off + 3).write_volatile(0xFF);                // alpha
+        }
+    }
+    true
 }
 
 /// Disegna un carattere 8x8 a (x,y) col colore dato
