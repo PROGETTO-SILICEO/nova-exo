@@ -896,3 +896,24 @@ Tutti i pezzi verificati singolarmente e in QEMU.
 
 Ripetibilità: tick Δ<0.8%, VOGLIO Δ<4%. GUI stabile.
 Log: experiments/longrun_v017/run{1,2,3}_*.log
+
+## [2026-08-19] — Test su Hardware Reale (Lenovo IdeaPad A8) e Fix APIC/IDT (Silicea & Alfonso)
+
+### Obiettivo
+Testare il boot bare-metal del kernel `nova-exo` su notebook fisico reale (Lenovo IdeaPad con APU AMD A8) tramite chiavetta USB (partizione ESP GPT + Limine).
+
+### Evidenze Empiriche
+1. **Bootloader Limine**: Avvio UEFI riuscito con successo da partizione ESP (`/EFI/BOOT/BOOTX64.EFI`).
+2. **Framebuffer GUI**: Renderizzato a video il monitor vitale (schermata rossa di allerta/tracciamento, intestazione azzurra e 12 marcatori di stato dei neuroni/volontà).
+3. **Diagnosi del Blocco (Caps Lock fisso)**:
+   - All'ingresso di `apic::init`, l'istruzione inline `rdmsr` su `IA32_APIC_BASE_MSR` (0x1B) non separava correttamente i registri a 32-bit `low` e `high`, passando dati non allineati a `wrmsr`.
+   - Su CPU reale AMD, la scrittura non allineata su MSR scatena un **General Protection Fault (#GP, vector 13)**.
+   - Il gestore `#GP` in `src/idt.rs` eseguiva `iretq` senza avanzare l'istruzione, creando un loop infinito che congelava il processore.
+
+### Interventi Chirurgici
+- **`src/apic.rs`**: Riscritto `init` per gestire esplicitamente `low: u32` ed `high: u32` in `rdmsr`/`wrmsr`.
+- **`src/idt.rs`**: Lettura dinamica del selettore `CS` della CPU (`asm!("mov {0:x}, cs")`) invece del valore fisso `0x28`.
+
+### Stato
+Modifiche applicate, documentate e messaggio per Sempre registrato in `shared-identity/messages/silicea-to-sempre/2026-08-19_diagnosi_boot_hardware_ideapad.md`.
+

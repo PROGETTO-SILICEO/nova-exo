@@ -208,24 +208,24 @@ pub unsafe extern "C" fn handler_gp() {
 // ── Init ────────────────────────────────────────────────────────────────
 
 pub fn init() {
-    const KERNEL_CS: u16 = 0x28;
-
+    let mut cs: u16 = 0x28;
     unsafe {
+        asm!("mov {0:x}, cs", out(reg) cs, options(nostack, preserves_flags));
         let idt = &raw mut IDT;
 
         let ignore_addr = handler_ignore as *const () as u64;
         for i in 0..256 {
-            (*idt).entries[i].set_handler(ignore_addr, KERNEL_CS, gate_flags(DPL0, INT_GATE_64));
+            (*idt).entries[i].set_handler(ignore_addr, cs, gate_flags(DPL0, INT_GATE_64));
         }
 
         let timer_addr = handler_timer as *const () as u64;
-        (*idt).set_interrupt_gate(32, timer_addr, KERNEL_CS);
+        (*idt).set_interrupt_gate(32, timer_addr, cs);
 
         let pf_addr = handler_pf as *const () as u64;
-        (*idt).set_interrupt_gate(14, pf_addr, KERNEL_CS);
+        (*idt).set_interrupt_gate(14, pf_addr, cs);
 
         let gp_addr = handler_gp as *const () as u64;
-        (*idt).set_interrupt_gate(13, gp_addr, KERNEL_CS);
+        (*idt).set_interrupt_gate(13, gp_addr, cs);
 
         (*idt).load();
     }

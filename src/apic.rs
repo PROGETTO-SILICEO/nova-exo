@@ -33,12 +33,22 @@ pub fn init(mmio_base: u64) {
     unsafe {
         APIC_BASE = mmio_base as *mut u32;
 
-        let mut apic_base: u64;
-        asm!("rdmsr", out("eax") apic_base, out("edx") _, in("ecx") IA32_APIC_BASE_MSR, options(nostack));
-        apic_base |= 1 << 11;
-        let low = apic_base as u32;
-        let high = (apic_base >> 32) as u32;
-        asm!("wrmsr", in("eax") low, in("edx") high, in("ecx") IA32_APIC_BASE_MSR, options(nostack));
+        let (mut low, mut high): (u32, u32);
+        asm!(
+            "rdmsr",
+            out("eax") low,
+            out("edx") high,
+            in("ecx") IA32_APIC_BASE_MSR,
+            options(nostack)
+        );
+        low |= 1 << 11; // Enable APIC global
+        asm!(
+            "wrmsr",
+            in("eax") low,
+            in("edx") high,
+            in("ecx") IA32_APIC_BASE_MSR,
+            options(nostack)
+        );
 
         let spurious = read_reg(APIC_SPURIOUS);
         write_reg(APIC_SPURIOUS, spurious | (1 << 8) | 0xFF);
