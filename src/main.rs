@@ -440,18 +440,6 @@ pub extern "C" fn _start() -> ! {
     // disabilita tutto), su hardware vero sì. CLI come PRIMA cosa.
     unsafe { asm!("cli"); }
 
-    // Limine requests & Framebuffer GUI subito attivi
-    init_limine_requests();
-    let has_gui = unsafe { gui::init() };
-    if has_gui {
-        unsafe {
-            gui::set_cursor(10, 10);
-            gui::print_str("NOVA-EXO: BOOTING ON BARE METAL...", gui::COL_CYAN);
-            gui::set_cursor(10, 24);
-            gui::print_str("INITIALIZING SYSTEM...", gui::COL_WHITE);
-        }
-    }
-
     unsafe {
         let serial_ok = serial_detect_and_init();
         beep(1319, 80);
@@ -827,9 +815,10 @@ pub extern "C" fn _start() -> ! {
 
     pci::enumerate();
     paging::init();
+    init_limine_requests();
     unsafe { boot_beep(8); } // paging ok
 
-    if gui::ready() {
+    if unsafe { gui::init() } {
         serial_println!("GUI: framebuffer ok ({}x{} bpp {})",
             gui::fb_width(), gui::fb_height(), gui::fb_bpp());
         unsafe { boot_beep(9); } // GUI ok

@@ -95,16 +95,37 @@ static mut BLUE_SHIFT: u8 = 0;
 pub unsafe fn init() -> bool {
     let req = &raw const FB_REQ;
     if (*req).response.is_null() {
-        FB_READY = false;
-        return false;
+        // Fallback: MMIO fisso mappato da paging a 0xFD000000
+        FB_ADDR = crate::paging::mmio_virt_addr(0xFD00_0000u64) as *mut u8;
+        FB_WIDTH = 1024;
+        FB_HEIGHT = 768;
+        FB_PITCH = 1024 * 4;
+        FB_BPP = 32;
+        FB_READY = true;
+        clear_screen(px(8, 10, 20));
+        return true;
     }
     let resp = &*(*req).response;
     if resp.framebuffer_count == 0 || resp.framebuffers.is_null() {
-        return false;
+        FB_ADDR = crate::paging::mmio_virt_addr(0xFD00_0000u64) as *mut u8;
+        FB_WIDTH = 1024;
+        FB_HEIGHT = 768;
+        FB_PITCH = 1024 * 4;
+        FB_BPP = 32;
+        FB_READY = true;
+        clear_screen(px(8, 10, 20));
+        return true;
     }
     let fb = &*(*resp.framebuffers);
     if fb.address.is_null() || fb.width == 0 || fb.height == 0 {
-        return false;
+        FB_ADDR = crate::paging::mmio_virt_addr(0xFD00_0000u64) as *mut u8;
+        FB_WIDTH = 1024;
+        FB_HEIGHT = 768;
+        FB_PITCH = 1024 * 4;
+        FB_BPP = 32;
+        FB_READY = true;
+        clear_screen(px(8, 10, 20));
+        return true;
     }
 
     FB_ADDR = fb.address;
