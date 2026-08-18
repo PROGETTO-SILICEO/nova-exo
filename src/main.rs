@@ -131,14 +131,39 @@ static FASCI: [cfc::AxonBundle; 2] = [
 // ── Serial port ─────────────────────────────────────────────────────────
 
 static mut SERIAL: SerialPort = unsafe { SerialPort::new(0x3F8) };
+pub(crate) static mut SERIAL_PRESENT: bool = false;
+
+pub unsafe fn serial_detect_and_init() -> bool {
+    // Probe UART 16550 scratch register at 0x3FF (0x3F8 + 7)
+    outb(0x3FF, 0xA5);
+    let mut r1: u8;
+    asm!("in al, dx", out("al") r1, in("dx") 0x3FFu16);
+    if r1 != 0xA5 {
+        SERIAL_PRESENT = false;
+        return false;
+    }
+    outb(0x3FF, 0x5A);
+    let mut r2: u8;
+    asm!("in al, dx", out("al") r2, in("dx") 0x3FFu16);
+    if r2 != 0x5A {
+        SERIAL_PRESENT = false;
+        return false;
+    }
+    let serial: &mut SerialPort = &mut *(&raw mut SERIAL);
+    serial.init();
+    SERIAL_PRESENT = true;
+    true
+}
 
 macro_rules! serial_println {
     ($($arg:tt)*) => {
         #[allow(unused_unsafe)]
         unsafe {
-            let serial: &mut SerialPort = &mut *(&raw mut SERIAL);
-            let _ = write!(serial, $($arg)*);
-            let _ = serial.write_str("\n");
+            if $crate::SERIAL_PRESENT {
+                let serial: &mut SerialPort = &mut *(&raw mut SERIAL);
+                let _ = write!(serial, $($arg)*);
+                let _ = serial.write_str("\n");
+            }
         }
     };
 }
@@ -188,15 +213,20 @@ unsafe fn pic_disable() {
 
 pub(crate) fn serial_putc(c: u8) {
     unsafe {
-        loop {
+        if !SERIAL_PRESENT {
+            return;
+        }
+        let mut timeout = 10_000u32;
+        while timeout > 0 {
             let mut lsr: u8;
             asm!("in al, dx", out("al") lsr, in("dx") 0x3fdu16);
             if lsr & 0x20 != 0 {
-                break;
+                asm!("out dx, al", in("dx") 0x3f8u16, in("al") c);
+                return;
             }
+            timeout -= 1;
             asm!("pause");
         }
-        asm!("out dx, al", in("dx") 0x3f8u16, in("al") c);
     }
 }
 
@@ -399,15 +429,18 @@ pub extern "C" fn _start() -> ! {
     // causa triple fault → reboot loop. In QEMU non succede (Limine
     // disabilita tutto), su hardware vero sì. CLI come PRIMA cosa.
     unsafe { asm!("cli"); }
+
+    // Limine requests & Framebuffer GUI subito attivi
+    init_limine_requests();
+    let has_gui = unsafe { gui::init() };
+
     unsafe {
-        // 2 beep DISTINTI (Mi5 1319Hz + La4 880Hz): il nostro segnale.
-        // Un singolo beep all'accensione è il POST code del BIOS —
-        // così distinguiamo il nostro kernel dal firmware.
+        let serial_ok = serial_detect_and_init();
         beep(1319, 80);
         beep(880, 80);
-        let serial = &mut *(&raw mut SERIAL);
-        serial.init();
-        boot_beep(2); // seriale ok
+        if serial_ok {
+            boot_beep(2);
+        }
     }
     serial_println!("Nova Exo v0.24 -- APIC battito.");
     serial_println!("Neuroni: {} per cellula, {} totale", cfc::NEURONS_PER_CELL, cfc::TOTAL_NEURONS);
@@ -861,15 +894,20 @@ pub extern "C" fn _start() -> ! {
         // Poll NIC RX (non-blocking) — popola RX_PENDING/RX_DATA
         e1000::E1000::poll_rx();
 
-        // Poll serial (non-blocking) — always drain FIFO
-        unsafe {
-            loop {
-                let mut lsr: u8;
-                asm!("in al, dx", out("al") lsr, in("dx") 0x3fdu16);
-                if lsr & 1 == 0 { break; }
-                let mut byte: u8;
-                asm!("in al, dx", out("al") byte, in("dx") 0x3f8u16);
-                line_reader.push(byte);
+        // Poll serial (non-blocking) — only if UART is present
+        if unsafe { SERIAL_PRESENT } {
+            unsafe {
+                let mut max_drain = 32;
+                loop {
+                    if max_drain == 0 { break; }
+                    max_drain -= 1;
+                    let mut lsr: u8;
+                    asm!("in al, dx", out("al") lsr, in("dx") 0x3fdu16);
+                    if lsr & 1 == 0 || lsr == 0xFF { break; }
+                    let mut byte: u8;
+                    asm!("in al, dx", out("al") byte, in("dx") 0x3f8u16);
+                    line_reader.push(byte);
+                }
             }
         }
 
