@@ -894,6 +894,29 @@ pub extern "C" fn _start() -> ! {
         serial_println!("APIC ID check: {}", apic_id);
         apic::init_timer(32);
         serial_println!("Enabling interrupts. Tessuto loop starts.");
+
+        if gui::ready() {
+            let (d_id, d_int) = executive.current();
+            let desire_name = match d_id {
+                0 => "QUIETE",
+                1 => "MOVIMENTO",
+                2 => "NUTRIZIONE",
+                3 => "ALLERTA",
+                _ => "SCONOSCIUTO",
+            };
+            gui::render_vitals(
+                0,
+                &tessuto.tatto.h,
+                &tessuto.chemio.h,
+                &tessuto.metabol.h,
+                &tessuto.integrat.h,
+                desire_name,
+                d_int,
+                0.0,
+                "AVVIO",
+            );
+        }
+
         asm!("sti");
     }
 

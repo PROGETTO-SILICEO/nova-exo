@@ -13,8 +13,8 @@
 // Metodo Exo: un passo per tick. Il render avviene a frequenza bassa
 // (ogni N tick), mai a ogni battito — il battito non si ferma.
 
-/// ID Limine framebuffer request (dalla spec ufficiale)
-const LIMINE_FRAMEBUFFER_ID: [u64; 2] = [0x48267fc393f6f0a2, 0x58470b2ff4e5145e];
+/// ID Limine framebuffer request (dalla specifica ufficiale Limine)
+const LIMINE_FRAMEBUFFER_ID: [u64; 2] = [0x9d5827dcd881dd75, 0xa3148604f7fb11fb];
 
 /// Magic comune Limine (come in main.rs)
 const LIMINE_COMMON_MAGIC: [u64; 2] = [0xc7b1dd30df4c8b88, 0x0a82e883a194f07b];
