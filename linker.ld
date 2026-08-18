@@ -12,7 +12,7 @@ SECTIONS {
     . = 0xffffffff80000000;
 
     .limine_reqs : {
-        *(.limine_reqs)
+        KEEP(*(.limine_reqs))
     } :limine
 
     . = ALIGN(0x1000);

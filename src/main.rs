@@ -133,22 +133,32 @@ static FASCI: [cfc::AxonBundle; 2] = [
 static mut SERIAL: SerialPort = unsafe { SerialPort::new(0x3F8) };
 pub(crate) static mut SERIAL_PRESENT: bool = false;
 
+pub struct SafeSerialWriter;
+impl core::fmt::Write for SafeSerialWriter {
+    fn write_str(&mut self, s: &str) -> core::fmt::Result {
+        for &b in s.as_bytes() {
+            serial_putc(b);
+        }
+        Ok(())
+    }
+}
+
 pub unsafe fn serial_detect_and_init() -> bool {
-    // Probe UART 16550 scratch register at 0x3FF (0x3F8 + 7)
-    outb(0x3FF, 0xA5);
-    let mut r1: u8;
-    asm!("in al, dx", out("al") r1, in("dx") 0x3FFu16);
-    if r1 != 0xA5 {
+    // 16550 Hardware Loopback Test:
+    // 1. Set loopback mode in Modem Control Register (0x3FC, bit 4)
+    outb(0x3FC, 0x1E);
+    // 2. Write test byte to data register (0x3F8)
+    outb(0x3F8, 0xAE);
+    // 3. Read back from data register (0x3F8)
+    let mut in_byte: u8;
+    asm!("in al, dx", out("al") in_byte, in("dx") 0x3F8u16);
+    if in_byte != 0xAE {
         SERIAL_PRESENT = false;
+        outb(0x3FC, 0x00);
         return false;
     }
-    outb(0x3FF, 0x5A);
-    let mut r2: u8;
-    asm!("in al, dx", out("al") r2, in("dx") 0x3FFu16);
-    if r2 != 0x5A {
-        SERIAL_PRESENT = false;
-        return false;
-    }
+    // 4. Disable loopback, enable normal operation
+    outb(0x3FC, 0x0F);
     let serial: &mut SerialPort = &mut *(&raw mut SERIAL);
     serial.init();
     SERIAL_PRESENT = true;
@@ -160,9 +170,9 @@ macro_rules! serial_println {
         #[allow(unused_unsafe)]
         unsafe {
             if $crate::SERIAL_PRESENT {
-                let serial: &mut SerialPort = &mut *(&raw mut SERIAL);
-                let _ = write!(serial, $($arg)*);
-                let _ = serial.write_str("\n");
+                let mut writer = $crate::SafeSerialWriter;
+                let _ = core::fmt::Write::write_fmt(&mut writer, format_args!($($arg)*));
+                $crate::serial_putc(b'\n');
             }
         }
     };
