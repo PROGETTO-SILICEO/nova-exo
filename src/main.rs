@@ -43,7 +43,7 @@ unsafe impl Sync for BaseRevision {}
 #[used]
 #[link_section = ".limine_reqs"]
 static mut BASE_REVISION: BaseRevision = BaseRevision {
-    magic: [0xf9562b2d5c95a6c8, 0x6a7b384944536bdc, 6],
+    magic: [0xf9562b2d5c95a6c8, 0x6a7b384944536bdc, 2],
 };
 
 #[repr(C)]
@@ -433,6 +433,14 @@ pub extern "C" fn _start() -> ! {
     // Limine requests & Framebuffer GUI subito attivi
     init_limine_requests();
     let has_gui = unsafe { gui::init() };
+    if has_gui {
+        unsafe {
+            gui::set_cursor(10, 10);
+            gui::print_str("NOVA-EXO: BOOTING ON BARE METAL...", gui::COL_CYAN);
+            gui::set_cursor(10, 24);
+            gui::print_str("INITIALIZING SYSTEM...", gui::COL_WHITE);
+        }
+    }
 
     unsafe {
         let serial_ok = serial_detect_and_init();
@@ -808,23 +816,14 @@ pub extern "C" fn _start() -> ! {
     unsafe { boot_beep(6); } // IDT ok
 
     pci::enumerate();
-    init_limine_requests();
-    unsafe { boot_beep(7); } // PCI+Limine ok
-
     paging::init();
     unsafe { boot_beep(8); } // paging ok
 
-    // ── GUI: il monitor vitale di Exo ──
-    // Limine fornisce il framebuffer già mappato in higher-half.
-    // Il paging aggiunge la mappatura 2MB per la regione 0xFD000000.
-    if unsafe { gui::init() } {
+    if gui::ready() {
         serial_println!("GUI: framebuffer ok ({}x{} bpp {})",
             gui::fb_width(), gui::fb_height(), gui::fb_bpp());
         unsafe { boot_beep(9); } // GUI ok
-    } else {
-        serial_println!("GUI: framebuffer non disponibile (si prosegue su seriale)");
     }
-    unsafe { boot_beep(10); } // loop in arrivo
 
     // NIC Intel 82540EM — enable bus mastering, then init
     if let Some((b, s, f)) = pci::pci_find_device(0x8086, 0x100e) {
