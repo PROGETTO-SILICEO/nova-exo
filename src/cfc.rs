@@ -632,6 +632,10 @@ pub fn inc_tick() {
 /// `tick % N == 0` falliscono se il tick avanza a passi variabili).
 /// `next` è il prossimo marcatore (si aggiorna in-place).
 pub fn tick_passed(interval: u64, next: &mut u64) -> bool {
+    if interval == 0 {
+        // Guard (analisi stabilità 04/10/2026): mai divisione per zero.
+        return false;
+    }
     let t = tick();
     if t >= *next {
         // salta al prossimo marcatore futuro (gestisce grandi salti)
