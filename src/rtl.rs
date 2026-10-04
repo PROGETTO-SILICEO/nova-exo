@@ -23,13 +23,12 @@ pub struct Rtl {
 }
 
 /// Mostra una stringa alla riga diagnostica (y=460) — visibile sul video.
-/// Pulisce sempre 48 caratteri prima (mai overlap tra messaggi successivi).
+/// Pulisce l'area con un rettangolo pieno (gli SPAZI non cancellano i pixel).
 unsafe fn diag(s: &str, color: u32) {
-    gui::set_cursor(10, 460);
-    gui::print_str(
-        "                                                ",
-        gui::color(200, 0, 0),
-    );
+    let bg = gui::color(200, 0, 0);
+    // rettangolo pieno 8px di altezza (2 barre da 4px)
+    gui::draw_bar(10, 459, 48 * 9, 1.0, bg, bg);
+    gui::draw_bar(10, 463, 48 * 9, 1.0, bg, bg);
     gui::set_cursor(10, 460);
     gui::print_str(s, color);
 }
@@ -153,6 +152,56 @@ impl Rtl {
         if let Ok(s) = core::str::from_utf8(&buf3) {
             gui::set_cursor(10, 482);
             gui::print_str(s, gui::COL_CYAN);
+        }
+
+        // ── RESET del chip + ri-lettura MAC (04/10/2026) ──
+        // Su molte Realtek il MAC viene caricato dall'EEPROM/OTP al reset:
+        // prima del reset i registri IDR possono contenere pattern di default
+        // (es. 88:88:...). CmdReset è self-clearing.
+        let cmd_before = core::ptr::read_volatile((mmio + 0x37) as *const u8);
+        core::ptr::write_volatile((mmio + 0x37) as *mut u8, cmd_before | 0x10);
+        let mut reset_ok = false;
+        for _ in 0..2_000_000u32 {
+            if core::ptr::read_volatile((mmio + 0x37) as *const u8) & 0x10 == 0 {
+                reset_ok = true;
+                break;
+            }
+        }
+        // ri-leggi MAC post-reset
+        let mut mac2 = [0u8; 6];
+        for (i, m) in mac2.iter_mut().enumerate() {
+            *m = core::ptr::read_volatile((mmio + i as u64) as *const u8);
+        }
+        let cmd_after = core::ptr::read_volatile((mmio + 0x37) as *const u8);
+
+        // Riga 4: MAC post-reset (il dato che conta) + esito reset
+        let mut buf4: [u8; 42] = *b"MAC2=00:00:00:00:00:00 CMD=00 RST=OK      ";
+        for i in 0..6 {
+            buf4[5 + i * 3] = hex[(mac2[i] >> 4) as usize];
+            buf4[6 + i * 3] = hex[(mac2[i] & 0xF) as usize];
+            if i < 5 {
+                buf4[7 + i * 3] = b':';
+            }
+        }
+        buf4[27] = hex[(cmd_after >> 4) as usize];
+        buf4[28] = hex[(cmd_after & 0xF) as usize];
+        if !reset_ok {
+            buf4[33] = b'F';
+            buf4[34] = b'A';
+            buf4[35] = b'I';
+            buf4[36] = b'L';
+        }
+        let all_zero2 = mac2.iter().all(|&b| b == 0x00);
+        let all_ff2 = mac2.iter().all(|&b| b == 0xFF);
+        let all_88 = mac2.iter().all(|&b| b == 0x88);
+        let color4 = if all_zero2 || all_ff2 || all_88 {
+            gui::COL_RED
+        } else {
+            gui::COL_GREEN
+        };
+        if let Ok(s) = core::str::from_utf8(&buf4) {
+            gui::set_cursor(10, 493);
+            gui::print_str(s, color4);
         }
 
         Some(Rtl {
