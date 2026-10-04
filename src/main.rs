@@ -959,7 +959,7 @@ pub extern "C" fn _start() -> ! {
         if diag_loop < 30 {
             serial_println!("DIAG:loop={} tsc={}", diag_loop, now);
             if diag_loop == 0 {
-                unsafe { gui::draw_bar(40, 30, 24, 1.0, gui::color(255, 255, 0), gui::color(40, 0, 0)); }
+                unsafe { gui::draw_bar(35, 30, 24, 1.0, gui::color(255, 255, 0), gui::color(40, 0, 0)); }
             }
             diag_loop += 1;
         }
@@ -968,7 +968,7 @@ pub extern "C" fn _start() -> ! {
             if cfc::tick() <= 30 {
                 serial_println!("DIAG:tick={}", cfc::tick());
                 if cfc::tick() == 1 {
-                    unsafe { gui::draw_bar(70, 30, 24, 1.0, gui::color(0, 255, 255), gui::color(40, 0, 0)); }
+                    unsafe { gui::draw_bar(110, 30, 24, 1.0, gui::color(0, 255, 255), gui::color(40, 0, 0)); }
                 }
             }
             next_tsc += TSC_PER_TICK;
@@ -976,17 +976,31 @@ pub extern "C" fn _start() -> ! {
 
         // Poll NIC RX (non-blocking) — popola RX_PENDING/RX_DATA
         e1000::E1000::poll_rx();
+        if diag_loop == 1 {
+            // arancione: poll_rx passato (primo giro)
+            unsafe { gui::draw_bar(60, 30, 24, 1.0, gui::color(255, 140, 0), gui::color(40, 0, 0)); }
+        }
 
         // Poll serial (non-blocking) — always drain FIFO
+        // FIX v0.29c: MAI drain illimitato. Su hardware senza UART a 0x3F8
+        // (i laptop moderni) la porta flottante ritorna 0xFF: DR=1 per
+        // sempre → loop infinito → il kernel non raggiunge MAI il tick.
+        // Questo era il vero blocco del Lenovo (non il timer).
         unsafe {
+            let mut drained: u32 = 0;
             loop {
                 let mut lsr: u8;
                 asm!("in al, dx", out("al") lsr, in("dx") 0x3fdu16);
-                if lsr & 1 == 0 { break; }
+                if lsr & 1 == 0 || lsr == 0xFF || drained >= 64 { break; }
                 let mut byte: u8;
                 asm!("in al, dx", out("al") byte, in("dx") 0x3f8u16);
                 line_reader.push(byte);
+                drained += 1;
             }
+        }
+        if diag_loop == 1 {
+            // viola: drain passato (primo giro)
+            unsafe { gui::draw_bar(85, 30, 24, 1.0, gui::color(128, 0, 255), gui::color(40, 0, 0)); }
         }
 
         // Work only when TICK advances (heartbeat), not on every IRQ wakeup
@@ -998,10 +1012,10 @@ pub extern "C" fn _start() -> ! {
         // occhio senza seriale né beep. Su un laptop: se il kernel gira,
         // caps lock lampeggia. kbd_led non blocca mai (timeout interno).
         if diag_hb < 8 { serial_println!("DIAG:HB1 tick={}", cfc::tick()); }
-        if diag_hb == 0 { unsafe { gui::draw_bar(100, 30, 24, 1.0, gui::color(0, 0, 255), gui::color(40, 0, 0)); } }
+        if diag_hb == 0 { unsafe { gui::draw_bar(135, 30, 24, 1.0, gui::color(0, 0, 255), gui::color(40, 0, 0)); } }
         unsafe { kbd_led(if (cfc::tick() / 50) & 1 == 0 { 0x04 } else { 0x00 }); }
         if diag_hb < 8 { serial_println!("DIAG:HB2"); }
-        if diag_hb == 0 { unsafe { gui::draw_bar(130, 30, 24, 1.0, gui::color(255, 0, 255), gui::color(40, 0, 0)); } }
+        if diag_hb == 0 { unsafe { gui::draw_bar(160, 30, 24, 1.0, gui::color(255, 0, 255), gui::color(40, 0, 0)); } }
         // DBG v0.27 heartbeat visivo: seconda barra (x=140) che lampeggia
         unsafe {
             gui::draw_bar(140, 6, 60, 1.0,
@@ -1010,7 +1024,7 @@ pub extern "C" fn _start() -> ! {
         }
         if diag_hb < 8 {
             serial_println!("DIAG:HB3");
-            if diag_hb == 0 { unsafe { gui::draw_bar(160, 30, 24, 1.0, gui::color(255, 255, 255), gui::color(40, 0, 0)); } }
+            if diag_hb == 0 { unsafe { gui::draw_bar(185, 30, 24, 1.0, gui::color(255, 255, 255), gui::color(40, 0, 0)); } }
             diag_hb += 1;
         }
 
