@@ -260,7 +260,7 @@ impl Rtl {
             for b in frame.iter_mut().take(6) {
                 *b = 0xFF; // dest: broadcast
             }
-            frame[6..12].copy_from_slice(&mac2); // src: il nostro MAC
+            frame[6..12].copy_from_slice(&[0xc8, 0x5b, 0x76, 0xe0, 0xe0, 0x01]); // SRC: MAC FIRMA "EXO-01" — distinguibile dal BIOS!
             frame[12] = 0x88;
             frame[13] = 0xB5; // ethertype: experimental (locale)
             let msg = b"EXO: PRIMO PACCHETTO DAL METALLO";
