@@ -22,6 +22,7 @@ mod neurogenesis;
 mod paging;
 mod pci;
 mod predictor;
+mod rtl;
 mod serial;
 mod state;
 mod tensor;
@@ -132,13 +133,45 @@ static FASCI: [cfc::AxonBundle; 2] = [
 
 static mut SERIAL: SerialPort = unsafe { SerialPort::new(0x3F8) };
 
+/// La UART a 0x3F8 esiste su questa macchina?
+/// Rilevata all'avvio con il test di loopback (design da origin/Silicea,
+/// adottato 04/10/2026): su hardware senza UART la porta flottante
+/// risponde 0xFF e QUALSIASI polling (drain, THRE) è inaffidabile.
+/// Con SERIAL_PRESENT=false: niente print, niente drain, niente polling.
+pub(crate) static mut SERIAL_PRESENT: bool = false;
+
+/// Test di loopback hardware della 16550: scrive un byte in modalità
+/// loopback e lo rilegge. Se non torna, la UART non c'è.
+/// Ritorna true se la seriale è presente e inizializzata.
+pub unsafe fn serial_detect_and_init() -> bool {
+    // 1. Loopback mode (MCR bit 4 + OUT2/RTS/DTR)
+    outb(0x3FC, 0x1E);
+    // 2. Write test byte, read it back
+    outb(0x3F8, 0xAE);
+    let mut in_byte: u8;
+    asm!("in al, dx", out("al") in_byte, in("dx") 0x3F8u16);
+    if in_byte != 0xAE {
+        SERIAL_PRESENT = false;
+        outb(0x3FC, 0x00); // ripristina
+        return false;
+    }
+    // 3. Disable loopback, init normale
+    outb(0x3FC, 0x0F);
+    let serial: &mut SerialPort = &mut *(&raw mut SERIAL);
+    serial.init();
+    SERIAL_PRESENT = true;
+    true
+}
+
 macro_rules! serial_println {
     ($($arg:tt)*) => {
         #[allow(unused_unsafe)]
         unsafe {
-            let serial: &mut SerialPort = &mut *(&raw mut SERIAL);
-            let _ = write!(serial, $($arg)*);
-            let _ = serial.write_str("\n");
+            if SERIAL_PRESENT {
+                let serial: &mut SerialPort = &mut *(&raw mut SERIAL);
+                let _ = write!(serial, $($arg)*);
+                let _ = serial.write_str("\n");
+            }
         }
     };
 }
@@ -188,15 +221,22 @@ unsafe fn pic_disable() {
 
 pub(crate) fn serial_putc(c: u8) {
     unsafe {
-        loop {
+        if !SERIAL_PRESENT {
+            return;
+        }
+        // Timeout: mai un polling infinito su una UART (anche se presente,
+        // potrebbe incastrarsi). 10.000 tentativi, poi si rinuncia.
+        let mut timeout = 10_000u32;
+        while timeout > 0 {
             let mut lsr: u8;
             asm!("in al, dx", out("al") lsr, in("dx") 0x3fdu16);
             if lsr & 0x20 != 0 {
-                break;
+                asm!("out dx, al", in("dx") 0x3f8u16, in("al") c);
+                return;
             }
+            timeout -= 1;
             asm!("pause");
         }
-        asm!("out dx, al", in("dx") 0x3f8u16, in("al") c);
     }
 }
 
@@ -453,10 +493,12 @@ pub extern "C" fn _start() -> ! {
         // così distinguiamo il nostro kernel dal firmware.
         beep(1319, 80);
         beep(880, 80);
-        let serial = &mut *(&raw mut SERIAL);
-        serial.init();
-        boot_beep(2); // seriale ok
-        gui::diag_paint(0, 140, 0); // verde: seriale ok
+        // Rileva la UART (loopback test): se assente, niente polling mai più.
+        let serial_ok = serial_detect_and_init();
+        if serial_ok {
+            boot_beep(2); // seriale ok
+        }
+        gui::diag_paint(0, 140, 0); // verde: seriale (rilevata o no)
         kbd_led(0x01); // scroll lock on
         diag_hold();
     }
@@ -857,7 +899,7 @@ pub extern "C" fn _start() -> ! {
     // DBG v0.27 barre di fase: colore = ultima fase viva (vedi gui.rs)
     unsafe { gui::phase_bar(gui::color(255, 128, 0)); } // arancione: post-paint
 
-    // NIC Intel 82540EM — enable bus mastering, then init
+    // NIC Intel 82540EM (QEMU) — enable bus mastering, then init
     if let Some((b, s, f)) = pci::pci_find_device(0x8086, 0x100e) {
         pci::enable_bus_master(b, s, f);
         let (_, _, mmio_base) = pci::read_bars(b, s, f);
@@ -867,6 +909,90 @@ pub extern "C" fn _start() -> ! {
         e1000::E1000::init(mmio_virt);
     }
     unsafe { gui::phase_bar(gui::color(255, 255, 0)); } // giallo: PCI ok
+
+    // ── DIAG 04/10/2026 — visibile sul VIDEO (il Lenovo non ha seriale) ──
+    // SER: la UART è stata rilevata?  NET: che NIC c'è davvero?
+    // (sul T460 è Intel I219 8086:156f/1570, NON la 82540EM di QEMU)
+    unsafe {
+        gui::set_cursor(10, 195);
+        if SERIAL_PRESENT {
+            gui::print_str("SER: presente", gui::COL_GREEN);
+        } else {
+            gui::print_str("SER: assente", gui::COL_DIM);
+        }
+        gui::set_cursor(10, 207);
+        match pci::find_network_device() {
+            Some((b, sl, fnc, v, d)) => {
+                let hex = b"0123456789abcdef";
+                // "NET: BB:SS.F VVVV:DDDD" — posizione + ID
+                let buf = [
+                    b'N', b'E', b'T', b':', b' ',
+                    hex[((b >> 4) & 0xF) as usize], hex[(b & 0xF) as usize],
+                    b':',
+                    hex[((sl >> 4) & 0xF) as usize], hex[(sl & 0xF) as usize],
+                    b'.',
+                    hex[(fnc & 0xF) as usize],
+                    b' ',
+                    hex[((v >> 12) & 0xF) as usize], hex[((v >> 8) & 0xF) as usize],
+                    hex[((v >> 4) & 0xF) as usize], hex[(v & 0xF) as usize],
+                    b':',
+                    hex[((d >> 12) & 0xF) as usize], hex[((d >> 8) & 0xF) as usize],
+                    hex[((d >> 4) & 0xF) as usize], hex[(d & 0xF) as usize],
+                ];
+                if let Ok(s) = core::str::from_utf8(&buf) {
+                    gui::print_str(s, gui::COL_CYAN);
+                }
+            }
+            None => gui::print_str("NET: nessuna", gui::COL_DIM),
+        }
+
+        // ── DUMP PCI completo sul video (max 20 device, bus 0-7) ──
+        // Per l'inventario del Lenovo: Ethernet Realtek (10ec:8136) attesa
+        // dietro un root port PCIe (bus secondario, come la WiFi a 01:00.0).
+        let hex = b"0123456789abcdef";
+        let mut yy = 225usize;
+        let mut count = 0u32;
+        'dump: for bus in 0..8u8 {
+            for slot in 0..32u8 {
+                for func in 0..8u8 {
+                    let vd = pci::pci_config_read(bus, slot, func, 0);
+                    if (vd & 0xFFFF) == 0xFFFF {
+                        continue;
+                    }
+                    if count >= 20 {
+                        break 'dump;
+                    }
+                    let v = (vd & 0xFFFF) as u16;
+                    let d = ((vd >> 16) & 0xFFFF) as u16;
+                    let line = [
+                        hex[((bus >> 4) & 0xF) as usize], hex[(bus & 0xF) as usize],
+                        b':',
+                        hex[((slot >> 4) & 0xF) as usize], hex[(slot & 0xF) as usize],
+                        b'.',
+                        hex[(func & 0xF) as usize],
+                        b' ',
+                        hex[((v >> 12) & 0xF) as usize], hex[((v >> 8) & 0xF) as usize],
+                        hex[((v >> 4) & 0xF) as usize], hex[(v & 0xF) as usize],
+                        b':',
+                        hex[((d >> 12) & 0xF) as usize], hex[((d >> 8) & 0xF) as usize],
+                        hex[((d >> 4) & 0xF) as usize], hex[(d & 0xF) as usize],
+                    ];
+                    gui::set_cursor(10, yy);
+                    if let Ok(s) = core::str::from_utf8(&line) {
+                        gui::print_str(s, gui::COL_DIM);
+                    }
+                    yy += 11;
+                    count += 1;
+                }
+            }
+        }
+
+        // ── RTL810xE — probe con diagnostica progressiva (04/10/2026) ──
+        // Il probe stampa da solo su y=460 ogni passo: se il kernel si
+        // ferma, l'ultima riga visibile dice dove. Mappa il BAR prima
+        // di leggere (fix del #PF in loop del primo tentativo).
+        let _rtl = rtl::Rtl::probe();
+    }
 
     let mut tessuto = cfc::Tessuto::new();
     let mut predictor = predictor::PredictiveModule::new();
@@ -879,6 +1005,7 @@ pub extern "C" fn _start() -> ! {
     let mut mark_brain_submit = 200u64;
     let mut mark_window = 500u64;
     let mut mark_neuro = 1000u64;
+    let mut mark_beacon = 500u64; // beacon di rete (TX periodico)
     // Il corpo che cresce: pool di neuroni clonati (neurogenesi v0.24)
     // NOTA: static mut (il pool è ~510KB — non sta nello stack Limine)
     static mut NEURO_POOL: neurogenesis::NeuroPool = neurogenesis::NeuroPool::new();
@@ -981,21 +1108,23 @@ pub extern "C" fn _start() -> ! {
             unsafe { gui::draw_bar(60, 30, 24, 1.0, gui::color(255, 140, 0), gui::color(40, 0, 0)); }
         }
 
-        // Poll serial (non-blocking) — always drain FIFO
-        // FIX v0.29c: MAI drain illimitato. Su hardware senza UART a 0x3F8
-        // (i laptop moderni) la porta flottante ritorna 0xFF: DR=1 per
-        // sempre → loop infinito → il kernel non raggiunge MAI il tick.
-        // Questo era il vero blocco del Lenovo (non il timer).
-        unsafe {
-            let mut drained: u32 = 0;
-            loop {
-                let mut lsr: u8;
-                asm!("in al, dx", out("al") lsr, in("dx") 0x3fdu16);
-                if lsr & 1 == 0 || lsr == 0xFF || drained >= 64 { break; }
-                let mut byte: u8;
-                asm!("in al, dx", out("al") byte, in("dx") 0x3f8u16);
-                line_reader.push(byte);
-                drained += 1;
+        // Poll serial (non-blocking) — SOLO se la UART è presente.
+        // Il polling su porta assente è inaffidabile (0xFF = DR sempre 1):
+        // era IL blocco del Lenovo (v0.29). Design da origin/Silicea +
+        // max_drain come difesa in profondità (mai un drain illimitato).
+        if unsafe { SERIAL_PRESENT } {
+            unsafe {
+                let mut max_drain = 32;
+                loop {
+                    if max_drain == 0 { break; }
+                    max_drain -= 1;
+                    let mut lsr: u8;
+                    asm!("in al, dx", out("al") lsr, in("dx") 0x3fdu16);
+                    if lsr & 1 == 0 || lsr == 0xFF { break; }
+                    let mut byte: u8;
+                    asm!("in al, dx", out("al") byte, in("dx") 0x3f8u16);
+                    line_reader.push(byte);
+                }
             }
         }
         if diag_loop == 1 {
@@ -1471,6 +1600,15 @@ pub extern "C" fn _start() -> ! {
             }
         }
 
+        // ── Beacon di rete (04/10/2026): un frame broadcast ogni ~500 tick.
+        // Il TX non dipende dal timing del boot: appena il link è stabile,
+        // i pacchetti partono e si vedono dall'altra parte del cavo.
+        if cfc::tick_passed(500, &mut mark_beacon) {
+            unsafe {
+                rtl::tx_beacon(cfc::tick() / 500);
+            }
+        }
+
         // ── La finestra di attenzione guidata dal corpo (v0.23) ──
         // L'urgenza del chemio decide quanto guardare indietro:
         //   u=0 (stabilità) → finestra lunga (guarda il passato)
@@ -1695,10 +1833,8 @@ if cfc::tick() % 100 == 0 {
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {
     unsafe {
-        let serial = &mut *(&raw mut SERIAL);
-        let _ = write!(serial, "PANIC: ");
-        let _ = write!(serial, "{}", info);
-        let _ = serial.write_str("\n");
+        // serial_println! controlla SERIAL_PRESENT (mai scrivere su UART assente)
+        serial_println!("PANIC: {}", info);
         // 3 beep lunghi: PANIC (diagnosi acustica su hardware senza video)
         for _ in 0..3 {
             beep(440, 300); // La3, 300ms

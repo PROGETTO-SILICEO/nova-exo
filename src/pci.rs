@@ -21,8 +21,7 @@ pub struct PciDevice {
     pub header_type: u8,
 }
 
-pub fn enumerate() {
-    for slot in 0..32 {
+pub fn enumerate() {    for slot in 0..32 {
         let vendor = pci_config_read(0, slot, 0, 0);
         if (vendor & 0xFFFF) == 0xFFFF {
             continue;
@@ -51,6 +50,37 @@ pub fn enumerate() {
             }
         }
     }
+}
+
+/// Trova il primo device PCI **Ethernet** (classe 02 subclass 00 — NON WiFi
+/// che è 02:80). Ritorna (bus, slot, func, vendor, device).
+/// Scan COMPLETO bus/slot/func, bus 0-7 (le NIC stanno dietro i root port
+/// PCIe su bus secondari: sull'IdeaPad la WiFi è 01:00.0 e la Ethernet
+/// Realtek su un altro bus — fix 04/10/2026).
+pub fn find_network_device() -> Option<(u8, u8, u8, u16, u16)> {
+    for bus in 0..8u8 {
+        for slot in 0..32u8 {
+            for func in 0..8u8 {
+                let vendor = pci_config_read(bus, slot, func, 0);
+                if (vendor & 0xFFFF) == 0xFFFF {
+                    continue;
+                }
+                let class = pci_config_read(bus, slot, func, 8);
+                let dev_class = ((class >> 24) & 0xFF) as u8;
+                let dev_subclass = ((class >> 16) & 0xFF) as u8;
+                if dev_class == 0x02 && dev_subclass == 0x00 {
+                    return Some((
+                        bus,
+                        slot,
+                        func,
+                        (vendor & 0xFFFF) as u16,
+                        ((vendor >> 16) & 0xFFFF) as u16,
+                    ));
+                }
+            }
+        }
+    }
+    None
 }
 
 pub fn pci_config_read(bus: u8, slot: u8, func: u8, offset: u8) -> u32 {
@@ -86,10 +116,16 @@ pub fn enable_bus_master(bus: u8, slot: u8, func: u8) {
 
 /// Find a device by vendor:device ID. Returns (bus, slot, func) or None.
 pub fn pci_find_device(vendor: u16, device: u16) -> Option<(u8, u8, u8)> {
-    for slot in 0..32 {
-        let vd = pci_config_read(0, slot, 0, 0);
-        if (vd & 0xFFFF) as u16 == vendor && ((vd >> 16) & 0xFFFF) as u16 == device {
-            return Some((0, slot as u8, 0));
+    // Scan completo bus/slot/func (il vecchio cercava solo bus 0 func 0 —
+    // fix 04/10/2026: le NIC integrate stanno a func 6, 00:1f.6)
+    for bus in 0..5u8 {
+        for slot in 0..32u8 {
+            for func in 0..8u8 {
+                let vd = pci_config_read(bus, slot, func, 0);
+                if (vd & 0xFFFF) as u16 == vendor && ((vd >> 16) & 0xFFFF) as u16 == device {
+                    return Some((bus, slot, func));
+                }
+            }
         }
     }
     None
