@@ -7,7 +7,7 @@
 // Architettura:
 //   - Richiesta Limine framebuffer (address, pitch, width, height, bpp)
 //   - Mappatura via paging (come MMIO)
-//   - Font 8x8 embedded (font.bin, ASCII 32..126)
+//   - Font 8x8 embedded (font.bin, ASCII 0..255 — 256 glifi)
 //   - Scrittura testo + barre di stato
 //
 // Metodo Exo: un passo per tick. Il render avviene a frequenza bassa
@@ -189,7 +189,10 @@ pub unsafe fn diag_paint(r: u8, g: u8, b: u8) -> bool {
 /// Disegna un carattere 8x8 a (x,y) col colore dato
 pub unsafe fn draw_char(x: usize, y: usize, c: u8, color: u32) {
     if c < 32 || c > 126 { return; }
-    let glyph = &FONT[(c as usize - 32) * 8..(c as usize - 32) * 8 + 8];
+    // font.bin è ASCII 0..255 (256 glifi): l'indice del glifo è il codice
+    // del carattere stesso. NON sottrarre 32 (bug trovato 04/10/2026:
+    // ogni carattere a video era shiftato di 32 — "tick:" appariva "TICK").
+    let glyph = &FONT[c as usize * 8..c as usize * 8 + 8];
     for row in 0..8 {
         let bits = glyph[row];
         for col in 0..8 {
