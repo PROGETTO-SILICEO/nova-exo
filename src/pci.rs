@@ -21,8 +21,7 @@ pub struct PciDevice {
     pub header_type: u8,
 }
 
-pub fn enumerate() {
-    for slot in 0..32 {
+pub fn enumerate() {    for slot in 0..32 {
         let vendor = pci_config_read(0, slot, 0, 0);
         if (vendor & 0xFFFF) == 0xFFFF {
             continue;
@@ -51,6 +50,28 @@ pub fn enumerate() {
             }
         }
     }
+}
+
+/// Trova il primo device PCI di classe 0x02 (network): (slot, vendor, device).
+/// Diagnostica 04/10/2026: sul Lenovo (T460) la NIC è Intel I219 (8086:156f
+/// o 8086:1570), NON la 82540EM di QEMU (8086:100e) — serve sapere quale c'è.
+pub fn find_network_device() -> Option<(u8, u16, u16)> {
+    for slot in 0..32 {
+        let vendor = pci_config_read(0, slot, 0, 0);
+        if (vendor & 0xFFFF) == 0xFFFF {
+            continue;
+        }
+        let class = pci_config_read(0, slot, 0, 8);
+        let dev_class = ((class >> 24) & 0xFF) as u8;
+        if dev_class == 0x02 {
+            return Some((
+                slot as u8,
+                (vendor & 0xFFFF) as u16,
+                ((vendor >> 16) & 0xFFFF) as u16,
+            ));
+        }
+    }
+    None
 }
 
 pub fn pci_config_read(bus: u8, slot: u8, func: u8, offset: u8) -> u32 {

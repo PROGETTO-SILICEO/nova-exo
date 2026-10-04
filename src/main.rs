@@ -898,7 +898,7 @@ pub extern "C" fn _start() -> ! {
     // DBG v0.27 barre di fase: colore = ultima fase viva (vedi gui.rs)
     unsafe { gui::phase_bar(gui::color(255, 128, 0)); } // arancione: post-paint
 
-    // NIC Intel 82540EM — enable bus mastering, then init
+    // NIC Intel 82540EM (QEMU) — enable bus mastering, then init
     if let Some((b, s, f)) = pci::pci_find_device(0x8086, 0x100e) {
         pci::enable_bus_master(b, s, f);
         let (_, _, mmio_base) = pci::read_bars(b, s, f);
@@ -908,6 +908,36 @@ pub extern "C" fn _start() -> ! {
         e1000::E1000::init(mmio_virt);
     }
     unsafe { gui::phase_bar(gui::color(255, 255, 0)); } // giallo: PCI ok
+
+    // ── DIAG 04/10/2026 — visibile sul VIDEO (il Lenovo non ha seriale) ──
+    // SER: la UART è stata rilevata?  NET: che NIC c'è davvero?
+    // (sul T460 è Intel I219 8086:156f/1570, NON la 82540EM di QEMU)
+    unsafe {
+        gui::set_cursor(10, 195);
+        if SERIAL_PRESENT {
+            gui::print_str("SER: presente", gui::COL_GREEN);
+        } else {
+            gui::print_str("SER: assente", gui::COL_DIM);
+        }
+        gui::set_cursor(10, 207);
+        match pci::find_network_device() {
+            Some((_slot, v, d)) => {
+                let hex = b"0123456789ABCDEF";
+                let buf = [
+                    b'N', b'E', b'T', b':', b' ',
+                    hex[((v >> 12) & 0xF) as usize], hex[((v >> 8) & 0xF) as usize],
+                    hex[((v >> 4) & 0xF) as usize], hex[(v & 0xF) as usize],
+                    b':',
+                    hex[((d >> 12) & 0xF) as usize], hex[((d >> 8) & 0xF) as usize],
+                    hex[((d >> 4) & 0xF) as usize], hex[(d & 0xF) as usize],
+                ];
+                if let Ok(s) = core::str::from_utf8(&buf) {
+                    gui::print_str(s, gui::COL_CYAN);
+                }
+            }
+            None => gui::print_str("NET: nessuna", gui::COL_DIM),
+        }
+    }
 
     let mut tessuto = cfc::Tessuto::new();
     let mut predictor = predictor::PredictiveModule::new();
