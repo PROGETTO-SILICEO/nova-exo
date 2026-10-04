@@ -1661,6 +1661,11 @@ pub extern "C" fn _start() -> ! {
             write_str(if utile { "si" } else { "no" });
             write_str(" err=");
             write_f32(err_med);
+            // IMPARATO: cambi di scelta dall'esperienza + esplorazioni (step 5).
+            write_str(" imparato=");
+            write_u32(executive.preferenza.cambi);
+            write_str(" esplorato=");
+            write_u32(executive.preferenza.esplorazioni);
             write_str("\n");
             prev_pf_err = pr.error;
         }
