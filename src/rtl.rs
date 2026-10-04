@@ -20,6 +20,12 @@ const TX_DESC_LO: u64 = 0x20;
 const TX_DESC_HI: u64 = 0x24;
 const CHIP_CMD: u64 = 0x37;
 const TX_POLL: u64 = 0x38;
+const PHYAR: u64 = 0x60; // PHY access register (bit31=busy, 16-20=reg, 0-15=data)
+
+// PHY registers (standard MII)
+const PHY_BMCR: u8 = 0; // Basic Mode Control: bit11=power down, bit9=restart autoneg
+const PHY_BMSR: u8 = 1; // Basic Mode Status: bit2=Link Status
+const PHY_ANAR: u8 = 4; // Auto-Neg Advertisement
 
 // Descriptor flags (opts1)
 const DESC_OWN: u32 = 1 << 31; // owned by NIC
@@ -228,11 +234,27 @@ impl Rtl {
             gui::print_str(s, color4);
         }
 
-        // ── PRIMO PACCHETTO (04/10/2026) ──
-        // Frame broadcast "EXO parla". Verifica esterna: la MAC table dello
-        // switch (SuperStack 4200) o un packet capture da un PC.
+        // ── PHY + PRIMO PACCHETTO (04/10/2026) ──
+        // La PHY può essere in power-down dopo il reset → link assente →
+        // il TX esce dal MAC ma non dal cavo. Prima: link check + wake.
         let mut tx_result: u8 = 2; // 0=ok, 1=timeout, 2=skip
+        let mut link_state: u8 = 0; // 0=down, 1=up, 2=riattivata
         if reset_ok {
+            let mut up = Rtl::link_status(mmio);
+            if up {
+                link_state = 1;
+            } else {
+                Rtl::phy_wake(mmio);
+                // attesa autoneg (max ~600k giri ≈ qualche secondo)
+                for _ in 0..600_000u32 {
+                    if Rtl::link_status(mmio) {
+                        up = true;
+                        break;
+                    }
+                }
+                link_state = if up { 2 } else { 0 };
+            }
+
             Rtl::tx_init(mmio);
             let mut frame = [0u8; 60];
             for b in frame.iter_mut().take(6) {
@@ -255,6 +277,12 @@ impl Rtl {
             1 => gui::print_str("TX: timeout (DescOwn non pulito)", gui::COL_RED),
             _ => gui::print_str("TX: skip (no reset)", gui::COL_DIM),
         }
+        gui::set_cursor(10, 515);
+        match link_state {
+            1 => gui::print_str("LINK: up (già attivo)", gui::COL_GREEN),
+            2 => gui::print_str("LINK: riattivato (autoneg)", gui::COL_GREEN),
+            _ => gui::print_str("LINK: down", gui::COL_RED),
+        }
 
         Some(Rtl {
             mmio,
@@ -271,6 +299,53 @@ impl Rtl {
         let all_zero = self.mac.iter().all(|&b| b == 0x00);
         let all_ff = self.mac.iter().all(|&b| b == 0xFF);
         !all_zero && !all_ff
+    }
+
+    /// Legge un registro PHY via PHYAR (0x60). Ritorna 0xFFFF se timeout.
+    pub unsafe fn phy_read(mmio: u64, reg: u8) -> u16 {
+        core::ptr::write_volatile(
+            (mmio + PHYAR) as *mut u32,
+            0x8000_0000 | ((reg as u32) << 16),
+        );
+        for _ in 0..100_000u32 {
+            let v = core::ptr::read_volatile((mmio + PHYAR) as *const u32);
+            if v & 0x8000_0000 == 0 {
+                return (v & 0xFFFF) as u16;
+            }
+        }
+        0xFFFF
+    }
+
+    /// Scrive un registro PHY via PHYAR (0x60).
+    pub unsafe fn phy_write(mmio: u64, reg: u8, val: u16) {
+        core::ptr::write_volatile(
+            (mmio + PHYAR) as *mut u32,
+            0x8000_0000 | ((reg as u32) << 16) | (val as u32),
+        );
+        for _ in 0..100_000u32 {
+            let v = core::ptr::read_volatile((mmio + PHYAR) as *const u32);
+            if v & 0x8000_0000 == 0 {
+                return;
+            }
+        }
+    }
+
+    /// Il link è su? (BMSR bit 2). E attende l'autoneg fino a ~3s se richiesto.
+    pub unsafe fn link_status(mmio: u64) -> bool {
+        let bmsr = Self::phy_read(mmio, PHY_BMSR);
+        bmsr & 0x0004 != 0
+    }
+
+    /// Riattiva la PHY: power-up + autoneg su tutte le velocità 10/100.
+    pub unsafe fn phy_wake(mmio: u64) {
+        // BMCR: clear power-down (bit11), abilita autoneg (bit12)
+        let bmcr = Self::phy_read(mmio, PHY_BMCR);
+        Self::phy_write(mmio, PHY_BMCR, (bmcr & !0x0800) | 0x1000);
+        // ANAR: advertise 100FD|100HD|10FD|10HD (0x01E1)
+        Self::phy_write(mmio, PHY_ANAR, 0x01E1);
+        // Restart autoneg (bit9) + autoneg enable
+        let bmcr2 = Self::phy_read(mmio, PHY_BMCR);
+        Self::phy_write(mmio, PHY_BMCR, bmcr2 | 0x0200 | 0x1000);
     }
 
     /// Prepara il TX: descriptor ring + config + CmdTxEnb.
