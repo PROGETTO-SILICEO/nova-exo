@@ -92,7 +92,18 @@ impl Rtl {
         let chip_cmd = core::ptr::read_volatile((mmio + 0x37) as *const u8);
         let intr_status = core::ptr::read_volatile((mmio + 0x3e) as *const u16);
 
-        // Display finale: "RTL: MAC=xx:xx:xx:xx:xx:xx CMD=xx"
+        // Registri di identificazione aggiuntivi (debug 04/10 v2):
+        // se questi NON sembrano Realtek, stiamo leggendo dal posto sbagliato.
+        // Attesi su chip sano: Cfg9346 (0x50) ∈ {0x00, 0xC0}; TxConfig (0x40)
+        // valori bassi noti; RxMaxSize (0xDA) ~ 0x1FFF o simile.
+        let cfg9346 = core::ptr::read_volatile((mmio + 0x50) as *const u8);
+        let tx_config = core::ptr::read_volatile((mmio + 0x40) as *const u32);
+        let rx_max = core::ptr::read_volatile((mmio + 0xda) as *const u16);
+
+        // Pulisci la riga PRIMA del risultato (fix overlap dei print)
+        diag("                                        ", gui::COL_DIM);
+
+        // Display: riga 1 = MAC + CMD; riga 2 = registri chiave
         let hex = b"0123456789abcdef";
         let mut buf: [u8; 34] = *b"RTL: MAC=00:00:00:00:00:00 CMD=00 ";
         for i in 0..6 {
@@ -109,6 +120,33 @@ impl Rtl {
         let color = if all_zero || all_ff { gui::COL_RED } else { gui::COL_GREEN };
         if let Ok(s) = core::str::from_utf8(&buf) {
             diag(s, color);
+        }
+
+        // Riga 2: "REG: 50=xx 40=xxxxxxxx da=xxxx" (valori grezzi)
+        let mut buf2: [u8; 36] = *b"REG: 50=00 40=00000000 da=0000      ";
+        buf2[8] = hex[(cfg9346 >> 4) as usize];
+        buf2[9] = hex[(cfg9346 & 0xF) as usize];
+        for i in 0..8 {
+            buf2[14 + i] = hex[((tx_config >> (4 * (7 - i))) & 0xF) as usize];
+        }
+        buf2[26] = hex[(rx_max >> 12) as usize & 0xF];
+        buf2[27] = hex[(rx_max >> 8) as usize & 0xF];
+        buf2[28] = hex[(rx_max >> 4) as usize & 0xF];
+        buf2[29] = hex[(rx_max & 0xF) as usize];
+        if let Ok(s) = core::str::from_utf8(&buf2) {
+            gui::set_cursor(10, 471);
+            gui::print_str(s, gui::COL_CYAN);
+        }
+
+        // Riga 3: BAR scelto + valore fisico
+        let mut buf3: [u8; 31] = *b"BAR=00000000 (index=0)         ";
+        for i in 0..8 {
+            buf3[4 + i] = hex[((mmio_phys >> (4 * (7 - i))) & 0xF) as usize];
+        }
+        buf3[21] = b'0' + bar_index;
+        if let Ok(s) = core::str::from_utf8(&buf3) {
+            gui::set_cursor(10, 482);
+            gui::print_str(s, gui::COL_CYAN);
         }
 
         Some(Rtl {
