@@ -23,7 +23,13 @@ pub struct Rtl {
 }
 
 /// Mostra una stringa alla riga diagnostica (y=460) — visibile sul video.
+/// Pulisce sempre 48 caratteri prima (mai overlap tra messaggi successivi).
 unsafe fn diag(s: &str, color: u32) {
+    gui::set_cursor(10, 460);
+    gui::print_str(
+        "                                                ",
+        gui::color(200, 0, 0),
+    );
     gui::set_cursor(10, 460);
     gui::print_str(s, color);
 }
