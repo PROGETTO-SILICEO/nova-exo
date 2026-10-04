@@ -13,6 +13,30 @@ use crate::gui;
 use crate::paging;
 use crate::pci;
 
+// ── Registri (famiglia r8169) ──
+const CFG_9346: u64 = 0x50; // unlock config (0xC0 = unlock, 0x00 = lock)
+const TX_CONFIG: u64 = 0x40;
+const TX_DESC_LO: u64 = 0x20;
+const TX_DESC_HI: u64 = 0x24;
+const CHIP_CMD: u64 = 0x37;
+const TX_POLL: u64 = 0x38;
+
+// Descriptor flags (opts1)
+const DESC_OWN: u32 = 1 << 31; // owned by NIC
+const DESC_RING_END: u32 = 1 << 30;
+const DESC_FIRST_FRAG: u32 = 1 << 29;
+const DESC_LAST_FRAG: u32 = 1 << 28;
+
+/// TX ring: 16 descriptor × 16 byte = 256 byte (allineato 256, requisito chip)
+#[repr(align(256))]
+struct Aligned256([u8; 256]);
+static mut TX_RING: Aligned256 = Aligned256([0u8; 256]);
+
+/// Buffer dati TX (il frame da spedire)
+#[repr(align(64))]
+struct Aligned2048([u8; 2048]);
+static mut TX_BUF: Aligned2048 = Aligned2048([0u8; 2048]);
+
 pub struct Rtl {
     pub mmio: u64,
     pub mmio_phys: u64,
@@ -204,6 +228,34 @@ impl Rtl {
             gui::print_str(s, color4);
         }
 
+        // ── PRIMO PACCHETTO (04/10/2026) ──
+        // Frame broadcast "EXO parla". Verifica esterna: la MAC table dello
+        // switch (SuperStack 4200) o un packet capture da un PC.
+        let mut tx_result: u8 = 2; // 0=ok, 1=timeout, 2=skip
+        if reset_ok {
+            Rtl::tx_init(mmio);
+            let mut frame = [0u8; 60];
+            for b in frame.iter_mut().take(6) {
+                *b = 0xFF; // dest: broadcast
+            }
+            frame[6..12].copy_from_slice(&mac2); // src: il nostro MAC
+            frame[12] = 0x88;
+            frame[13] = 0xB5; // ethertype: experimental (locale)
+            let msg = b"EXO: PRIMO PACCHETTO DAL METALLO";
+            let n = msg.len().min(60 - 14);
+            frame[14..14 + n].copy_from_slice(&msg[..n]);
+            tx_result = if Rtl::tx_frame(mmio, &frame) { 0 } else { 1 };
+        }
+        gui::set_cursor(10, 504);
+        match tx_result {
+            0 => gui::print_str(
+                "TX: inviato (60B) - guarda lo switch!",
+                gui::COL_GREEN,
+            ),
+            1 => gui::print_str("TX: timeout (DescOwn non pulito)", gui::COL_RED),
+            _ => gui::print_str("TX: skip (no reset)", gui::COL_DIM),
+        }
+
         Some(Rtl {
             mmio,
             mmio_phys,
@@ -219,5 +271,59 @@ impl Rtl {
         let all_zero = self.mac.iter().all(|&b| b == 0x00);
         let all_ff = self.mac.iter().all(|&b| b == 0xFF);
         !all_zero && !all_ff
+    }
+
+    /// Prepara il TX: descriptor ring + config + CmdTxEnb.
+    /// (statica: usabile prima di costruire la struct)
+    pub unsafe fn tx_init(mmio: u64) -> bool {
+        let ring_phys = crate::virt_to_phys(&raw const TX_RING as *const _ as u64);
+        let buf_phys = crate::virt_to_phys(&raw const TX_BUF as *const _ as u64);
+
+        // Descriptor 0: addr = buffer fisico; opts1=0 (non owned = libero)
+        let d = (&raw mut TX_RING.0) as *mut u32;
+        core::ptr::write_volatile(d, 0);
+        core::ptr::write_volatile(d.add(1), 0);
+        core::ptr::write_volatile(d.add(2) as *mut u64, buf_phys);
+
+        // Cfg9346 unlock → scrivi config → lock
+        core::ptr::write_volatile((mmio + CFG_9346) as *mut u8, 0xC0);
+        // TxConfig: IFG standard + MXDMA unlimited (valore canonico)
+        core::ptr::write_volatile((mmio + TX_CONFIG) as *mut u32, 0x0300_0700);
+        // Indirizzo del ring
+        core::ptr::write_volatile((mmio + TX_DESC_LO) as *mut u32, ring_phys as u32);
+        core::ptr::write_volatile((mmio + TX_DESC_HI) as *mut u32, (ring_phys >> 32) as u32);
+        // Abilita il trasmettitore (CmdTxEnb)
+        let cmd = core::ptr::read_volatile((mmio + CHIP_CMD) as *const u8);
+        core::ptr::write_volatile((mmio + CHIP_CMD) as *mut u8, cmd | 0x04);
+        core::ptr::write_volatile((mmio + CFG_9346) as *mut u8, 0x00);
+        true
+    }
+
+    /// Trasmette un frame. Ritorna true se il NIC l'ha preso in carico
+    /// (DescOwn pulito dal chip = trasmesso).
+    pub unsafe fn tx_frame(mmio: u64, frame: &[u8]) -> bool {
+        if frame.is_empty() || frame.len() > 1518 {
+            return false;
+        }
+        // copia il frame nel buffer DMA
+        let buf = (&raw mut TX_BUF.0) as *mut u8;
+        for (i, &b) in frame.iter().enumerate() {
+            core::ptr::write_volatile(buf.add(i), b);
+        }
+        // arma il descriptor 0: DescOwn|First|Last|len|RingEnd
+        let d = (&raw mut TX_RING.0) as *mut u32;
+        let opts1 =
+            DESC_OWN | DESC_FIRST_FRAG | DESC_LAST_FRAG | DESC_RING_END | frame.len() as u32;
+        core::sync::atomic::fence(core::sync::atomic::Ordering::Release);
+        core::ptr::write_volatile(d, opts1);
+        // poke: TxPoll = NPQ (normal priority queue)
+        core::ptr::write_volatile((mmio + TX_POLL) as *mut u8, 0x40);
+        // attesa: il chip pulisce DescOwn quando ha finito
+        for _ in 0..2_000_000u32 {
+            if core::ptr::read_volatile(d as *const u32) & DESC_OWN == 0 {
+                return true;
+            }
+        }
+        false
     }
 }
