@@ -43,6 +43,46 @@ static mut TX_RING: Aligned256 = Aligned256([0u8; 256]);
 struct Aligned2048([u8; 2048]);
 static mut TX_BUF: Aligned2048 = Aligned2048([0u8; 2048]);
 
+/// Stato globale per il beacon periodico dal loop principale.
+pub static mut RTL_MMIO: u64 = 0;
+pub static mut RTL_PRESENT: bool = false;
+
+/// Beacon di rete (04/10/2026): frame broadcast con contatore, chiamabile
+/// dal loop ogni N tick. Robusto: il TX non dipende dal timing del boot.
+pub unsafe fn tx_beacon(counter: u64) -> bool {
+    if !RTL_PRESENT || RTL_MMIO == 0 {
+        return false;
+    }
+    let mut frame = [0u8; 60];
+    for b in frame.iter_mut().take(6) {
+        *b = 0xFF; // broadcast
+    }
+    frame[6..12].copy_from_slice(&[0xc8, 0x5b, 0x76, 0xe0, 0xe0, 0x01]); // firma EXO-01
+    frame[12] = 0x88;
+    frame[13] = 0xB5;
+    let msg = b"EXO TICK ";
+    frame[14..23].copy_from_slice(msg);
+    // contatore decimale in coda
+    let mut n = counter;
+    let mut digits = [0u8; 20];
+    let mut len = 0;
+    if n == 0 {
+        digits[0] = b'0';
+        len = 1;
+    }
+    while n > 0 && len < 20 {
+        digits[len] = b'0' + (n % 10) as u8;
+        n /= 10;
+        len += 1;
+    }
+    for i in 0..len {
+        if 23 + i < 60 {
+            frame[23 + i] = digits[len - 1 - i];
+        }
+    }
+    Rtl::tx_frame(RTL_MMIO, &frame)
+}
+
 pub struct Rtl {
     pub mmio: u64,
     pub mmio_phys: u64,
@@ -256,6 +296,8 @@ impl Rtl {
             }
 
             Rtl::tx_init(mmio);
+            RTL_MMIO = mmio;
+            RTL_PRESENT = true; // abilita il beacon periodico dal loop
             let mut frame = [0u8; 60];
             for b in frame.iter_mut().take(6) {
                 *b = 0xFF; // dest: broadcast

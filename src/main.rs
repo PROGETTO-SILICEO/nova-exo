@@ -1005,6 +1005,7 @@ pub extern "C" fn _start() -> ! {
     let mut mark_brain_submit = 200u64;
     let mut mark_window = 500u64;
     let mut mark_neuro = 1000u64;
+    let mut mark_beacon = 500u64; // beacon di rete (TX periodico)
     // Il corpo che cresce: pool di neuroni clonati (neurogenesi v0.24)
     // NOTA: static mut (il pool è ~510KB — non sta nello stack Limine)
     static mut NEURO_POOL: neurogenesis::NeuroPool = neurogenesis::NeuroPool::new();
@@ -1596,6 +1597,15 @@ pub extern "C" fn _start() -> ! {
                 write_str("NEURO:tot nascite="); write_u64_serial(neuro_pool.births);
                 write_str(" potature="); write_u64_serial(neuro_pool.prunes);
                 write_str("\n");
+            }
+        }
+
+        // ── Beacon di rete (04/10/2026): un frame broadcast ogni ~500 tick.
+        // Il TX non dipende dal timing del boot: appena il link è stabile,
+        // i pacchetti partono e si vedono dall'altra parte del cavo.
+        if cfc::tick_passed(500, &mut mark_beacon) {
+            unsafe {
+                rtl::tx_beacon(cfc::tick() / 500);
             }
         }
 
