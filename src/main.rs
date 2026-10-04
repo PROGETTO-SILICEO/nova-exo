@@ -132,13 +132,45 @@ static FASCI: [cfc::AxonBundle; 2] = [
 
 static mut SERIAL: SerialPort = unsafe { SerialPort::new(0x3F8) };
 
+/// La UART a 0x3F8 esiste su questa macchina?
+/// Rilevata all'avvio con il test di loopback (design da origin/Silicea,
+/// adottato 04/10/2026): su hardware senza UART la porta flottante
+/// risponde 0xFF e QUALSIASI polling (drain, THRE) è inaffidabile.
+/// Con SERIAL_PRESENT=false: niente print, niente drain, niente polling.
+pub(crate) static mut SERIAL_PRESENT: bool = false;
+
+/// Test di loopback hardware della 16550: scrive un byte in modalità
+/// loopback e lo rilegge. Se non torna, la UART non c'è.
+/// Ritorna true se la seriale è presente e inizializzata.
+pub unsafe fn serial_detect_and_init() -> bool {
+    // 1. Loopback mode (MCR bit 4 + OUT2/RTS/DTR)
+    outb(0x3FC, 0x1E);
+    // 2. Write test byte, read it back
+    outb(0x3F8, 0xAE);
+    let mut in_byte: u8;
+    asm!("in al, dx", out("al") in_byte, in("dx") 0x3F8u16);
+    if in_byte != 0xAE {
+        SERIAL_PRESENT = false;
+        outb(0x3FC, 0x00); // ripristina
+        return false;
+    }
+    // 3. Disable loopback, init normale
+    outb(0x3FC, 0x0F);
+    let serial: &mut SerialPort = &mut *(&raw mut SERIAL);
+    serial.init();
+    SERIAL_PRESENT = true;
+    true
+}
+
 macro_rules! serial_println {
     ($($arg:tt)*) => {
         #[allow(unused_unsafe)]
         unsafe {
-            let serial: &mut SerialPort = &mut *(&raw mut SERIAL);
-            let _ = write!(serial, $($arg)*);
-            let _ = serial.write_str("\n");
+            if SERIAL_PRESENT {
+                let serial: &mut SerialPort = &mut *(&raw mut SERIAL);
+                let _ = write!(serial, $($arg)*);
+                let _ = serial.write_str("\n");
+            }
         }
     };
 }
@@ -188,15 +220,22 @@ unsafe fn pic_disable() {
 
 pub(crate) fn serial_putc(c: u8) {
     unsafe {
-        loop {
+        if !SERIAL_PRESENT {
+            return;
+        }
+        // Timeout: mai un polling infinito su una UART (anche se presente,
+        // potrebbe incastrarsi). 10.000 tentativi, poi si rinuncia.
+        let mut timeout = 10_000u32;
+        while timeout > 0 {
             let mut lsr: u8;
             asm!("in al, dx", out("al") lsr, in("dx") 0x3fdu16);
             if lsr & 0x20 != 0 {
-                break;
+                asm!("out dx, al", in("dx") 0x3f8u16, in("al") c);
+                return;
             }
+            timeout -= 1;
             asm!("pause");
         }
-        asm!("out dx, al", in("dx") 0x3f8u16, in("al") c);
     }
 }
 
@@ -453,10 +492,12 @@ pub extern "C" fn _start() -> ! {
         // così distinguiamo il nostro kernel dal firmware.
         beep(1319, 80);
         beep(880, 80);
-        let serial = &mut *(&raw mut SERIAL);
-        serial.init();
-        boot_beep(2); // seriale ok
-        gui::diag_paint(0, 140, 0); // verde: seriale ok
+        // Rileva la UART (loopback test): se assente, niente polling mai più.
+        let serial_ok = serial_detect_and_init();
+        if serial_ok {
+            boot_beep(2); // seriale ok
+        }
+        gui::diag_paint(0, 140, 0); // verde: seriale (rilevata o no)
         kbd_led(0x01); // scroll lock on
         diag_hold();
     }
@@ -981,21 +1022,23 @@ pub extern "C" fn _start() -> ! {
             unsafe { gui::draw_bar(60, 30, 24, 1.0, gui::color(255, 140, 0), gui::color(40, 0, 0)); }
         }
 
-        // Poll serial (non-blocking) — always drain FIFO
-        // FIX v0.29c: MAI drain illimitato. Su hardware senza UART a 0x3F8
-        // (i laptop moderni) la porta flottante ritorna 0xFF: DR=1 per
-        // sempre → loop infinito → il kernel non raggiunge MAI il tick.
-        // Questo era il vero blocco del Lenovo (non il timer).
-        unsafe {
-            let mut drained: u32 = 0;
-            loop {
-                let mut lsr: u8;
-                asm!("in al, dx", out("al") lsr, in("dx") 0x3fdu16);
-                if lsr & 1 == 0 || lsr == 0xFF || drained >= 64 { break; }
-                let mut byte: u8;
-                asm!("in al, dx", out("al") byte, in("dx") 0x3f8u16);
-                line_reader.push(byte);
-                drained += 1;
+        // Poll serial (non-blocking) — SOLO se la UART è presente.
+        // Il polling su porta assente è inaffidabile (0xFF = DR sempre 1):
+        // era IL blocco del Lenovo (v0.29). Design da origin/Silicea +
+        // max_drain come difesa in profondità (mai un drain illimitato).
+        if unsafe { SERIAL_PRESENT } {
+            unsafe {
+                let mut max_drain = 32;
+                loop {
+                    if max_drain == 0 { break; }
+                    max_drain -= 1;
+                    let mut lsr: u8;
+                    asm!("in al, dx", out("al") lsr, in("dx") 0x3fdu16);
+                    if lsr & 1 == 0 || lsr == 0xFF { break; }
+                    let mut byte: u8;
+                    asm!("in al, dx", out("al") byte, in("dx") 0x3f8u16);
+                    line_reader.push(byte);
+                }
             }
         }
         if diag_loop == 1 {
@@ -1695,10 +1738,8 @@ if cfc::tick() % 100 == 0 {
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {
     unsafe {
-        let serial = &mut *(&raw mut SERIAL);
-        let _ = write!(serial, "PANIC: ");
-        let _ = write!(serial, "{}", info);
-        let _ = serial.write_str("\n");
+        // serial_println! controlla SERIAL_PRESENT (mai scrivere su UART assente)
+        serial_println!("PANIC: {}", info);
         // 3 beep lunghi: PANIC (diagnosi acustica su hardware senza video)
         for _ in 0..3 {
             beep(440, 300); // La3, 300ms
