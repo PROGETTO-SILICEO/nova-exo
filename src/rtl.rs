@@ -1,13 +1,16 @@
-//! RTL810xE — Realtek Fast Ethernet (famiglia r8169). Primo step: probe.
+//! RTL810xE — Realtek Fast Ethernet (famiglia r8169). Probe con diagnostica.
 //!
 //! Riferimenti (04/10/2026): driver r8169 Rust no_std (chitti kernel),
 //! wiki.osdev.org/RTL8169, Linux r8169_main.c.
 //! Sull'IdeaPad 110-15ACL la scheda è a 02:00.0 (10ec:8136), dietro il
 //! root port PCIe. QEMU NON emula questo chip: il banco di test è il Lenovo.
 //!
-//! Step 1 (questo file): la scheda risponde? → lettura MAC (offset 0x00)
-//! + stato ChipCmd (0x37). Nessuna scrittura: solo letture, zero rischio.
+//! Lezione 04/10 (primo tentativo): il mapping MMIO di paging::init è fisso
+//! (5 zone di QEMU) → la lettura del BAR reale faceva #PF in loop. Ora:
+//! si legge il BAR dal config, si MAPPA dinamicamente, poi si legge.
 
+use crate::gui;
+use crate::paging;
 use crate::pci;
 
 pub struct Rtl {
@@ -19,16 +22,43 @@ pub struct Rtl {
     pub intr_status: u16,
 }
 
-impl Rtl {
-    /// Cerca la RTL810xE (10ec:8136), abilita bus master, trova il BAR
-    /// memory, legge MAC + stato. Ritorna None se la scheda non c'è o il
-    /// BAR non decodifica.
-    pub unsafe fn probe() -> Option<Rtl> {
-        let (bus, slot, func) = pci::pci_find_device(0x10ec, 0x8136)?;
-        pci::enable_bus_master(bus, slot, func);
+/// Mostra una stringa alla riga diagnostica (y=460) — visibile sul video.
+unsafe fn diag(s: &str, color: u32) {
+    gui::set_cursor(10, 460);
+    gui::print_str(s, color);
+}
 
-        // Primo BAR che decodifica come memory (le PCIe parts usano BAR2,
-        // ma proviamo 2 → 1 → 0 come fa chitti).
+/// Mostra "RTL: BAR=XXXXXXXX" (hex del valore fisico del BAR).
+unsafe fn diag_bar(prefix: &str, val: u64) {
+    let hex = b"0123456789abcdef";
+    let mut buf: [u8; 28] = *b"RTL: BAR=00000000           ";
+    // prefix override: teniamo il formato fisso, il prefisso è nel commento
+    let _ = prefix;
+    for i in 0..8 {
+        buf[9 + i] = hex[((val >> (4 * (7 - i))) & 0xF) as usize];
+    }
+    if let Ok(s) = core::str::from_utf8(&buf) {
+        diag(s, gui::COL_CYAN);
+    }
+}
+
+impl Rtl {
+    /// Cerca la RTL810xE, mappa il BAR, legge MAC + stato. Ogni passo è
+    /// mostrato sul video: se il kernel si ferma, l'ultima riga dice dove.
+    pub unsafe fn probe() -> Option<Rtl> {
+        diag("RTL: cerco 10ec:8136...", gui::COL_DIM);
+
+        let (bus, slot, func) = match pci::pci_find_device(0x10ec, 0x8136) {
+            Some(t) => t,
+            None => {
+                diag("RTL: assente                    ", gui::COL_DIM);
+                return None;
+            }
+        };
+        pci::enable_bus_master(bus, slot, func);
+        diag("RTL: trovata, bus master on", gui::COL_DIM);
+
+        // Primo BAR che decodifica come memory (PCIe parts: BAR2 → 1 → 0)
         let mut mmio_phys: u64 = 0;
         let mut bar_index: u8 = 0;
         for idx in [2u8, 1, 0] {
@@ -40,20 +70,46 @@ impl Rtl {
             }
         }
         if mmio_phys == 0 {
+            diag("RTL: nessun BAR memory", gui::COL_RED);
             return None;
         }
+        diag_bar("", mmio_phys);
 
-        let mmio = crate::paging::mmio_virt_addr(mmio_phys);
+        // Mapping DINAMICO della pagina del BAR (fix 04/10)
+        if !paging::map_mmio_page(mmio_phys) {
+            diag("RTL: BAR fuori range mappabile", gui::COL_RED);
+            return None;
+        }
+        diag("RTL: mappata, leggo MAC...", gui::COL_DIM);
+
+        let mmio = paging::mmio_virt_addr(mmio_phys);
 
         // MAC address: 6 byte a offset 0x00 (IDR0..IDR5)
         let mut mac = [0u8; 6];
         for (i, m) in mac.iter_mut().enumerate() {
             *m = core::ptr::read_volatile((mmio + i as u64) as *const u8);
         }
-
-        // Stato: ChipCmd (0x37, u8) e IntrStatus (0x3e, u16)
         let chip_cmd = core::ptr::read_volatile((mmio + 0x37) as *const u8);
         let intr_status = core::ptr::read_volatile((mmio + 0x3e) as *const u16);
+
+        // Display finale: "RTL: MAC=xx:xx:xx:xx:xx:xx CMD=xx"
+        let hex = b"0123456789abcdef";
+        let mut buf: [u8; 34] = *b"RTL: MAC=00:00:00:00:00:00 CMD=00 ";
+        for i in 0..6 {
+            buf[9 + i * 3] = hex[(mac[i] >> 4) as usize];
+            buf[10 + i * 3] = hex[(mac[i] & 0xF) as usize];
+            if i < 5 {
+                buf[11 + i * 3] = b':';
+            }
+        }
+        buf[31] = hex[(chip_cmd >> 4) as usize];
+        buf[32] = hex[(chip_cmd & 0xF) as usize];
+        let all_zero = mac.iter().all(|&b| b == 0x00);
+        let all_ff = mac.iter().all(|&b| b == 0xFF);
+        let color = if all_zero || all_ff { gui::COL_RED } else { gui::COL_GREEN };
+        if let Ok(s) = core::str::from_utf8(&buf) {
+            diag(s, color);
+        }
 
         Some(Rtl {
             mmio,

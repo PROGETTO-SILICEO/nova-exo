@@ -987,32 +987,11 @@ pub extern "C" fn _start() -> ! {
             }
         }
 
-        // ── RTL810xE — primo probe (04/10/2026): la scheda risponde? ──
-        // Solo LETTURE (MAC + stato): zero rischio. Il MAC plausibile
-        // (non 0x00/0xFF) = il metallo parla.
-        gui::set_cursor(10, 460);
-        match rtl::Rtl::probe() {
-            Some(r) => {
-                let hex = b"0123456789abcdef";
-                let mut buf: [u8; 34] = *b"RTL: MAC=00:00:00:00:00:00 CMD=00 ";
-                for i in 0..6 {
-                    buf[9 + i * 3] = hex[(r.mac[i] >> 4) as usize];
-                    buf[10 + i * 3] = hex[(r.mac[i] & 0xF) as usize];
-                    if i < 5 {
-                        buf[11 + i * 3] = b':';
-                    }
-                }
-                buf[31] = hex[(r.chip_cmd >> 4) as usize];
-                buf[32] = hex[(r.chip_cmd & 0xF) as usize];
-                if let Ok(s) = core::str::from_utf8(&buf) {
-                    gui::print_str(
-                        s,
-                        if r.mac_plausibile() { gui::COL_GREEN } else { gui::COL_RED },
-                    );
-                }
-            }
-            None => gui::print_str("RTL: assente", gui::COL_DIM),
-        }
+        // ── RTL810xE — probe con diagnostica progressiva (04/10/2026) ──
+        // Il probe stampa da solo su y=460 ogni passo: se il kernel si
+        // ferma, l'ultima riga visibile dice dove. Mappa il BAR prima
+        // di leggere (fix del #PF in loop del primo tentativo).
+        let _rtl = rtl::Rtl::probe();
     }
 
     let mut tessuto = cfc::Tessuto::new();
