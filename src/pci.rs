@@ -52,23 +52,31 @@ pub fn enumerate() {    for slot in 0..32 {
     }
 }
 
-/// Trova il primo device PCI di classe 0x02 (network): (slot, vendor, device).
-/// Diagnostica 04/10/2026: sul Lenovo (T460) la NIC è Intel I219 (8086:156f
-/// o 8086:1570), NON la 82540EM di QEMU (8086:100e) — serve sapere quale c'è.
-pub fn find_network_device() -> Option<(u8, u16, u16)> {
-    for slot in 0..32 {
-        let vendor = pci_config_read(0, slot, 0, 0);
-        if (vendor & 0xFFFF) == 0xFFFF {
-            continue;
-        }
-        let class = pci_config_read(0, slot, 0, 8);
-        let dev_class = ((class >> 24) & 0xFF) as u8;
-        if dev_class == 0x02 {
-            return Some((
-                slot as u8,
-                (vendor & 0xFFFF) as u16,
-                ((vendor >> 16) & 0xFFFF) as u16,
-            ));
+/// Trova il primo device PCI di classe 0x02 (network).
+/// Ritorna (bus, slot, func, vendor, device).
+/// Scan COMPLETO bus/slot/func: la I219 è tipicamente a 00:1f.6 (funzione 6)
+/// — il vecchio scan a sola func 0/bus 0 la mancava (bug trovato 04/10/2026
+/// sul Lenovo: "NET: nessuna" mentre la scheda c'è).
+pub fn find_network_device() -> Option<(u8, u8, u8, u16, u16)> {
+    for bus in 0..5u8 {
+        for slot in 0..32u8 {
+            for func in 0..8u8 {
+                let vendor = pci_config_read(bus, slot, func, 0);
+                if (vendor & 0xFFFF) == 0xFFFF {
+                    continue;
+                }
+                let class = pci_config_read(bus, slot, func, 8);
+                let dev_class = ((class >> 24) & 0xFF) as u8;
+                if dev_class == 0x02 {
+                    return Some((
+                        bus,
+                        slot,
+                        func,
+                        (vendor & 0xFFFF) as u16,
+                        ((vendor >> 16) & 0xFFFF) as u16,
+                    ));
+                }
+            }
         }
     }
     None
@@ -107,10 +115,16 @@ pub fn enable_bus_master(bus: u8, slot: u8, func: u8) {
 
 /// Find a device by vendor:device ID. Returns (bus, slot, func) or None.
 pub fn pci_find_device(vendor: u16, device: u16) -> Option<(u8, u8, u8)> {
-    for slot in 0..32 {
-        let vd = pci_config_read(0, slot, 0, 0);
-        if (vd & 0xFFFF) as u16 == vendor && ((vd >> 16) & 0xFFFF) as u16 == device {
-            return Some((0, slot as u8, 0));
+    // Scan completo bus/slot/func (il vecchio cercava solo bus 0 func 0 —
+    // fix 04/10/2026: le NIC integrate stanno a func 6, 00:1f.6)
+    for bus in 0..5u8 {
+        for slot in 0..32u8 {
+            for func in 0..8u8 {
+                let vd = pci_config_read(bus, slot, func, 0);
+                if (vd & 0xFFFF) as u16 == vendor && ((vd >> 16) & 0xFFFF) as u16 == device {
+                    return Some((bus, slot, func));
+                }
+            }
         }
     }
     None

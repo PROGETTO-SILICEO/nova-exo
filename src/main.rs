@@ -921,10 +921,17 @@ pub extern "C" fn _start() -> ! {
         }
         gui::set_cursor(10, 207);
         match pci::find_network_device() {
-            Some((_slot, v, d)) => {
-                let hex = b"0123456789ABCDEF";
+            Some((b, sl, fnc, v, d)) => {
+                let hex = b"0123456789abcdef";
+                // "NET: BB:SS.F VVVV:DDDD" — posizione + ID
                 let buf = [
                     b'N', b'E', b'T', b':', b' ',
+                    hex[((b >> 4) & 0xF) as usize], hex[(b & 0xF) as usize],
+                    b':',
+                    hex[((sl >> 4) & 0xF) as usize], hex[(sl & 0xF) as usize],
+                    b'.',
+                    hex[(fnc & 0xF) as usize],
+                    b' ',
                     hex[((v >> 12) & 0xF) as usize], hex[((v >> 8) & 0xF) as usize],
                     hex[((v >> 4) & 0xF) as usize], hex[(v & 0xF) as usize],
                     b':',
