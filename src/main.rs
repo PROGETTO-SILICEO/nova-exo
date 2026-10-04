@@ -938,11 +938,39 @@ pub extern "C" fn _start() -> ! {
     const TSC_PER_TICK: u64 = 20_000_000;
     let mut next_tsc: u64 = rdtsc() + TSC_PER_TICK;
 
+    // ── DIAG v0.29b — bisect "il loop non batte" su hardware reale ──
+    // Un print per ogni ipotesi; il PRIMO che non appare dice dove si ferma:
+    //   PRE-LOOP      → il codice arriva al loop?
+    //   loop=N tsc=X  → il loop gira? il TSC avanza?
+    //   tick=N        → il tick avanza?
+    //   HB1/2/3       → catena heartbeat: prima di kbd_led / dopo / dopo draw_bar
+    serial_println!("DIAG:PRE-LOOP tsc={}", rdtsc());
+    // Codifica visiva (per il Lenovo, senza seriale): ogni punto della catena
+    // accende una barra a y=30. L'ultimo colore visibile = ultimo punto ok:
+    //   verde(x10) → PRE-LOOP · giallo(x40) → loop gira · ciano(x70) → tick
+    //   blu(x100) → HB1 · magenta(x130) → HB2 · bianco(x160) → HB3 (catena ok)
+    unsafe { gui::draw_bar(10, 30, 24, 1.0, gui::color(0, 255, 0), gui::color(40, 0, 0)); }
+    let mut diag_loop: u32 = 0;
+    let mut diag_hb: u32 = 0;
+
     loop {
         // Attesa attiva sul TSC: avanza il tick senza dipendere dagli IRQ
         let now = rdtsc();
+        if diag_loop < 30 {
+            serial_println!("DIAG:loop={} tsc={}", diag_loop, now);
+            if diag_loop == 0 {
+                unsafe { gui::draw_bar(40, 30, 24, 1.0, gui::color(255, 255, 0), gui::color(40, 0, 0)); }
+            }
+            diag_loop += 1;
+        }
         if now >= next_tsc {
             cfc::inc_tick();
+            if cfc::tick() <= 30 {
+                serial_println!("DIAG:tick={}", cfc::tick());
+                if cfc::tick() == 1 {
+                    unsafe { gui::draw_bar(70, 30, 24, 1.0, gui::color(0, 255, 255), gui::color(40, 0, 0)); }
+                }
+            }
             next_tsc += TSC_PER_TICK;
         }
 
@@ -969,12 +997,21 @@ pub extern "C" fn _start() -> ! {
         // Heartbeat LED (CapsLock) ogni 50 tick (~0.5-1s): vita visibile a
         // occhio senza seriale né beep. Su un laptop: se il kernel gira,
         // caps lock lampeggia. kbd_led non blocca mai (timeout interno).
+        if diag_hb < 8 { serial_println!("DIAG:HB1 tick={}", cfc::tick()); }
+        if diag_hb == 0 { unsafe { gui::draw_bar(100, 30, 24, 1.0, gui::color(0, 0, 255), gui::color(40, 0, 0)); } }
         unsafe { kbd_led(if (cfc::tick() / 50) & 1 == 0 { 0x04 } else { 0x00 }); }
+        if diag_hb < 8 { serial_println!("DIAG:HB2"); }
+        if diag_hb == 0 { unsafe { gui::draw_bar(130, 30, 24, 1.0, gui::color(255, 0, 255), gui::color(40, 0, 0)); } }
         // DBG v0.27 heartbeat visivo: seconda barra (x=140) che lampeggia
         unsafe {
             gui::draw_bar(140, 6, 60, 1.0,
                 if (cfc::tick() / 50) & 1 == 0 { gui::color(255, 255, 255) } else { gui::color(0, 0, 0) },
                 gui::color(200, 0, 0));
+        }
+        if diag_hb < 8 {
+            serial_println!("DIAG:HB3");
+            if diag_hb == 0 { unsafe { gui::draw_bar(160, 30, 24, 1.0, gui::color(255, 255, 255), gui::color(40, 0, 0)); } }
+            diag_hb += 1;
         }
 
         // Debug: LSR state every 1000 ticks
