@@ -938,27 +938,69 @@ pub extern "C" fn _start() -> ! {
     const TSC_PER_TICK: u64 = 20_000_000;
     let mut next_tsc: u64 = rdtsc() + TSC_PER_TICK;
 
+    // ── DIAG v0.29b — bisect "il loop non batte" su hardware reale ──
+    // Un print per ogni ipotesi; il PRIMO che non appare dice dove si ferma:
+    //   PRE-LOOP      → il codice arriva al loop?
+    //   loop=N tsc=X  → il loop gira? il TSC avanza?
+    //   tick=N        → il tick avanza?
+    //   HB1/2/3       → catena heartbeat: prima di kbd_led / dopo / dopo draw_bar
+    serial_println!("DIAG:PRE-LOOP tsc={}", rdtsc());
+    // Codifica visiva (per il Lenovo, senza seriale): ogni punto della catena
+    // accende una barra a y=30. L'ultimo colore visibile = ultimo punto ok:
+    //   verde(x10) → PRE-LOOP · giallo(x40) → loop gira · ciano(x70) → tick
+    //   blu(x100) → HB1 · magenta(x130) → HB2 · bianco(x160) → HB3 (catena ok)
+    unsafe { gui::draw_bar(10, 30, 24, 1.0, gui::color(0, 255, 0), gui::color(40, 0, 0)); }
+    let mut diag_loop: u32 = 0;
+    let mut diag_hb: u32 = 0;
+
     loop {
         // Attesa attiva sul TSC: avanza il tick senza dipendere dagli IRQ
         let now = rdtsc();
+        if diag_loop < 30 {
+            serial_println!("DIAG:loop={} tsc={}", diag_loop, now);
+            if diag_loop == 0 {
+                unsafe { gui::draw_bar(35, 30, 24, 1.0, gui::color(255, 255, 0), gui::color(40, 0, 0)); }
+            }
+            diag_loop += 1;
+        }
         if now >= next_tsc {
             cfc::inc_tick();
+            if cfc::tick() <= 30 {
+                serial_println!("DIAG:tick={}", cfc::tick());
+                if cfc::tick() == 1 {
+                    unsafe { gui::draw_bar(110, 30, 24, 1.0, gui::color(0, 255, 255), gui::color(40, 0, 0)); }
+                }
+            }
             next_tsc += TSC_PER_TICK;
         }
 
         // Poll NIC RX (non-blocking) — popola RX_PENDING/RX_DATA
         e1000::E1000::poll_rx();
+        if diag_loop == 1 {
+            // arancione: poll_rx passato (primo giro)
+            unsafe { gui::draw_bar(60, 30, 24, 1.0, gui::color(255, 140, 0), gui::color(40, 0, 0)); }
+        }
 
         // Poll serial (non-blocking) — always drain FIFO
+        // FIX v0.29c: MAI drain illimitato. Su hardware senza UART a 0x3F8
+        // (i laptop moderni) la porta flottante ritorna 0xFF: DR=1 per
+        // sempre → loop infinito → il kernel non raggiunge MAI il tick.
+        // Questo era il vero blocco del Lenovo (non il timer).
         unsafe {
+            let mut drained: u32 = 0;
             loop {
                 let mut lsr: u8;
                 asm!("in al, dx", out("al") lsr, in("dx") 0x3fdu16);
-                if lsr & 1 == 0 { break; }
+                if lsr & 1 == 0 || lsr == 0xFF || drained >= 64 { break; }
                 let mut byte: u8;
                 asm!("in al, dx", out("al") byte, in("dx") 0x3f8u16);
                 line_reader.push(byte);
+                drained += 1;
             }
+        }
+        if diag_loop == 1 {
+            // viola: drain passato (primo giro)
+            unsafe { gui::draw_bar(85, 30, 24, 1.0, gui::color(128, 0, 255), gui::color(40, 0, 0)); }
         }
 
         // Work only when TICK advances (heartbeat), not on every IRQ wakeup
@@ -969,12 +1011,21 @@ pub extern "C" fn _start() -> ! {
         // Heartbeat LED (CapsLock) ogni 50 tick (~0.5-1s): vita visibile a
         // occhio senza seriale né beep. Su un laptop: se il kernel gira,
         // caps lock lampeggia. kbd_led non blocca mai (timeout interno).
+        if diag_hb < 8 { serial_println!("DIAG:HB1 tick={}", cfc::tick()); }
+        if diag_hb == 0 { unsafe { gui::draw_bar(135, 30, 24, 1.0, gui::color(0, 0, 255), gui::color(40, 0, 0)); } }
         unsafe { kbd_led(if (cfc::tick() / 50) & 1 == 0 { 0x04 } else { 0x00 }); }
+        if diag_hb < 8 { serial_println!("DIAG:HB2"); }
+        if diag_hb == 0 { unsafe { gui::draw_bar(160, 30, 24, 1.0, gui::color(255, 0, 255), gui::color(40, 0, 0)); } }
         // DBG v0.27 heartbeat visivo: seconda barra (x=140) che lampeggia
         unsafe {
             gui::draw_bar(140, 6, 60, 1.0,
                 if (cfc::tick() / 50) & 1 == 0 { gui::color(255, 255, 255) } else { gui::color(0, 0, 0) },
                 gui::color(200, 0, 0));
+        }
+        if diag_hb < 8 {
+            serial_println!("DIAG:HB3");
+            if diag_hb == 0 { unsafe { gui::draw_bar(185, 30, 24, 1.0, gui::color(255, 255, 255), gui::color(40, 0, 0)); } }
+            diag_hb += 1;
         }
 
         // Debug: LSR state every 1000 ticks
