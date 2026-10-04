@@ -326,6 +326,32 @@ impl Rtl {
             _ => gui::print_str("LINK: down", gui::COL_RED),
         }
 
+        // ── Diagnostica TX profonda (04/10/2026 v3) ──
+        // Il DescOwn pulito NON basta: il chip può fallire la trasmissione
+        // (TU/underrun) pulendo comunque il bit. Qui leggiamo l'esito VERO:
+        //  opts1 post-TX: bit15=TOK (ok), bit14=TU (underrun), bit13=TXERR
+        //  + IntrStatus (TxOK/TxErr), BMSR, PHYstatus (0x6C: cosa vede il MAC)
+        if reset_ok {
+            let d = (&raw const TX_RING.0) as *const u32;
+            let opts1_after = core::ptr::read_volatile(d);
+            let isr = core::ptr::read_volatile((mmio + 0x3E) as *const u16);
+            let bmsr = Rtl::phy_read(mmio, PHY_BMSR);
+            let physt = core::ptr::read_volatile((mmio + 0x6C) as *const u16);
+            let mut b: [u8; 48] = *b"TXS: d=00000000 isr=0000 bmsr=0000 physt=0000   ";
+            for i in 0..8 {
+                b[7 + i] = hex[((opts1_after >> (4 * (7 - i))) & 0xF) as usize];
+            }
+            for i in 0..4 {
+                b[20 + i] = hex[((isr >> (4 * (3 - i))) & 0xF) as usize];
+                b[30 + i] = hex[((bmsr >> (4 * (3 - i))) & 0xF) as usize];
+                b[41 + i] = hex[((physt >> (4 * (3 - i))) & 0xF) as usize];
+            }
+            if let Ok(s) = core::str::from_utf8(&b) {
+                gui::set_cursor(10, 526);
+                gui::print_str(s, gui::COL_CYAN);
+            }
+        }
+
         Some(Rtl {
             mmio,
             mmio_phys,
