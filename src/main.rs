@@ -944,6 +944,47 @@ pub extern "C" fn _start() -> ! {
             }
             None => gui::print_str("NET: nessuna", gui::COL_DIM),
         }
+
+        // ── DUMP PCI completo sul video (max 16 device, bus 0-1) ──
+        // Per l'inventario del Lenovo: la I219 dovrebbe essere 00:1f.6.
+        // Se non appare qui, è nascosta/disabilitata a livello firmware.
+        let hex = b"0123456789abcdef";
+        let mut yy = 225usize;
+        let mut count = 0u32;
+        'dump: for bus in 0..2u8 {
+            for slot in 0..32u8 {
+                for func in 0..8u8 {
+                    let vd = pci::pci_config_read(bus, slot, func, 0);
+                    if (vd & 0xFFFF) == 0xFFFF {
+                        continue;
+                    }
+                    if count >= 16 {
+                        break 'dump;
+                    }
+                    let v = (vd & 0xFFFF) as u16;
+                    let d = ((vd >> 16) & 0xFFFF) as u16;
+                    let line = [
+                        hex[((bus >> 4) & 0xF) as usize], hex[(bus & 0xF) as usize],
+                        b':',
+                        hex[((slot >> 4) & 0xF) as usize], hex[(slot & 0xF) as usize],
+                        b'.',
+                        hex[(func & 0xF) as usize],
+                        b' ',
+                        hex[((v >> 12) & 0xF) as usize], hex[((v >> 8) & 0xF) as usize],
+                        hex[((v >> 4) & 0xF) as usize], hex[(v & 0xF) as usize],
+                        b':',
+                        hex[((d >> 12) & 0xF) as usize], hex[((d >> 8) & 0xF) as usize],
+                        hex[((d >> 4) & 0xF) as usize], hex[(d & 0xF) as usize],
+                    ];
+                    gui::set_cursor(10, yy);
+                    if let Ok(s) = core::str::from_utf8(&line) {
+                        gui::print_str(s, gui::COL_DIM);
+                    }
+                    yy += 11;
+                    count += 1;
+                }
+            }
+        }
     }
 
     let mut tessuto = cfc::Tessuto::new();
