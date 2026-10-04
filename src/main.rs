@@ -945,20 +945,20 @@ pub extern "C" fn _start() -> ! {
             None => gui::print_str("NET: nessuna", gui::COL_DIM),
         }
 
-        // ── DUMP PCI completo sul video (max 16 device, bus 0-1) ──
-        // Per l'inventario del Lenovo: la I219 dovrebbe essere 00:1f.6.
-        // Se non appare qui, è nascosta/disabilitata a livello firmware.
+        // ── DUMP PCI completo sul video (max 20 device, bus 0-7) ──
+        // Per l'inventario del Lenovo: Ethernet Realtek (10ec:8136) attesa
+        // dietro un root port PCIe (bus secondario, come la WiFi a 01:00.0).
         let hex = b"0123456789abcdef";
         let mut yy = 225usize;
         let mut count = 0u32;
-        'dump: for bus in 0..2u8 {
+        'dump: for bus in 0..8u8 {
             for slot in 0..32u8 {
                 for func in 0..8u8 {
                     let vd = pci::pci_config_read(bus, slot, func, 0);
                     if (vd & 0xFFFF) == 0xFFFF {
                         continue;
                     }
-                    if count >= 16 {
+                    if count >= 20 {
                         break 'dump;
                     }
                     let v = (vd & 0xFFFF) as u16;

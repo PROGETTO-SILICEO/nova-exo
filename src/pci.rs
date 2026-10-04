@@ -52,13 +52,13 @@ pub fn enumerate() {    for slot in 0..32 {
     }
 }
 
-/// Trova il primo device PCI di classe 0x02 (network).
-/// Ritorna (bus, slot, func, vendor, device).
-/// Scan COMPLETO bus/slot/func: la I219 è tipicamente a 00:1f.6 (funzione 6)
-/// — il vecchio scan a sola func 0/bus 0 la mancava (bug trovato 04/10/2026
-/// sul Lenovo: "NET: nessuna" mentre la scheda c'è).
+/// Trova il primo device PCI **Ethernet** (classe 02 subclass 00 — NON WiFi
+/// che è 02:80). Ritorna (bus, slot, func, vendor, device).
+/// Scan COMPLETO bus/slot/func, bus 0-7 (le NIC stanno dietro i root port
+/// PCIe su bus secondari: sull'IdeaPad la WiFi è 01:00.0 e la Ethernet
+/// Realtek su un altro bus — fix 04/10/2026).
 pub fn find_network_device() -> Option<(u8, u8, u8, u16, u16)> {
-    for bus in 0..5u8 {
+    for bus in 0..8u8 {
         for slot in 0..32u8 {
             for func in 0..8u8 {
                 let vendor = pci_config_read(bus, slot, func, 0);
@@ -67,7 +67,8 @@ pub fn find_network_device() -> Option<(u8, u8, u8, u16, u16)> {
                 }
                 let class = pci_config_read(bus, slot, func, 8);
                 let dev_class = ((class >> 24) & 0xFF) as u8;
-                if dev_class == 0x02 {
+                let dev_subclass = ((class >> 16) & 0xFF) as u8;
+                if dev_class == 0x02 && dev_subclass == 0x00 {
                     return Some((
                         bus,
                         slot,
