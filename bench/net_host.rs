@@ -17,7 +17,7 @@ use net::*;
 
 const SRC_MAC: [u8; 6] = [0xc8, 0x5b, 0x76, 0xe0, 0xe0, 0x01];
 const OFF_PAYLOAD: usize = 14 + 20 + 8; // eth + ip + udp
-const DIAG: [u32; 6] = [11, 0, 0x870E, 16384, 0x0C, 0x80003FFF];
+const DIAG: [u32; 7] = [11, 0, 0x870E, 16384, 0x0C, 0xF, 0];
 
 fn cell(v: f32) -> [f32; 16] {
     let mut c = [0.0f32; 16];
@@ -34,7 +34,7 @@ fn frame() -> (usize, [u8; 1518]) {
     let mut buf = [0u8; 1518];
     let cells = [cell(0.0), cell(-0.5), cell(1.25), cell(0.0)];
     let n = build_state_frame(
-        &mut buf, SRC_MAC, 12345, "riposo", &cells, 2, 0.5, 3, 7, DIAG,
+        &mut buf, SRC_MAC, 12345, "riposo", &cells, 2, 0.5, 3, 7, DIAG, 5,
     );
     (n, buf)
 }
@@ -199,7 +199,8 @@ fn payload_porta_la_diagnostica_rx() {
     // differenza fra "porta chiusa" e "rete silenziosa" è questo campo.
     let (n, b) = frame();
     let p = payload(&b, n);
-    assert!(p.contains("\"r\":[11,0,34574,16384,12,2147500031]"), "manca la diagnostica RX: {}", p);
+    assert!(p.contains("\"r\":[11,0,34574,16384,12,15,0]"), "manca la diagnostica RX: {}", p);
+    assert!(p.contains("\"v\":5"), "manca l'epoca di build: {}", p);
 }
 
 #[test]
@@ -217,7 +218,7 @@ fn buffer_troppo_piccolo_non_scrive() {
     let mut small = [0u8; 40];
     let cells = [cell(0.0); 4];
     let n = build_state_frame(
-        &mut small, SRC_MAC, 1, "vita", &cells, 0, 0.0, 0, 0, DIAG,
+        &mut small, SRC_MAC, 1, "vita", &cells, 0, 0.0, 0, 0, DIAG, 5,
     );
     assert_eq!(n, 0, "con buffer insufficiente deve tornare 0, non scrivere");
 }
@@ -230,7 +231,7 @@ fn concept_diversi_sono_riportati() {
     for nome in ["errore", "vita", "riposo", "novita"].iter() {
         let mut buf = [0u8; 1518];
         let cells = [cell(0.0); 4];
-        let n = build_state_frame(&mut buf, SRC_MAC, 1, nome, &cells, 0, 0.0, 0, 0, DIAG);
+        let n = build_state_frame(&mut buf, SRC_MAC, 1, nome, &cells, 0, 0.0, 0, 0, DIAG, 5);
         let p = payload(&buf, n);
         assert!(p.contains(nome), "concept '{}' non riportato: {}", nome, p);
     }

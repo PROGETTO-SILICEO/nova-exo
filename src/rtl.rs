@@ -92,6 +92,40 @@ pub static mut RX_MAXSZ: u16 = 0; // RxMaxSize (0xda) riletto
 /// opts1 del primo descrittore: se è 0x80003FFF (o 0xC0003FFF) il ring è armato.
 pub static mut RX_DESC0: u32 = 0;
 
+/// Epoca di build. Va INCREMENTATA a mano ad ogni build che cambia il
+/// protocollo o l'RX: senza, non si può sapere quale kernel sta parlando —
+/// ed è esattamente la confusione che ha fatto perdere un giro il 05/10.
+pub const NET_EPOCH: u32 = 5;
+
+const INTR_STATUS: u64 = 0x3E;
+
+/// Maschera degli OWN dei descrittori RX: bit i = descrittore i in mano al
+/// chip. Se vale 0xF il ring è tutto armato; se è 0 il chip li ha consumati
+/// e non riarmati. È il diagnostico che dice se il riarmo funziona DAVVERO,
+/// letto dal vivo e non alla init.
+pub unsafe fn rx_desc_own_mask() -> u32 {
+    if !RTL_PRESENT || RTL_MMIO == 0 {
+        return 0;
+    }
+    let d = (&raw const RX_RING.0) as *const u32;
+    let mut m = 0u32;
+    for i in 0..RX_DESC {
+        let o = core::ptr::read_volatile(d.add(i * 4));
+        if o & DESC_OWN != 0 {
+            m |= 1 << i;
+        }
+    }
+    m
+}
+
+/// IntrStatus: se c'è stato un errore RX (overflow/FIFO) lo dice.
+pub unsafe fn intr_status() -> u16 {
+    if !RTL_PRESENT || RTL_MMIO == 0 {
+        return 0;
+    }
+    core::ptr::read_volatile((RTL_MMIO + INTR_STATUS) as *const u16)
+}
+
 /// Stato globale per il beacon periodico dal loop principale.
 pub static mut RTL_MMIO: u64 = 0;
 pub static mut RTL_PRESENT: bool = false;

@@ -173,7 +173,8 @@ pub fn build_payload(
     desire_int: f32,
     cambi: u32,
     esplorazioni: u32,
-    diag: [u32; 6],
+    diag: [u32; 7],
+    epoch: u32,
 ) -> usize {
     let mut pos = 0usize;
     push_str(buf, &mut pos, "{\"t\":");
@@ -212,7 +213,9 @@ pub fn build_payload(
         }
         write_u32_buf(buf, &mut pos, *v);
     }
-    push_str(buf, &mut pos, "]}");
+    push_str(buf, &mut pos, "],\"v\":");
+    write_u32_buf(buf, &mut pos, epoch);
+    push(buf, &mut pos, b'}');
     pos
 }
 
@@ -230,7 +233,8 @@ pub fn build_state_frame(
     desire_int: f32,
     cambi: u32,
     esplorazioni: u32,
-    diag: [u32; 6],
+    diag: [u32; 7],
+    epoch: u32,
 ) -> usize {
     let hdr_len = 14 + 20 + 8;
     if dst.len() < hdr_len + 2 {
@@ -240,7 +244,7 @@ pub fn build_state_frame(
     // payload costruito direttamente nella sua posizione finale
     let payload_len = build_payload(
         &mut dst[hdr_len..], tick, concept, cells, desire_id, desire_int, cambi,
-        esplorazioni, diag,
+        esplorazioni, diag, epoch,
     );
     if payload_len == 0 {
         return 0;

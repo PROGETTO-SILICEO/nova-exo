@@ -1603,7 +1603,8 @@ pub extern "C" fn _start() -> ! {
                         rtl::RX_RCR,
                         rtl::RX_MAXSZ as u32,
                         rtl::RX_CMD as u32,
-                        rtl::RX_DESC0,
+                        rtl::rx_desc_own_mask(),
+                        rtl::intr_status() as u32,
                     ];
                     let n = net::build_state_frame(
                         buf,
@@ -1616,6 +1617,7 @@ pub extern "C" fn _start() -> ! {
                         executive.preferenza.cambi,
                         executive.preferenza.esplorazioni,
                         diag,
+                        rtl::NET_EPOCH,
                     );
                     if n > 0 {
                         rtl::tx_raw(&buf[..n]);

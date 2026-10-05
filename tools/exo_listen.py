@@ -79,7 +79,7 @@ def parse_payload(raw: bytes) -> dict:
     if not isinstance(d, dict):
         raise Scarto("radice non è un oggetto")
 
-    fuori = set(d) - {"t", "k", "c", "w", "l", "r"}
+    fuori = set(d) - {"t", "k", "c", "w", "l", "r", "v"}
     if fuori:
         raise Scarto(f"chiavi inattese: {sorted(fuori)}")
 
@@ -113,12 +113,12 @@ def parse_payload(raw: bytes) -> dict:
     lesplorato = _num(l[1], 0, 2**63, "l[1]")
 
     # Diagnostica RX. OPZIONALE: i kernel fino al 05/10 non la mandano.
-    # [rx_pkts, rx_errs, rx_config, rx_maxsize, chipcmd, desc0_opts1]
+    # [rx_pkts, rx_errs, rx_config, rx_maxsize, chipcmd, desc_own_mask, intr_status]
     r = d.get("r")
     diag = None
     if r is not None:
-        if not isinstance(r, list) or len(r) != 6:
-            raise Scarto("r: attesi 6 valori di diagnostica")
+        if not isinstance(r, list) or len(r) != 7:
+            raise Scarto("r: attesi 7 valori di diagnostica")
         diag = [_num(v, 0, 2**32, f"r[{i}]") for i, v in enumerate(r)]
 
     out = {
@@ -128,6 +128,11 @@ def parse_payload(raw: bytes) -> dict:
         "w": [int(wid), float(wint)],
         "l": [int(limparato), int(lesplorato)],
     }
+    # Epoca di build: dice QUALE kernel sta parlando. Opzionale (i kernel
+    # precedenti non la mandano).
+    v = d.get("v")
+    if v is not None:
+        out["v"] = int(_num(v, 0, 2**32, "v"))
     if diag is not None:
         out["r"] = [int(v) for v in diag]
     return out
@@ -139,11 +144,12 @@ def formatta(r: dict) -> str:
     ch = ",".join(f"{v:.4f}" for v in chemio)
     rx = ""
     if "r" in r:
-        p, e, cfg, mx, cmd, d0 = r["r"]
+        p, e, cfg, mx, cmd, own, intr = r["r"]
         rx = (f" rx_pkts={p} rx_errs={e} rx_cfg=0x{cfg:04x} rx_max={mx}"
-              f" cmd=0x{cmd:02x} d0=0x{d0:08x}")
+              f" cmd=0x{cmd:02x} own=0x{own:x} intr=0x{intr:04x}")
+    ep = f" [epoca {r['v']}]" if "v" in r else ""
     return (f"t={r['t']:<9} concept={r['k']:<8} chemio=[{ch}] "
-            f"w={r['w']} imparato={r['l'][0]} esplorato={r['l'][1]}{rx}")
+            f"w={r['w']} imparato={r['l'][0]} esplorato={r['l'][1]}{rx}{ep}")
 
 
 def ascolta(port: int, out: str | None, once: bool, seconds: float | None,
