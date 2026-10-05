@@ -66,15 +66,30 @@ pub fn feed(len: u16, src: &[u8]) {
     }
 }
 
-/// Estrae i 4 valori di `chemio_input` da un pacchetto: i primi 4 byte del
-/// payload (offset 14, dopo l'header Ethernet), normalizzati su 255.
+/// Offset del payload dentro un frame Ethernet con IPv4 + UDP:
+/// 14 (eth) + 20 (IP) + 8 (UDP) = 42.
+pub const OFF_UDP_PAYLOAD: usize = 42;
+const OFF_ETH_PAYLOAD: usize = 14;
+const ETHERTYPE_IPV4: u16 = 0x0800;
+const IP_PROTO_UDP: u8 = 17;
+
+/// Estrae i 4 valori di `chemio_input` da un pacchetto, normalizzati su 255.
 ///
-/// PURA e senza stato: è la parte che si può testare su host senza litigare
-/// con i globali (i test girano in parallelo).
+/// PERCHÉ L'ETHERTYPE (05/10/2026): prima si leggeva sempre l'offset 14, che
+/// in un pacchetto IPv4 è l'inizio dell'header — identico (`0x45 0x00 …`) per
+/// tutti. Il corpo sentiva **la forma dell'intestazione**, non il contenuto:
+/// la chemio si muoveva di poco e il concetto non cambiava mai. Ora:
+///   - IPv4 + UDP -> i 4 byte del PAYLOAD (offset 42): dati veri, pilotabili
+///   - altro (es. 0x88B5) -> offset 14, come prima
+///
+/// PURA e senza stato: testabile su host senza litigare coi globali.
 pub fn payload_to_chemio(len: u16, data: &[u8; CAP]) -> [f32; 4] {
+    let eth = u16::from_be_bytes([data[12], data[13]]);
+    let is_udp = eth == ETHERTYPE_IPV4 && data[23] == IP_PROTO_UDP;
+    let base = if is_udp { OFF_UDP_PAYLOAD } else { OFF_ETH_PAYLOAD };
     let mut out = [0.0f32; 4];
     for j in 0..4 {
-        let idx = 14 + j;
+        let idx = base + j;
         if (idx as u16) < len && idx < CAP {
             out[j] = data[idx] as f32 / 255.0;
         }

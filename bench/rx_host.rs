@@ -11,17 +11,71 @@
 #[path = "../src/rx.rs"]
 mod rx;
 
-use rx::{desc_opts1, payload_to_chemio, CAP, DESC_OWN, DESC_RING_END, RX_DESC_BUF_SIZE};
+use rx::{
+    desc_opts1, payload_to_chemio, CAP, DESC_OWN, DESC_RING_END, OFF_UDP_PAYLOAD,
+    RX_DESC_BUF_SIZE,
+};
 
-/// Costruisce un pacchetto di prova: header Ethernet di 14 byte + payload.
+/// Costruisce un pacchetto NON-IP (es. EtherType 0x88B5): payload a offset 14.
 fn pkt(payload: &[u8]) -> ([u8; CAP], u16) {
     let mut d = [0u8; CAP];
+    d[12] = 0x88;
+    d[13] = 0xB5;
     for (i, &b) in payload.iter().enumerate() {
         if 14 + i < CAP {
             d[14 + i] = b;
         }
     }
     (d, (14 + payload.len()) as u16)
+}
+
+/// Costruisce un frame IPv4+UDP: il payload sta a offset 42, non 14.
+fn pkt_udp(payload: &[u8]) -> ([u8; CAP], u16) {
+    let mut d = [0u8; CAP];
+    d[12] = 0x08; // EtherType IPv4
+    d[13] = 0x00;
+    d[14] = 0x45; // version/IHL
+    d[23] = 17; // protocollo UDP
+    for (i, &b) in payload.iter().enumerate() {
+        if OFF_UDP_PAYLOAD + i < CAP {
+            d[OFF_UDP_PAYLOAD + i] = b;
+        }
+    }
+    (d, (OFF_UDP_PAYLOAD + payload.len()) as u16)
+}
+
+#[test]
+fn ipv4_udp_legge_il_payload_non_l_intestazione() {
+    // Il caso che ha bloccato tutto: prima si leggeva 0x45 0x00 (header IP),
+    // identico per ogni pacchetto, quindi il corpo non sentiva mai il contenuto.
+    let (d, len) = pkt_udp(&[255, 200, 150, 100]);
+    let c = payload_to_chemio(len, &d);
+    assert_eq!(c[0], 1.0);
+    assert_eq!(c[1], 200.0 / 255.0);
+    assert_eq!(c[2], 150.0 / 255.0);
+    assert_eq!(c[3], 100.0 / 255.0);
+    assert_ne!(c[0], 0x45 as f32 / 255.0, "sta leggendo l'header IP!");
+}
+
+#[test]
+fn non_ip_legge_a_offset_14_come_prima() {
+    let (d, len) = pkt(&[0, 51, 102, 255]);
+    let c = payload_to_chemio(len, &d);
+    assert_eq!(c[0], 0.0);
+    assert_eq!(c[1], 51.0 / 255.0);
+    assert_eq!(c[3], 1.0);
+}
+
+#[test]
+fn ipv4_non_udp_torna_a_offset_14() {
+    // TCP (proto 6): non e' UDP, si legge come prima invece di inventare.
+    let mut d = [0u8; CAP];
+    d[12] = 0x08;
+    d[13] = 0x00;
+    d[23] = 6;
+    d[14] = 0x99;
+    let c = payload_to_chemio(60, &d);
+    assert_eq!(c[0], 0x99 as f32 / 255.0);
 }
 
 #[test]

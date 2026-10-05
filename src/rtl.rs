@@ -95,7 +95,7 @@ pub static mut RX_DESC0: u32 = 0;
 /// Epoca di build. Va INCREMENTATA a mano ad ogni build che cambia il
 /// protocollo o l'RX: senza, non si può sapere quale kernel sta parlando —
 /// ed è esattamente la confusione che ha fatto perdere un giro il 05/10.
-pub const NET_EPOCH: u32 = 5;
+pub const NET_EPOCH: u32 = 6;
 
 const INTR_STATUS: u64 = 0x3E;
 
