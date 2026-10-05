@@ -14,6 +14,7 @@ mod e1000;
 mod executive;
 mod gguf;
 mod gui;
+mod hexutil;
 mod idt;
 mod inference;
 mod interpreter;
@@ -369,9 +370,10 @@ pub(crate) fn write_hex32(val: u32) {
 
 fn write_hex64(val: u64) {
     write_str("0x");
-    for nibble_idx in (0..16).rev() {
-        let nibble = ((val >> (nibble_idx * 4)) & 0xF) as u8;
-        serial_putc(if nibble < 10 { b'0' + nibble } else { b'a' + nibble - 10 });
+    let mut cifre = [0u8; 16];
+    let n = hexutil::write_hex64_to(val, &mut cifre);
+    for &c in &cifre[..n] {
+        serial_putc(c);
     }
 }
 
@@ -1336,21 +1338,22 @@ pub extern "C" fn _start() -> ! {
                 }
                 chemio_input = [0.0; 4];
             } else if raw.starts_with(b"INJECT_SENSE ") {
-                let args = &raw[13..];
-                let mut addr: u64 = 0;
-                for &b in args {
-                    let d = match b {
-                        b'0'..=b'9' => b - b'0',
-                        b'a'..=b'f' => b - b'a' + 10,
-                        b'A'..=b'F' => b - b'A' + 10,
-                        _ => break,
-                    };
-                    addr = addr * 16 + d as u64;
+                // Il parser accetta il prefisso 0x. Prima accettava solo
+                // cifre nude: `INJECT_SENSE 0xDEADBEEF` si fermava sul byte
+                // `x` e iniettava silenziosamente all'indirizzo 0, con
+                // una risposta che sembrava conferma. Ora un argomento non
+                // capito è un errore dichiarato, non un indirizzo inventato.
+                match hexutil::parse_hex64(&raw[13..]) {
+                    Some(addr) => {
+                        cfc::sense_pf(addr, 0);
+                        write_str("SENS:INJECT@");
+                        write_hex64(addr);
+                        serial_putc(b'\n');
+                    }
+                    None => {
+                        write_str("E:INJECT_SENSE atteso esadecimale (es. 0xDEADBEEF)\n");
+                    }
                 }
-                cfc::sense_pf(addr, 0);
-                write_str("SENS:INJECT@");
-                write_hex64(addr);
-                serial_putc(b'\n');
                 chemio_input = [0.0; 4];
             } else {
                 chemio_input = line_reader.parse_line().unwrap_or([0.0; 4]);
