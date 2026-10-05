@@ -11,7 +11,7 @@
 #[path = "../src/rx.rs"]
 mod rx;
 
-use rx::{payload_to_chemio, CAP};
+use rx::{desc_opts1, payload_to_chemio, CAP, DESC_OWN, DESC_RING_END, RX_DESC_BUF_SIZE};
 
 /// Costruisce un pacchetto di prova: header Ethernet di 14 byte + payload.
 fn pkt(payload: &[u8]) -> ([u8; CAP], u16) {
@@ -74,4 +74,52 @@ fn la_porta_tiene_solo_sessantaquattro_byte() {
     // e nessun accesso fuori dal buffer (se ci fosse, il test andrebbe in panic
     // per indice fuori range: è il vero controllo)
     d[CAP - 1] = 0;
+}
+
+// ── Formato del descrittore RX ────────────────────────────────────────────
+// Regressione del 05/10: l'init metteva la dimensione del buffer in opts1,
+// il riarmo la dimenticava -> 4 pacchetti e poi il silenzio. Questi test
+// bloccano quella classe di bug: la dimensione deve esserci SEMPRE.
+
+#[test]
+fn opts1_contiene_sempre_la_dimensione_del_buffer() {
+    for n in [1usize, 2, 4, 256] {
+        for i in 0..n {
+            let o = desc_opts1(i, n);
+            assert_eq!(o & 0xFFFF, RX_DESC_BUF_SIZE,
+                       "descrittore {i}/{n}: manca la dimensione del buffer (opts1=0x{o:08x})");
+        }
+    }
+}
+
+#[test]
+fn opts1_e_sempre_del_chip() {
+    for n in [1usize, 4, 8] {
+        for i in 0..n {
+            assert_ne!(desc_opts1(i, n) & DESC_OWN, 0, "manca DescOwn su {i}/{n}");
+        }
+    }
+}
+
+#[test]
+fn solo_l_ultimo_ha_ring_end() {
+    let n = 4;
+    for i in 0..n {
+        let eor = desc_opts1(i, n) & DESC_RING_END != 0;
+        assert_eq!(eor, i == n - 1, "RingEnd sbagliato su {i}/{n}");
+    }
+}
+
+#[test]
+fn opts1_ha_i_valori_attesi_dal_driver_linux() {
+    // rtl8169_mark_to_asic: DescOwn | eor | 0x3FFF
+    assert_eq!(desc_opts1(0, 4), 0x80003FFF);
+    assert_eq!(desc_opts1(3, 4), 0xC0003FFF, "l'ultimo ha anche RingEnd");
+    // il valore che il chip deve vedere, in decimale, come lo manda la telemetria
+    assert_eq!(desc_opts1(0, 4), 2147500031);
+}
+
+#[test]
+fn un_solo_descrittore_e_anche_l_ultimo() {
+    assert_eq!(desc_opts1(0, 1), 0xC0003FFF, "con n=1 e' sia primo sia ultimo");
 }

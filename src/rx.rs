@@ -16,6 +16,29 @@
 /// Numero di byte utili in `DATA`. Il consumatore ne usa solo 4.
 pub const CAP: usize = 64;
 
+// ── Formato del descrittore RX della Realtek ────────────────────────────────
+// PERCHÉ QUI (05/10/2026): l'init metteva la dimensione del buffer in opts1,
+// il RIARMO la dimenticava. Risultato: 4 pacchetti ricevuti al boot e poi il
+// silenzio, perché i descrittori tornavano al chip senza sapere quanto
+// scrivere. Non era un errore di distrazione: era il formato del descrittore
+// conosciuto in DUE posti che potevano divergere. Ora c'è un posto solo, ed è
+// una funzione PURA — quindi testabile su host.
+//
+// Da rtl8169_mark_to_asic: opts1 = DescOwn | eor | R8169_RX_BUF_SIZE.
+pub const DESC_OWN: u32 = 1 << 31; // in mano al chip
+pub const DESC_RING_END: u32 = 1 << 30; // fine del ring (ultimo descrittore)
+/// R8169_RX_BUF_SIZE = SZ_16K - 1. DEVE stare in opts1: senza, il chip non
+/// sa quanto può scrivere nel buffer (e all'inizio non scrive affatto).
+pub const RX_DESC_BUF_SIZE: u32 = 16383;
+
+/// opts1 di un descrittore RX armato. `i` è l'indice, `n` il numero di
+/// descrittori. Un posto solo per questo formato: init e riarmo la usano
+/// entrambi, così non possono più divergere.
+#[inline]
+pub fn desc_opts1(i: usize, n: usize) -> u32 {
+    DESC_OWN | if i + 1 == n { DESC_RING_END } else { 0 } | RX_DESC_BUF_SIZE
+}
+
 pub static mut PENDING: bool = false;
 pub static mut DATA: [u8; CAP] = [0; CAP];
 pub static mut LEN: u16 = 0;

@@ -46,11 +46,6 @@ const RX_CONFIG_VALUE: u32 = RX128_INT_EN | RX_DMA_BURST | RX_ACCEPT; // 0x870E
 /// Commento letterale di Linux: "Low hurts. Let's disable the filtering."
 const RX_MAX_SIZE: u16 = 16384;
 
-/// rtl8169_mark_to_asic: `opts1 = DescOwn | eor | R8169_RX_BUF_SIZE`.
-/// R8169_RX_BUF_SIZE = SZ_16K - 1 = 16383. SENZA questo il chip non sa
-/// quanto può scrivere: era il bug principale.
-const RX_DESC_BUF_SIZE: u32 = 16383;
-
 /// Descrittori RX (4) e dimensione di ciascun buffer.
 /// I buffer DEVONO essere almeno `RX_DESC_BUF_SIZE+1`: se dicessimo al chip
 /// 16383 e ne avessimo 2048, il DMA scriverebbe fuori dal buffer.
@@ -556,10 +551,7 @@ impl Rtl {
             let buf_phys =
                 crate::virt_to_phys((&raw const RX_BUFS.0[i][0]) as *const _ as u64);
             let e = d.add(i * 4);
-            let opts1 = DESC_OWN
-                | if i == RX_DESC - 1 { DESC_RING_END } else { 0 }
-                | RX_DESC_BUF_SIZE;
-            core::ptr::write_volatile(e, opts1);
+            core::ptr::write_volatile(e, crate::rx::desc_opts1(i, RX_DESC));
             core::ptr::write_volatile(e.add(1), 0);
             core::ptr::write_volatile(e.add(2) as *mut u64, buf_phys);
         }
@@ -621,9 +613,9 @@ impl Rtl {
             } else {
                 crate::rx::err();
             }
-            // Riarma: torna in mano al chip (con RingEnd se è l'ultimo)
-            let re = DESC_OWN | if i == RX_DESC - 1 { DESC_RING_END } else { 0 };
-            core::ptr::write_volatile(e, re);
+            // Riarma: torna in mano al chip. USA LA STESSA FUNZIONE dell'init:
+            // era qui che la dimensione del buffer andava persa.
+            core::ptr::write_volatile(e, crate::rx::desc_opts1(i, RX_DESC));
         }
     }
 
