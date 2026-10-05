@@ -79,7 +79,7 @@ def parse_payload(raw: bytes) -> dict:
     if not isinstance(d, dict):
         raise Scarto("radice non è un oggetto")
 
-    fuori = set(d) - {"t", "k", "c", "w", "l"}
+    fuori = set(d) - {"t", "k", "c", "w", "l", "r"}
     if fuori:
         raise Scarto(f"chiavi inattese: {sorted(fuori)}")
 
@@ -112,21 +112,37 @@ def parse_payload(raw: bytes) -> dict:
     limparato = _num(l[0], 0, 2**63, "l[0]")
     lesplorato = _num(l[1], 0, 2**63, "l[1]")
 
-    return {
+    # Diagnostica RX. OPZIONALE: i kernel fino al 05/10 non la mandano.
+    # [rx_pkts, rx_errs, rx_last_len, rtl_cmd]
+    r = d.get("r")
+    diag = None
+    if r is not None:
+        if not isinstance(r, list) or len(r) != 4:
+            raise Scarto("r: attesi 4 valori di diagnostica")
+        diag = [_num(v, 0, 2**32, f"r[{i}]") for i, v in enumerate(r)]
+
+    out = {
         "t": int(t),
         "k": k,
         "c": celle,
         "w": [int(wid), float(wint)],
         "l": [int(limparato), int(lesplorato)],
     }
+    if diag is not None:
+        out["r"] = [int(v) for v in diag]
+    return out
 
 
 def formatta(r: dict) -> str:
     """Riga leggibile: il concept, il chemio (i 4 valori che contano) e i contatori."""
     chemio = r["c"][1][:4] if len(r["c"]) > 1 else []
     ch = ",".join(f"{v:.4f}" for v in chemio)
+    rx = ""
+    if "r" in r:
+        p, e, ln, cmd = r["r"]
+        rx = f" rx_pkts={p} rx_errs={e} rx_len={ln} rtl_cmd=0x{cmd:02x}"
     return (f"t={r['t']:<9} concept={r['k']:<8} chemio=[{ch}] "
-            f"w={r['w']} imparato={r['l'][0]} esplorato={r['l'][1]}")
+            f"w={r['w']} imparato={r['l'][0]} esplorato={r['l'][1]}{rx}")
 
 
 def ascolta(port: int, out: str | None, once: bool, seconds: float | None,

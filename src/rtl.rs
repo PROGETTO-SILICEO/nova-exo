@@ -22,6 +22,24 @@ const CHIP_CMD: u64 = 0x37;
 const TX_POLL: u64 = 0x38;
 const PHYAR: u64 = 0x60; // PHY access register (bit31=busy, 16-20=reg, 0-15=data)
 
+// ── RX (aggiunti 05/10/2026) ──
+const RCR: u64 = 0x44; // Receive Configuration Register
+const RDSAR_LO: u64 = 0xE4; // RX Descriptor Start Address (basso)
+const RDSAR_HI: u64 = 0xE8; // RX Descriptor Start Address (alto)
+
+// RCR: si accetta SOLO fisico/multicast/broadcast — niente "tutto" e niente
+// pacchetti rotti. Se si accettasse tutto, il corpo sentirebbe anche il
+// rumore della rete.
+const RCR_APM: u32 = 1 << 1; // Accept Physical Match
+const RCR_AM: u32 = 1 << 2; // Accept Multicast
+const RCR_AB: u32 = 1 << 3; // Accept Broadcast
+const RCR_RBL_2048: u32 = 5 << 8; // Rx Buffer Length = 2048 (come i buffer)
+const RCR_MXDMA_UNLIM: u32 = 7 << 16; // DMA senza limite
+
+/// Descrittori RX (4) e dimensione di ciascun buffer.
+const RX_DESC: usize = 4;
+const RX_BUF_LEN: usize = 2048;
+
 // PHY registers (standard MII)
 const PHY_BMCR: u8 = 0; // Basic Mode Control: bit11=power down, bit9=restart autoneg
 const PHY_BMSR: u8 = 1; // Basic Mode Status: bit2=Link Status
@@ -42,6 +60,21 @@ static mut TX_RING: Aligned256 = Aligned256([0u8; 256]);
 #[repr(align(64))]
 struct Aligned2048([u8; 2048]);
 static mut TX_BUF: Aligned2048 = Aligned2048([0u8; 2048]);
+
+// ── RX: ring e buffer (05/10/2026) ──
+// Il ring deve stare su un confine da 256 byte (requisito del chip).
+static mut RX_RING: Aligned256 = Aligned256([0u8; 256]);
+/// Un buffer per descrittore: il chip ci scrive dentro via DMA.
+#[repr(align(64))]
+struct RxBufs([[u8; RX_BUF_LEN]; RX_DESC]);
+static mut RX_BUFS: RxBufs = RxBufs([[0u8; RX_BUF_LEN]; RX_DESC]);
+
+/// Diagnostica RX: visibile dal metallo solo attraverso la telemetria UDP,
+/// perché lì la seriale non esiste. Senza questa, un RX che non funziona
+/// sarebbe indistinguibile da una rete silenziosa.
+pub static mut RX_INIT_OK: bool = false;
+pub static mut RX_CMD: u8 = 0; // valore di CHIP_CMD dopo l'init
+pub static mut RX_RCR: u32 = 0; // valore letto da RCR dopo l'init
 
 /// Stato globale per il beacon periodico dal loop principale.
 pub static mut RTL_MMIO: u64 = 0;
@@ -322,8 +355,19 @@ impl Rtl {
             }
 
             Rtl::tx_init(mmio);
+            // RX (05/10/2026): apre la porta d'ingresso che mancava sul metallo.
+            // Se la config non torna, RX_INIT_OK resta false e poll_rx non fa
+            // nulla: meglio nessun ingresso che un ingresso che mente.
+            let rx_ok = Rtl::rx_init(mmio);
             RTL_MMIO = mmio;
             RTL_PRESENT = true; // abilita il beacon periodico dal loop
+            crate::write_str("rtl:rx_init=");
+            crate::write_str(if rx_ok { "ok" } else { "FALLITO" });
+            crate::write_str(" cmd=0x");
+            crate::write_hex64(RX_CMD as u64);
+            crate::write_str(" rcr=0x");
+            crate::write_hex64(RX_RCR as u64);
+            crate::serial_putc(b'\n');
             let mut frame = [0u8; 60];
             for b in frame.iter_mut().take(6) {
                 *b = 0xFF; // dest: broadcast
@@ -466,6 +510,88 @@ impl Rtl {
         core::ptr::write_volatile((mmio + CHIP_CMD) as *mut u8, cmd | 0x04);
         core::ptr::write_volatile((mmio + CFG_9346) as *mut u8, 0x00);
         true
+    }
+
+    // ── RX (05/10/2026) ─────────────────────────────────────────────────
+    // Il 110-15ACL non ha seriale: l'unico modo di far entrare qualcosa nel
+    // corpo è la rete. La e1000 (Intel/QEMU) aveva già l'RX; la RTL810xE no.
+    // Questa è la porta che manca — alimenta `crate::rx`, la stessa che usa
+    // la e1000, così il consumatore (chemio_input) resta unico.
+    //
+    // QEMU NON emula questo chip: qui non si può testare. Quindi si scrive
+    // difensivo (se la config non torna, NON si abilita RE) e si espone la
+    // diagnostica, che viaggia nella telemetria UDP.
+
+    /// Inizializza l'RX: ring di descrittori + buffer, RCR, RDSAR, e RE.
+    /// Ritorna true solo se il ricevitore risulta davvero abilitato.
+    pub unsafe fn rx_init(mmio: u64) -> bool {
+        let ring_phys = crate::virt_to_phys(&raw const RX_RING.0 as *const _ as u64);
+
+        // Descriptor: opts1 (OWN), opts2, addr64. L'ultimo ha RingEnd.
+        let d = (&raw mut RX_RING.0) as *mut u32;
+        for i in 0..RX_DESC {
+            let buf_phys = crate::virt_to_phys(
+                (&raw const RX_BUFS.0[i][0]) as *const _ as u64,
+            );
+            let e = d.add(i * 4);
+            let opts1 = DESC_OWN | if i == RX_DESC - 1 { DESC_RING_END } else { 0 };
+            core::ptr::write_volatile(e, opts1);
+            core::ptr::write_volatile(e.add(1), 0);
+            core::ptr::write_volatile(e.add(2) as *mut u64, buf_phys);
+        }
+
+        core::ptr::write_volatile((mmio + CFG_9346) as *mut u8, 0xC0);
+
+        // Indirizzo del ring RX (registro a 64 bit)
+        core::ptr::write_volatile((mmio + RDSAR_LO) as *mut u32, ring_phys as u32);
+        core::ptr::write_volatile((mmio + RDSAR_HI) as *mut u32, (ring_phys >> 32) as u32);
+
+        // RCR: accetta fisico + multicast + broadcast; RBL = 2048 (come i buffer);
+        // MXDMA unlimited. NON accetta pacchetti rotti né "tutto".
+        let rcr = RCR_APM | RCR_AM | RCR_AB | RCR_RBL_2048 | RCR_MXDMA_UNLIM;
+        core::ptr::write_volatile((mmio + RCR) as *mut u32, rcr);
+
+        // Abilita trasmettitore E ricevitore
+        let cmd = core::ptr::read_volatile((mmio + CHIP_CMD) as *const u8);
+        core::ptr::write_volatile((mmio + CHIP_CMD) as *mut u8, cmd | 0x04 | 0x08);
+
+        core::ptr::write_volatile((mmio + CFG_9346) as *mut u8, 0x00);
+
+        // Verifica: il ricevitore è davvero acceso? Se no, non mentire.
+        let cmd_after = core::ptr::read_volatile((mmio + CHIP_CMD) as *const u8);
+        let rcr_after = core::ptr::read_volatile((mmio + RCR) as *const u32);
+        RX_CMD = cmd_after;
+        RX_RCR = rcr_after;
+        RX_INIT_OK = (cmd_after & 0x08) != 0 && (rcr_after & 0xFFFF_FFFF) == rcr;
+        RX_INIT_OK
+    }
+
+    /// Ritira i pacchetti ricevuti verso la porta condivisa. Non bloccante:
+    /// se non c'è niente, esce subito. Riarma ogni descrittore consumato.
+    pub unsafe fn poll_rx() {
+        if !RX_INIT_OK {
+            return;
+        }
+        let d = (&raw mut RX_RING.0) as *mut u32;
+        for i in 0..RX_DESC {
+            let e = d.add(i * 4);
+            let opts1 = core::ptr::read_volatile(e);
+            if opts1 & DESC_OWN != 0 {
+                continue; // ancora in mano al chip: niente da prendere
+            }
+            let len = (opts1 & 0xFFFF) as u16;
+            if len > 0 {
+                let buf = (&raw const RX_BUFS.0[i][0]) as *const u8;
+                let n = (len as usize).min(crate::rx::CAP).min(RX_BUF_LEN);
+                let slice = core::slice::from_raw_parts(buf, n);
+                crate::rx::feed(len, slice);
+            } else {
+                crate::rx::err();
+            }
+            // Riarma: torna in mano al chip (con RingEnd se è l'ultimo)
+            let re = DESC_OWN | if i == RX_DESC - 1 { DESC_RING_END } else { 0 };
+            core::ptr::write_volatile(e, re);
+        }
     }
 
     /// Trasmette un frame. Ritorna true se il NIC l'ha preso in carico

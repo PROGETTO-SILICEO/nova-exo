@@ -42,6 +42,7 @@ fn main() {
         0.5,
         3,
         7,
+        [11, 2, 1518, 8],
     );
     assert!(n > 0, "build_state_frame non ha scritto nulla");
 

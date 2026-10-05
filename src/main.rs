@@ -26,6 +26,7 @@ mod pain;
 mod pci;
 mod predictor;
 mod rtl;
+mod rx;
 mod serial;
 mod state;
 mod tensor;
@@ -1114,8 +1115,10 @@ pub extern "C" fn _start() -> ! {
             next_tsc += TSC_PER_TICK;
         }
 
-        // Poll NIC RX (non-blocking) — popola RX_PENDING/RX_DATA
+        // Poll NIC RX (non-blocking) — popolano la porta condivisa `rx`.
+        // Due porte, un consumatore: e1000 (Intel/QEMU) e RTL810xE (110-15ACL).
         e1000::E1000::poll_rx();
+        unsafe { rtl::Rtl::poll_rx(); }
         if diag_loop == 1 {
             // arancione: poll_rx passato (primo giro)
             unsafe { gui::draw_bar(60, 30, 24, 1.0, gui::color(255, 140, 0), gui::color(40, 0, 0)); }
@@ -1431,21 +1434,11 @@ pub extern "C" fn _start() -> ! {
             chemio_input = [0.0; 4];
         }
 
-        // Override Chemio input con pacchetto Ethernet ricevuto (se presente)
-        unsafe {
-            if e1000::RX_PENDING {
-                e1000::RX_PENDING = false;
-                let len = e1000::RX_LEN;
-                // Primi 4 byte del payload → input Chemio
-                let eth_hdr = 14;
-                for j in 0..4 {
-                    let idx = eth_hdr + j;
-                    if (idx as u16) < len {
-                        chemio_input[j] = e1000::RX_DATA[idx] as f32 / 255.0;
-                    }
-                }
-
-            }
+        // Override Chemio input con pacchetto Ethernet ricevuto (se presente).
+        // La porta è CONDIVISA (src/rx.rs): la alimentano sia la e1000 (Intel,
+        // QEMU) sia la RTL810xE (110-15ACL). Un solo consumatore, due porte.
+        if let Some((_len, c)) = rx::take() {
+            chemio_input = c;
         }
 
         // Auto-modulazione: la volontà orienta il corpo (dal desiderio del tick precedente)
@@ -1602,6 +1595,14 @@ pub extern "C" fn _start() -> ! {
                     ];
                     let (d_id, d_int) = executive.current();
                     let buf = &mut *(&raw mut TX_FRAME);
+                    // Diagnostica RX: pkts, errori, ultima lunghezza, CHIP_CMD
+                    // della Realtek. È l'unico modo di vedere l'RX sul metallo.
+                    let diag = [
+                        rx::PKTS,
+                        rx::ERRS,
+                        rx::LAST_LEN as u32,
+                        rtl::RX_CMD as u32,
+                    ];
                     let n = net::build_state_frame(
                         buf,
                         rtl::EXO_MAC,
@@ -1612,6 +1613,7 @@ pub extern "C" fn _start() -> ! {
                         d_int,
                         executive.preferenza.cambi,
                         executive.preferenza.esplorazioni,
+                        diag,
                     );
                     if n > 0 {
                         rtl::tx_raw(&buf[..n]);

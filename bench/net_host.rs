@@ -17,6 +17,7 @@ use net::*;
 
 const SRC_MAC: [u8; 6] = [0xc8, 0x5b, 0x76, 0xe0, 0xe0, 0x01];
 const OFF_PAYLOAD: usize = 14 + 20 + 8; // eth + ip + udp
+const DIAG: [u32; 4] = [11, 0, 1518, 8]; // rx_pkts, rx_errs, last_len, rtl_cmd
 
 fn cell(v: f32) -> [f32; 16] {
     let mut c = [0.0f32; 16];
@@ -33,7 +34,7 @@ fn frame() -> (usize, [u8; 1518]) {
     let mut buf = [0u8; 1518];
     let cells = [cell(0.0), cell(-0.5), cell(1.25), cell(0.0)];
     let n = build_state_frame(
-        &mut buf, SRC_MAC, 12345, "riposo", &cells, 2, 0.5, 3, 7,
+        &mut buf, SRC_MAC, 12345, "riposo", &cells, 2, 0.5, 3, 7, DIAG,
     );
     (n, buf)
 }
@@ -179,8 +180,8 @@ fn payload_porta_i_quattro_tessuti_interi() {
     );
     assert!(p.contains(",14.0000,15.0000]"), "cella troncata (manca 14/15): {}", p);
     // 4 celle + w + l = 6 array; il '[' esterno di "c" ne aggiunge uno -> 7
-    assert_eq!(p.matches('[').count(), 7, "numero di array inatteso: {}", p);
-    assert_eq!(p.matches(']').count(), 7, "parentesi non bilanciate: {}", p);
+    assert_eq!(p.matches('[').count(), 8, "numero di array inatteso: {}", p);
+    assert_eq!(p.matches(']').count(), 8, "parentesi non bilanciate: {}", p);
     assert!(p.contains("-0.5000"), "manca un valore negativo atteso: {}", p);
 }
 
@@ -190,6 +191,15 @@ fn payload_porta_volonta_e_apprendimento() {
     let p = payload(&b, n);
     assert!(p.contains("\"w\":[2,0.5000]"), "manca la volontà: {}", p);
     assert!(p.contains("\"l\":[3,7]"), "mancano imparato/esplorato: {}", p);
+}
+
+#[test]
+fn payload_porta_la_diagnostica_rx() {
+    // Sul metallo la seriale non esiste: se l'RX non funziona, la sola
+    // differenza fra "porta chiusa" e "rete silenziosa" è questo campo.
+    let (n, b) = frame();
+    let p = payload(&b, n);
+    assert!(p.contains("\"r\":[11,0,1518,8]"), "manca la diagnostica RX: {}", p);
 }
 
 #[test]
@@ -207,7 +217,7 @@ fn buffer_troppo_piccolo_non_scrive() {
     let mut small = [0u8; 40];
     let cells = [cell(0.0); 4];
     let n = build_state_frame(
-        &mut small, SRC_MAC, 1, "vita", &cells, 0, 0.0, 0, 0,
+        &mut small, SRC_MAC, 1, "vita", &cells, 0, 0.0, 0, 0, DIAG,
     );
     assert_eq!(n, 0, "con buffer insufficiente deve tornare 0, non scrivere");
 }
@@ -220,7 +230,7 @@ fn concept_diversi_sono_riportati() {
     for nome in ["errore", "vita", "riposo", "novita"].iter() {
         let mut buf = [0u8; 1518];
         let cells = [cell(0.0); 4];
-        let n = build_state_frame(&mut buf, SRC_MAC, 1, nome, &cells, 0, 0.0, 0, 0);
+        let n = build_state_frame(&mut buf, SRC_MAC, 1, nome, &cells, 0, 0.0, 0, 0, DIAG);
         let p = payload(&buf, n);
         assert!(p.contains(nome), "concept '{}' non riportato: {}", nome, p);
     }

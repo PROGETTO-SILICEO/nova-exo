@@ -84,9 +84,9 @@ struct RxDesc {
 
 // ── RX data for CfC pipeline ────────────────────────────────────────────
 
-pub static mut RX_PENDING: bool = false;
-pub static mut RX_DATA: [u8; 64] = [0; 64];
-pub static mut RX_LEN: u16 = 0;
+// I buffer RX storici (RX_PENDING/RX_DATA/RX_LEN) sono stati rimossi il
+// 05/10/2026: l'RX ora passa dalla porta condivisa `crate::rx`, così il
+// consumatore (main.rs) è unico per entrambe le NIC.
 
 // ── DMA buffers ─────────────────────────────────────────────────────────
 
@@ -438,15 +438,14 @@ impl E1000 {
             let desc = unsafe { &*(ring as *const Aligned4K).cast::<RxDesc>().add(i) };
             if desc.status & 0x01 != 0 {
                 let pool = &raw const RX_POOL;
-                let data_ptr = pool as *const u8;
-                let len = desc.length.min(64);
+                let n = (desc.length as usize).min(crate::rx::CAP);
+                // Consegna alla PORTA CONDIVISA (src/rx.rs): da qui in poi il
+                // consumatore è unico, sia che il pacchetto arrivi dall'Intel
+                // sia dalla Realtek. La porta Intel resta aperta.
                 unsafe {
-                    // Copy payload to shared buffer for CfC
-                    for j in 0..len as usize {
-                        RX_DATA[j] = *data_ptr.add(i * RX_BUF_SIZE + j);
-                    }
-                    RX_LEN = desc.length;
-                    RX_PENDING = true;
+                    let data_ptr = (pool as *const u8).add(i * RX_BUF_SIZE);
+                    let slice = core::slice::from_raw_parts(data_ptr, n);
+                    crate::rx::feed(desc.length, slice);
                 }
                 // Re-arm descriptor for next packet
                 let desc_mut = unsafe { &mut *(ring as *const Aligned4K as *mut Aligned4K).cast::<RxDesc>().add(i) };

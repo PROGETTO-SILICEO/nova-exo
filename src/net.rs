@@ -173,6 +173,7 @@ pub fn build_payload(
     desire_int: f32,
     cambi: u32,
     esplorazioni: u32,
+    diag: [u32; 4],
 ) -> usize {
     let mut pos = 0usize;
     push_str(buf, &mut pos, "{\"t\":");
@@ -201,6 +202,15 @@ pub fn build_payload(
     write_u32_buf(buf, &mut pos, cambi);
     push(buf, &mut pos, b',');
     write_u32_buf(buf, &mut pos, esplorazioni);
+    // Diagnostica RX: sul metallo la seriale non esiste, questo è l'unico
+    // modo di sapere se la porta d'ingresso si è aperta e se riceve.
+    push_str(buf, &mut pos, "],\"r\":[");
+    for (i, v) in diag.iter().enumerate() {
+        if i > 0 {
+            push(buf, &mut pos, b',');
+        }
+        write_u32_buf(buf, &mut pos, *v);
+    }
     push_str(buf, &mut pos, "]}");
     pos
 }
@@ -219,6 +229,7 @@ pub fn build_state_frame(
     desire_int: f32,
     cambi: u32,
     esplorazioni: u32,
+    diag: [u32; 4],
 ) -> usize {
     let hdr_len = 14 + 20 + 8;
     if dst.len() < hdr_len + 2 {
@@ -226,8 +237,10 @@ pub fn build_state_frame(
     }
 
     // payload costruito direttamente nella sua posizione finale
-    let payload_len =
-        build_payload(&mut dst[hdr_len..], tick, concept, cells, desire_id, desire_int, cambi, esplorazioni);
+    let payload_len = build_payload(
+        &mut dst[hdr_len..], tick, concept, cells, desire_id, desire_int, cambi,
+        esplorazioni, diag,
+    );
     if payload_len == 0 {
         return 0;
     }
