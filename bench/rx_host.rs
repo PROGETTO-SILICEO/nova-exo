@@ -167,13 +167,11 @@ fn solo_l_ultimo_ha_ring_end() {
 #[test]
 fn opts1_ha_i_valori_attesi_dal_driver_linux() {
     // rtl8169_mark_to_asic: DescOwn | eor | 0x3FFF
-    assert_eq!(desc_opts1(0, 4), 0x80003FFF);
-    assert_eq!(desc_opts1(3, 4), 0xC0003FFF, "l'ultimo ha anche RingEnd");
-    // il valore che il chip deve vedere, in decimale, come lo manda la telemetria
-    assert_eq!(desc_opts1(0, 4), 2147500031);
+    assert_eq!(desc_opts1(0, 4), 0x800007FF);
+    assert_eq!(desc_opts1(3, 4), 0xC00007FF, "l'ultimo ha anche RingEnd");
 }
 
 #[test]
 fn un_solo_descrittore_e_anche_l_ultimo() {
-    assert_eq!(desc_opts1(0, 1), 0xC0003FFF, "con n=1 e' sia primo sia ultimo");
+    assert_eq!(desc_opts1(0, 1), 0xC00007FF, "con n=1 e' sia primo sia ultimo");
 }

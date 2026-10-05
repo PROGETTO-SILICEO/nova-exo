@@ -42,15 +42,19 @@ const RX_DMA_BURST: u32 = 7 << 8; // 0x0700 — burst massimo, non la lunghezza
 const RX_ACCEPT: u32 = 0x08 | 0x02 | 0x04; // 0x0E
 const RX_CONFIG_VALUE: u32 = RX128_INT_EN | RX_DMA_BURST | RX_ACCEPT; // 0x870E
 
-/// rtl_set_rx_max_size: `R8169_RX_BUF_SIZE + 1` = 16384.
-/// Commento letterale di Linux: "Low hurts. Let's disable the filtering."
-const RX_MAX_SIZE: u16 = 16384;
+/// RxMaxSize: DEVE essere coerente con RX_BUF_LEN e con opts1, o il DMA
+/// scrive fuori. Linux usa 16384 ("Low hurts"), ma con buffer da 2048 il
+/// valore giusto è 2048: i frame Ethernet non superano 1518.
+const RX_MAX_SIZE: u16 = 2048;
 
 /// Descrittori RX (4) e dimensione di ciascun buffer.
 /// I buffer DEVONO essere almeno `RX_DESC_BUF_SIZE+1`: se dicessimo al chip
 /// 16383 e ne avessimo 2048, il DMA scriverebbe fuori dal buffer.
-const RX_DESC: usize = 4;
-const RX_BUF_LEN: usize = 16384;
+/// 64 descrittori (non 4): con 4 il FIFO del chip andava in OVERFLOW sulla
+/// raffica di broadcast al boot e il ricevitore si fermava per sempre.
+/// 64 × 2048 = 128 KB: tanto spazio per respirare, poca memoria.
+const RX_DESC: usize = 64;
+const RX_BUF_LEN: usize = 2048;
 
 // PHY registers (standard MII)
 const PHY_BMCR: u8 = 0; // Basic Mode Control: bit11=power down, bit9=restart autoneg
@@ -77,7 +81,7 @@ static mut TX_BUF: Aligned2048 = Aligned2048([0u8; 2048]);
 // Il ring deve stare su un confine da 256 byte (requisito del chip).
 static mut RX_RING: Aligned256 = Aligned256([0u8; 256]);
 /// Un buffer per descrittore: il chip ci scrive dentro via DMA.
-/// 4 × 16 KB = 64 KB di BSS. Allineati a 256 (requisito del chip).
+/// 64 × 2 KB = 128 KB di BSS. Allineati a 256 (requisito del chip).
 #[repr(align(256))]
 struct RxBufs([[u8; RX_BUF_LEN]; RX_DESC]);
 static mut RX_BUFS: RxBufs = RxBufs([[0u8; RX_BUF_LEN]; RX_DESC]);
@@ -91,11 +95,13 @@ pub static mut RX_RCR: u32 = 0; // RxConfig (0x44) riletto dopo l'init
 pub static mut RX_MAXSZ: u16 = 0; // RxMaxSize (0xda) riletto
 /// opts1 del primo descrittore: se è 0x80003FFF (o 0xC0003FFF) il ring è armato.
 pub static mut RX_DESC0: u32 = 0;
+/// Quanti overflow RX sono stati visti e recuperati.
+pub static mut RX_OVERFLOWS: u32 = 0;
 
 /// Epoca di build. Va INCREMENTATA a mano ad ogni build che cambia il
 /// protocollo o l'RX: senza, non si può sapere quale kernel sta parlando —
 /// ed è esattamente la confusione che ha fatto perdere un giro il 05/10.
-pub const NET_EPOCH: u32 = 6;
+pub const NET_EPOCH: u32 = 7;
 
 const INTR_STATUS: u64 = 0x3E;
 
@@ -630,6 +636,16 @@ impl Rtl {
     pub unsafe fn poll_rx() {
         if !RX_INIT_OK {
             return;
+        }
+        // Se il chip è andato in overflow, si ferma. Va svegliato: si scrive
+        // indietro il bit (si pulisce) e si riabilita il ricevitore. Senza
+        // questo, un solo overflow al boot zittisce la porta per sempre.
+        let st = core::ptr::read_volatile((RTL_MMIO + INTR_STATUS) as *const u16);
+        if st & (0x0010 | 0x0040) != 0 {
+            core::ptr::write_volatile((RTL_MMIO + INTR_STATUS) as *mut u16, st);
+            let cmd = core::ptr::read_volatile((RTL_MMIO + CHIP_CMD) as *const u8);
+            core::ptr::write_volatile((RTL_MMIO + CHIP_CMD) as *mut u8, cmd | 0x08);
+            RX_OVERFLOWS = RX_OVERFLOWS.wrapping_add(1);
         }
         let d = (&raw mut RX_RING.0) as *mut u32;
         for i in 0..RX_DESC {

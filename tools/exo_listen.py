@@ -113,12 +113,12 @@ def parse_payload(raw: bytes) -> dict:
     lesplorato = _num(l[1], 0, 2**63, "l[1]")
 
     # Diagnostica RX. OPZIONALE: i kernel fino al 05/10 non la mandano.
-    # [rx_pkts, rx_errs, rx_config, rx_maxsize, chipcmd, desc_own_mask, intr_status]
+    # [pkts, errs, cfg, max, cmd, own_mask, intr, overflows]
     r = d.get("r")
     diag = None
     if r is not None:
-        if not isinstance(r, list) or len(r) != 7:
-            raise Scarto("r: attesi 7 valori di diagnostica")
+        if not isinstance(r, list) or len(r) != 8:
+            raise Scarto("r: attesi 8 valori di diagnostica")
         diag = [_num(v, 0, 2**32, f"r[{i}]") for i, v in enumerate(r)]
 
     out = {
@@ -144,9 +144,9 @@ def formatta(r: dict) -> str:
     ch = ",".join(f"{v:.4f}" for v in chemio)
     rx = ""
     if "r" in r:
-        p, e, cfg, mx, cmd, own, intr = r["r"]
+        p, e, cfg, mx, cmd, own, intr, ovf = r["r"]
         rx = (f" rx_pkts={p} rx_errs={e} rx_cfg=0x{cfg:04x} rx_max={mx}"
-              f" cmd=0x{cmd:02x} own=0x{own:x} intr=0x{intr:04x}")
+              f" cmd=0x{cmd:02x} own=0x{own:x} intr=0x{intr:04x} ovf={ovf}")
     ep = f" [epoca {r['v']}]" if "v" in r else ""
     return (f"t={r['t']:<9} concept={r['k']:<8} chemio=[{ch}] "
             f"w={r['w']} imparato={r['l'][0]} esplorato={r['l'][1]}{rx}{ep}")

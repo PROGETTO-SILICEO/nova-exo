@@ -30,20 +30,27 @@ BROADCAST = "192.168.0.255"
 PORT = 42800
 
 
-def bussa(quattro: bytes, n: int, delay: float, porta: int, verbose: bool) -> int:
+def bussa(quattro: bytes, n: int, delay: float, porta: int, verbose: bool,
+          pad: int = 0) -> int:
+    """`pad` = lunghezza TOTALE del payload UDP. Serve perché un frame
+    Ethernet sotto i 60 byte è un RUNT: se la RxConfig non ha AcceptRunt
+    (0x10), il chip lo scarta. Con 4 byte il frame è 46 byte -> rifiutato.
+    Portandolo a 64 il frame è 106 byte e passa."""
+    payload = quattro + bytes(max(0, pad - len(quattro)))
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     s.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
     inviati = 0
     try:
         for i in range(n):
             try:
-                s.sendto(quattro, (BROADCAST, porta))
+                s.sendto(payload, (BROADCAST, porta))
                 inviati += 1
             except OSError as e:
                 print(f"[exo-poke] errore: {e}", file=sys.stderr)
                 break
             if verbose:
-                print(f"[exo-poke] {i + 1}/{n} -> {BROADCAST}:{porta} {quattro.hex()}")
+                print(f"[exo-poke] {i + 1}/{n} -> {BROADCAST}:{porta} {quattro.hex()} "
+                      f"(frame {14 + 20 + 8 + len(payload)} byte)")
             if delay:
                 time.sleep(delay)
     finally:
@@ -59,6 +66,9 @@ def main(argv=None) -> int:
     ap.add_argument("--n", type=int, default=10)
     ap.add_argument("--delay", type=float, default=0.3)
     ap.add_argument("--port", type=int, default=PORT)
+    ap.add_argument("--pad", type=int, default=64,
+                    help="lunghezza totale del payload UDP (min 60-byte frame: "
+                         "con 4 byte il frame e' un runt e il chip lo scarta)")
     ap.add_argument("--verbose", action="store_true")
     a = ap.parse_args(argv)
     try:
@@ -71,7 +81,7 @@ def main(argv=None) -> int:
         print(f"[exo-poke] servono esattamente 4 byte, ne ho {len(vals)}",
               file=sys.stderr)
         return 2
-    return bussa(bytes(vals), a.n, a.delay, a.port, a.verbose)
+    return bussa(bytes(vals), a.n, a.delay, a.port, a.verbose, a.pad)
 
 
 if __name__ == "__main__":

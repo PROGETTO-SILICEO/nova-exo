@@ -27,9 +27,15 @@ pub const CAP: usize = 64;
 // Da rtl8169_mark_to_asic: opts1 = DescOwn | eor | R8169_RX_BUF_SIZE.
 pub const DESC_OWN: u32 = 1 << 31; // in mano al chip
 pub const DESC_RING_END: u32 = 1 << 30; // fine del ring (ultimo descrittore)
-/// R8169_RX_BUF_SIZE = SZ_16K - 1. DEVE stare in opts1: senza, il chip non
-/// sa quanto può scrivere nel buffer (e all'inizio non scrive affatto).
-pub const RX_DESC_BUF_SIZE: u32 = 16383;
+/// Dimensione massima che il chip può scrivere in un buffer, meno uno.
+/// DEVE stare in opts1 (senza, il chip non scrive affatto) e DEVE essere
+/// coerente con RxMaxSize e con la dimensione reale del buffer: se diciamo
+/// 16383 avendo buffer da 2048, il DMA scrive FUORI.
+///
+/// 2047 invece dei 16383 di Linux: i frame Ethernet arrivano a 1518, quindi
+/// 2048 basta — e con buffer piccoli posso permettermi MOLTI descrittori,
+/// che è quello che serve contro gli overflow.
+pub const RX_DESC_BUF_SIZE: u32 = 2047;
 
 /// opts1 di un descrittore RX armato. `i` è l'indice, `n` il numero di
 /// descrittori. Un posto solo per questo formato: init e riarmo la usano

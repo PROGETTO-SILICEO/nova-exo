@@ -1605,6 +1605,7 @@ pub extern "C" fn _start() -> ! {
                         rtl::RX_CMD as u32,
                         rtl::rx_desc_own_mask(),
                         rtl::intr_status() as u32,
+                        rtl::RX_OVERFLOWS,
                     ];
                     let n = net::build_state_frame(
                         buf,

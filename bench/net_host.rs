@@ -17,7 +17,7 @@ use net::*;
 
 const SRC_MAC: [u8; 6] = [0xc8, 0x5b, 0x76, 0xe0, 0xe0, 0x01];
 const OFF_PAYLOAD: usize = 14 + 20 + 8; // eth + ip + udp
-const DIAG: [u32; 7] = [11, 0, 0x870E, 16384, 0x0C, 0xF, 0];
+const DIAG: [u32; 8] = [11, 0, 0x870E, 2048, 0x0C, 0xF, 0, 0];
 
 fn cell(v: f32) -> [f32; 16] {
     let mut c = [0.0f32; 16];
@@ -199,7 +199,7 @@ fn payload_porta_la_diagnostica_rx() {
     // differenza fra "porta chiusa" e "rete silenziosa" è questo campo.
     let (n, b) = frame();
     let p = payload(&b, n);
-    assert!(p.contains("\"r\":[11,0,34574,16384,12,15,0]"), "manca la diagnostica RX: {}", p);
+    assert!(p.contains("\"r\":[11,0,34574,2048,12,15,0,0]"), "manca la diagnostica RX: {}", p);
     assert!(p.contains("\"v\":5"), "manca l'epoca di build: {}", p);
 }
 

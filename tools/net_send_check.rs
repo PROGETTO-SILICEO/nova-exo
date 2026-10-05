@@ -42,7 +42,7 @@ fn main() {
         0.5,
         3,
         7,
-        [11, 2, 0x870E, 16384, 0x0C, 0xF, 0],
+        [11, 2, 0x870E, 2048, 0x0C, 0xF, 0, 0],
         5,
     );
     assert!(n > 0, "build_state_frame non ha scritto nulla");

@@ -173,7 +173,7 @@ pub fn build_payload(
     desire_int: f32,
     cambi: u32,
     esplorazioni: u32,
-    diag: [u32; 7],
+    diag: [u32; 8],
     epoch: u32,
 ) -> usize {
     let mut pos = 0usize;
@@ -205,7 +205,7 @@ pub fn build_payload(
     write_u32_buf(buf, &mut pos, esplorazioni);
     // Diagnostica RX: sul metallo la seriale non esiste, questo è l'unico
     // modo di sapere se la porta d'ingresso si è aperta e se riceve.
-    // [rx_pkts, rx_errs, rx_config, rx_maxsize, chipcmd, desc0_opts1]
+    // [rx_pkts, rx_errs, rx_config, rx_maxsize, chipcmd, own_mask, intr, overflows]
     push_str(buf, &mut pos, "],\"r\":[");
     for (i, v) in diag.iter().enumerate() {
         if i > 0 {
@@ -233,7 +233,7 @@ pub fn build_state_frame(
     desire_int: f32,
     cambi: u32,
     esplorazioni: u32,
-    diag: [u32; 7],
+    diag: [u32; 8],
     epoch: u32,
 ) -> usize {
     let hdr_len = 14 + 20 + 8;

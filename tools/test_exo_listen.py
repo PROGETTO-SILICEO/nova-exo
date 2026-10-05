@@ -64,8 +64,8 @@ def test_formatta_non_solleva():
 # ── Diagnostica RX (campo "r") ────────────────────────────────────────────
 
 def test_diagnostica_rx_parsa():
-    r = parse_payload(payload_net_rs(r=(11, 0, 0x870E, 16384, 12, 0xF, 0)))
-    assert r["r"] == [11, 0, 0x870E, 16384, 12, 0xF, 0], r
+    r = parse_payload(payload_net_rs(r=(11, 0, 0x870E, 2048, 12, 0xF, 0, 0)))
+    assert r["r"] == [11, 0, 0x870E, 2048, 12, 0xF, 0, 0], r
 
 
 def test_epoca_di_build():
@@ -86,15 +86,15 @@ def test_senza_diagnostica_e_compatibile():
 
 
 def test_formatta_mostra_la_diagnostica():
-    s = formatta(parse_payload(payload_net_rs(r=(11, 2, 0x870E, 16384, 12, 0xF, 0))))
+    s = formatta(parse_payload(payload_net_rs(r=(11, 2, 0x870E, 2048, 12, 0xF, 0, 3))))
     assert "rx_pkts=11" in s and "rx_errs=2" in s, s
-    assert "cmd=0x0c" in s and "own=0xf" in s, s
+    assert "cmd=0x0c" in s and "own=0xf" in s and "ovf=3" in s, s
 
 
 def test_diagnostica_malformata_e_scartata():
     _scarta(payload_net_rs().replace(b'"l":[3,7]}', b'"l":[3,7],"r":[1,2]}'),
             "r con 2 valori")
-    _scarta(payload_net_rs().replace(b'"l":[3,7]}', b'"l":[3,7],"r":[-1,0,0,0,0,0,0]}'),
+    _scarta(payload_net_rs().replace(b'"l":[3,7]}', b'"l":[3,7],"r":[-1,0,0,0,0,0,0,0]}'),
             "r negativo")
 
 
