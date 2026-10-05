@@ -47,6 +47,32 @@ static mut TX_BUF: Aligned2048 = Aligned2048([0u8; 2048]);
 pub static mut RTL_MMIO: u64 = 0;
 pub static mut RTL_PRESENT: bool = false;
 
+/// MAC sorgente dei frame di Exo. È la firma "EXO-01" usata dal beacon dal
+/// 04/10/2026, e ha funzionato da subito: la teniamo per continuità tra
+/// beacon e telemetria. DEBITO NOTO: non è il MAC reale del chip
+/// (`Rtl::probe().mac`), che sarebbe più corretto — da fare quando si
+/// consoliderà l'init della NIC.
+pub const EXO_MAC: [u8; 6] = [0xc8, 0x5b, 0x76, 0xe0, 0xe0, 0x01];
+
+/// Il descrittore TX è libero? Serve a spedire **senza bloccare** il loop:
+/// se è occupato si salta il giro invece di aspettare.
+pub unsafe fn tx_ready() -> bool {
+    if !RTL_PRESENT || RTL_MMIO == 0 {
+        return false;
+    }
+    let d = (&raw const TX_RING.0) as *const u32;
+    core::ptr::read_volatile(d) & DESC_OWN == 0
+}
+
+/// Spedisce un frame Ethernet già costruito (es. IPv4/UDP di `net.rs`).
+/// Non rende pubblico `RTL_MMIO`: il TX passa sempre da qui.
+pub unsafe fn tx_raw(frame: &[u8]) -> bool {
+    if !RTL_PRESENT || RTL_MMIO == 0 {
+        return false;
+    }
+    Rtl::tx_frame(RTL_MMIO, frame)
+}
+
 /// Beacon di rete (04/10/2026): frame broadcast con contatore, chiamabile
 /// dal loop ogni N tick. Robusto: il TX non dipende dal timing del boot.
 pub unsafe fn tx_beacon(counter: u64) -> bool {
@@ -57,7 +83,7 @@ pub unsafe fn tx_beacon(counter: u64) -> bool {
     for b in frame.iter_mut().take(6) {
         *b = 0xFF; // broadcast
     }
-    frame[6..12].copy_from_slice(&[0xc8, 0x5b, 0x76, 0xe0, 0xe0, 0x01]); // firma EXO-01
+    frame[6..12].copy_from_slice(&EXO_MAC); // firma EXO-01
     frame[12] = 0x88;
     frame[13] = 0xB5;
     let msg = b"EXO TICK ";

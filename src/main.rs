@@ -19,6 +19,7 @@ mod idt;
 mod inference;
 mod interpreter;
 mod interpreter_weights;
+mod net;
 mod neurogenesis;
 mod paging;
 mod pain;
@@ -1009,6 +1010,10 @@ pub extern "C" fn _start() -> ! {
     let mut mark_window = 500u64;
     let mut mark_neuro = 1000u64;
     let mut mark_beacon = 500u64; // beacon di rete (TX periodico)
+    // Buffer del frame di telemetria. static mut e non locale: lo stack
+    // Limine è piccolo e 1518 byte non ci stanno comodi (stessa ragione
+    // del NEURO_POOL).
+    static mut TX_FRAME: [u8; 1518] = [0u8; 1518];
     // Il corpo che cresce: pool di neuroni clonati (neurogenesi v0.24)
     // NOTA: static mut (il pool è ~510KB — non sta nello stack Limine)
     static mut NEURO_POOL: neurogenesis::NeuroPool = neurogenesis::NeuroPool::new();
@@ -1579,6 +1584,40 @@ pub extern "C" fn _start() -> ! {
             write_str(" e="); write_f32(int_rep.energy);
             write_str(" err="); write_f32(interpreter.last_error());
             write_str("\n");
+
+            // ── Telemetria UDP (05/10/2026): lo stesso stato che va sulla
+            // seriale, ma su rete. UDP e non il frame 0x88B5 perché il
+            // ricevitore (Sempre) gira in sandbox `no_new_privs`: i frame
+            // Ethernet grezzi non si catturano, un socket UDP normale sì.
+            // Spedito QUI, nello stesso tick del SENSO:INT, così rete e
+            // seriale portano lo stesso `concept` e si possono confrontare.
+            // Non bloccante: se il descrittore è occupato si salta il giro.
+            unsafe {
+                if rtl::tx_ready() {
+                    let cells = [
+                        tessuto.tatto.h,
+                        tessuto.chemio.h,
+                        tessuto.metabol.h,
+                        tessuto.integrat.h,
+                    ];
+                    let (d_id, d_int) = executive.current();
+                    let buf = &mut *(&raw mut TX_FRAME);
+                    let n = net::build_state_frame(
+                        buf,
+                        rtl::EXO_MAC,
+                        cfc::tick(),
+                        interpreter::CONCEPTS[int_rep.concept as usize],
+                        &cells,
+                        d_id,
+                        d_int,
+                        executive.preferenza.cambi,
+                        executive.preferenza.esplorazioni,
+                    );
+                    if n > 0 {
+                        rtl::tx_raw(&buf[..n]);
+                    }
+                }
+            }
         }
 
         // ── Il cervello nel metallo (InferenceEngine) ──
