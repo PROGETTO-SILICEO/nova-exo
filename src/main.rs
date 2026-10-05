@@ -21,6 +21,7 @@ mod interpreter;
 mod interpreter_weights;
 mod neurogenesis;
 mod paging;
+mod pain;
 mod pci;
 mod predictor;
 mod rtl;
@@ -1024,6 +1025,11 @@ pub extern "C" fn _start() -> ! {
     let mut prev_pf_err = 0.0f32;
     let mut pred_alpha_mod = 1.0f32;
     let mut line_reader = LineReader::new();
+    // Dolore commandato: lo strumento di laboratorio, non un senso.
+    // Un page fault vero dura un tick e non lascia traccia nella
+    // percezione; questo lo tiene acceso per un numero noto di tick.
+    // Vedi src/pain.rs — spento all'avvio, e `Default` non lo arma mai.
+    let mut dolore = pain::Pain::new();
     let mut dump_requested = false;
     let mut sleep_pending = false;
     let mut sleep_auto_trigger = 5000u64;
@@ -1184,6 +1190,17 @@ pub extern "C" fn _start() -> ! {
             }
             _ => None,
         };
+        // Il dolore commandato consuma il suo tick e, finché è acceso,
+        // tiene il canale del dolore aperto. Un fault vero arriva una
+        // volta sola e sparisce: qui il dolore dura quanto diciamo.
+        dolore.scadi();
+        let sense = sense.or_else(|| {
+            if dolore.attivo() {
+                Some(cfc::SenseEvent { pf_addr: dolore.addr(), pf_err: 0, gp_err: 0 })
+            } else {
+                None
+            }
+        });
         if let Some(ref se) = sense {
             if se.pf_addr != 0 {
                 write_str("SENS:PF@");
@@ -1334,6 +1351,52 @@ pub extern "C" fn _start() -> ! {
                         write_u32(i_val as u32); serial_putc(b',');
                         write_u32(j_val as u32); serial_putc(b'=');
                         write_f32(val); serial_putc(b'\n');
+                    }
+                }
+                chemio_input = [0.0; 4];
+            } else if raw.starts_with(b"PAIN ") {
+                // PAIN <hex_addr> <tick>  — tiene acceso il canale del
+                // dolore per `tick` tick del ciclo principale.
+                // PAIN OFF — lo spegne subito.
+                //
+                // L'indirizzo 0 è rifiutato: nel corpo 0 è la
+                // convenzione di "nessun fault", e armare il dolore su un
+                // indirizzo che il corpo non sa distinguere produrrebbe
+                // silenzio dichiarato come dolore.
+                let args = &raw[5..];
+                let mut campi = args.split(|&b| b == b' ');
+                let primo = campi.next().unwrap_or(b"");
+                if primo.eq_ignore_ascii_case(b"OFF") {
+                    dolore.spegni();
+                    write_str("PAIN:OFF\n");
+                } else {
+                    match hexutil::parse_hex64(primo) {
+                        Some(addr) if addr != 0 => {
+                            let mut n = 0u32;
+                            let mut cifre = 0;
+                            for &b in campi.next().unwrap_or(b"") {
+                                match (b as char).to_digit(10) {
+                                    Some(d) => {
+                                        n = n.saturating_mul(10).saturating_add(d);
+                                        cifre += 1;
+                                    }
+                                    None => break,
+                                }
+                            }
+                            match cifre {
+                                0 => write_str("E:PAIN atteso PAIN <addr> <tick> | PAIN OFF\n"),
+                                _ => {
+                                    dolore.arm(addr, n);
+                                    write_str("PAIN:ON@");
+                                    write_hex64(addr);
+                                    write_str(":TICK=");
+                                    write_u32(n);
+                                    serial_putc(b'\n');
+                                }
+                            }
+                        }
+                        Some(_) => write_str("E:PAIN indirizzo 0 rifiutato (0 = nessun fault)\n"),
+                        None => write_str("E:PAIN atteso PAIN <addr> <tick> | PAIN OFF\n"),
                     }
                 }
                 chemio_input = [0.0; 4];

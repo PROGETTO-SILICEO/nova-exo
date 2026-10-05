@@ -11,9 +11,34 @@ BUILD    := target/$(TARGET)/release
 ISO_DIR  := build/iso
 LIMINE   := build/limine-12.3.3
 
+# ── Test host ──────────────────────────────────────────────────────────────
+# Il kernel è no_std e non si può testare in loco: i banchi host esercitano
+# la logica PURA, includendo il codice reale con #[path] dove possibile.
+# Un test che passa ma copre una copia non è un test: è una coincidenza.
+
+HOST_BENCH_DIR := $(BUILD)/bench
+
+bench:
+	@mkdir -p $(HOST_BENCH_DIR)
+	@set -e; for b in bench/*.rs; do \
+		name=`basename $$b .rs`; \
+		echo "── compilo $$name"; \
+		rustc --test -O $$b -o $(HOST_BENCH_DIR)/$$name; \
+	done
+	@echo "banchi compilati in $(HOST_BENCH_DIR)"
+
+test: bench
+	@set -e; fail=0; \
+	for t in $(HOST_BENCH_DIR)/*; do \
+		echo "── eseguo `basename $$t`"; \
+		$$t --quiet || fail=1; \
+	done; \
+	if [ $$fail -ne 0 ]; then echo "TEST FALLITI"; exit 1; fi; \
+	echo "TUTTI I BANCHI VERDI"
+
 # ── Build ───────────────────────────────────────────────────────────────────
 
-.PHONY: all build clean install-deps run run-bios run-uefi usb demo video-demo build-demo iso-demo
+.PHONY: all build clean install-deps run run-bios run-uefi usb demo video-demo build-demo iso-demo test bench
 
 all: build
 
