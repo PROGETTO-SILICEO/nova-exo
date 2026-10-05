@@ -1600,8 +1600,10 @@ pub extern "C" fn _start() -> ! {
                     let diag = [
                         rx::PKTS,
                         rx::ERRS,
-                        rx::LAST_LEN as u32,
+                        rtl::RX_RCR,
+                        rtl::RX_MAXSZ as u32,
                         rtl::RX_CMD as u32,
+                        rtl::RX_DESC0,
                     ];
                     let n = net::build_state_frame(
                         buf,

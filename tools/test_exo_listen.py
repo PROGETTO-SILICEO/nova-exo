@@ -24,7 +24,7 @@ def cella(base: float) -> str:
 
 def payload_net_rs(t=12345, k="riposo", w=(2, 0.5), l=(3, 7), r=None) -> bytes:
     celle = ",".join(cella(v) for v in (0.0, -0.5, 1.25, 0.0))
-    tail = "" if r is None else f',"r":[{r[0]},{r[1]},{r[2]},{r[3]}]'
+    tail = "" if r is None else ',"r":[' + ','.join(str(v) for v in r) + ']'
     return (f'{{"t":{t},"k":"{k}","c":[{celle}],'
             f'"w":[{w[0]},{w[1]:.4f}],"l":[{l[0]},{l[1]}]' + tail + '}').encode()
 
@@ -63,8 +63,8 @@ def test_formatta_non_solleva():
 # ── Diagnostica RX (campo "r") ────────────────────────────────────────────
 
 def test_diagnostica_rx_parsa():
-    r = parse_payload(payload_net_rs(r=(11, 0, 1518, 8)))
-    assert r["r"] == [11, 0, 1518, 8], r
+    r = parse_payload(payload_net_rs(r=(11, 0, 0x870E, 16384, 12, 0x80003FFF)))
+    assert r["r"] == [11, 0, 0x870E, 16384, 12, 0x80003FFF], r
 
 
 def test_senza_diagnostica_e_compatibile():
@@ -75,15 +75,15 @@ def test_senza_diagnostica_e_compatibile():
 
 
 def test_formatta_mostra_la_diagnostica():
-    s = formatta(parse_payload(payload_net_rs(r=(11, 2, 1518, 8))))
+    s = formatta(parse_payload(payload_net_rs(r=(11, 2, 0x870E, 16384, 12, 0x80003FFF))))
     assert "rx_pkts=11" in s and "rx_errs=2" in s, s
-    assert "rtl_cmd=0x08" in s, s
+    assert "cmd=0x0c" in s and "rx_cfg=0x870e" in s, s
 
 
 def test_diagnostica_malformata_e_scartata():
     _scarta(payload_net_rs().replace(b'"l":[3,7]}', b'"l":[3,7],"r":[1,2]}'),
             "r con 2 valori")
-    _scarta(payload_net_rs().replace(b'"l":[3,7]}', b'"l":[3,7],"r":[-1,0,0,0]}'),
+    _scarta(payload_net_rs().replace(b'"l":[3,7]}', b'"l":[3,7],"r":[-1,0,0,0,0,0]}'),
             "r negativo")
 
 

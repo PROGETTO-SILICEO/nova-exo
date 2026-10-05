@@ -26,19 +26,36 @@ const PHYAR: u64 = 0x60; // PHY access register (bit31=busy, 16-20=reg, 0-15=dat
 const RCR: u64 = 0x44; // Receive Configuration Register
 const RDSAR_LO: u64 = 0xE4; // RX Descriptor Start Address (basso)
 const RDSAR_HI: u64 = 0xE8; // RX Descriptor Start Address (alto)
+const RMS: u64 = 0xDA; // RxMaxSize — la lunghezza massima che il chip accetta
 
-// RCR: si accetta SOLO fisico/multicast/broadcast — niente "tutto" e niente
-// pacchetti rotti. Se si accettasse tutto, il corpo sentirebbe anche il
-// rumore della rete.
-const RCR_APM: u32 = 1 << 1; // Accept Physical Match
-const RCR_AM: u32 = 1 << 2; // Accept Multicast
-const RCR_AB: u32 = 1 << 3; // Accept Broadcast
-const RCR_RBL_2048: u32 = 5 << 8; // Rx Buffer Length = 2048 (come i buffer)
-const RCR_MXDMA_UNLIM: u32 = 7 << 16; // DMA senza limite
+// ── RxConfig (0x44): i valori sono presi LETTERALMENTE da r8169_main.c ──
+// ERRORE CORRETTO il 05/10: credevo che i bit 8-10 fossero la lunghezza del
+// buffer. Non lo sono: sono il DMA burst (RXCFG_DMA_SHIFT=8). La lunghezza
+// sta in RxMaxSize (0xda), un registro separato che non avevo mai scritto.
+//
+// rtl_init_rxcfg, caso "default" (8105e/8106e/8102e): RX128_INT_EN | RX_DMA_BURST
+const RX128_INT_EN: u32 = 1 << 15; // 0x8000
+const RX_DMA_BURST: u32 = 7 << 8; // 0x0700 — burst massimo, non la lunghezza
+// rtl_set_rx_mode: AcceptBroadcast | AcceptMyPhys | AcceptMulticast
+// Si accetta SOLO fisico/multicast/broadcast: niente "tutto", così il corpo
+// non sente il rumore della rete.
+const RX_ACCEPT: u32 = 0x08 | 0x02 | 0x04; // 0x0E
+const RX_CONFIG_VALUE: u32 = RX128_INT_EN | RX_DMA_BURST | RX_ACCEPT; // 0x870E
+
+/// rtl_set_rx_max_size: `R8169_RX_BUF_SIZE + 1` = 16384.
+/// Commento letterale di Linux: "Low hurts. Let's disable the filtering."
+const RX_MAX_SIZE: u16 = 16384;
+
+/// rtl8169_mark_to_asic: `opts1 = DescOwn | eor | R8169_RX_BUF_SIZE`.
+/// R8169_RX_BUF_SIZE = SZ_16K - 1 = 16383. SENZA questo il chip non sa
+/// quanto può scrivere: era il bug principale.
+const RX_DESC_BUF_SIZE: u32 = 16383;
 
 /// Descrittori RX (4) e dimensione di ciascun buffer.
+/// I buffer DEVONO essere almeno `RX_DESC_BUF_SIZE+1`: se dicessimo al chip
+/// 16383 e ne avessimo 2048, il DMA scriverebbe fuori dal buffer.
 const RX_DESC: usize = 4;
-const RX_BUF_LEN: usize = 2048;
+const RX_BUF_LEN: usize = 16384;
 
 // PHY registers (standard MII)
 const PHY_BMCR: u8 = 0; // Basic Mode Control: bit11=power down, bit9=restart autoneg
@@ -65,7 +82,8 @@ static mut TX_BUF: Aligned2048 = Aligned2048([0u8; 2048]);
 // Il ring deve stare su un confine da 256 byte (requisito del chip).
 static mut RX_RING: Aligned256 = Aligned256([0u8; 256]);
 /// Un buffer per descrittore: il chip ci scrive dentro via DMA.
-#[repr(align(64))]
+/// 4 × 16 KB = 64 KB di BSS. Allineati a 256 (requisito del chip).
+#[repr(align(256))]
 struct RxBufs([[u8; RX_BUF_LEN]; RX_DESC]);
 static mut RX_BUFS: RxBufs = RxBufs([[0u8; RX_BUF_LEN]; RX_DESC]);
 
@@ -73,8 +91,11 @@ static mut RX_BUFS: RxBufs = RxBufs([[0u8; RX_BUF_LEN]; RX_DESC]);
 /// perché lì la seriale non esiste. Senza questa, un RX che non funziona
 /// sarebbe indistinguibile da una rete silenziosa.
 pub static mut RX_INIT_OK: bool = false;
-pub static mut RX_CMD: u8 = 0; // valore di CHIP_CMD dopo l'init
-pub static mut RX_RCR: u32 = 0; // valore letto da RCR dopo l'init
+pub static mut RX_CMD: u8 = 0; // CHIP_CMD dopo l'init
+pub static mut RX_RCR: u32 = 0; // RxConfig (0x44) riletto dopo l'init
+pub static mut RX_MAXSZ: u16 = 0; // RxMaxSize (0xda) riletto
+/// opts1 del primo descrittore: se è 0x80003FFF (o 0xC0003FFF) il ring è armato.
+pub static mut RX_DESC0: u32 = 0;
 
 /// Stato globale per il beacon periodico dal loop principale.
 pub static mut RTL_MMIO: u64 = 0;
@@ -527,42 +548,54 @@ impl Rtl {
     pub unsafe fn rx_init(mmio: u64) -> bool {
         let ring_phys = crate::virt_to_phys(&raw const RX_RING.0 as *const _ as u64);
 
-        // Descriptor: opts1 (OWN), opts2, addr64. L'ultimo ha RingEnd.
+        // opts1 = DescOwn | (RingEnd se ultimo) | DIMENSIONE BUFFER.
+        // La dimensione nei bit bassi è quella che mancava: senza, il chip non
+        // sa quanto può scrivere. Da rtl8169_mark_to_asic.
         let d = (&raw mut RX_RING.0) as *mut u32;
         for i in 0..RX_DESC {
-            let buf_phys = crate::virt_to_phys(
-                (&raw const RX_BUFS.0[i][0]) as *const _ as u64,
-            );
+            let buf_phys =
+                crate::virt_to_phys((&raw const RX_BUFS.0[i][0]) as *const _ as u64);
             let e = d.add(i * 4);
-            let opts1 = DESC_OWN | if i == RX_DESC - 1 { DESC_RING_END } else { 0 };
+            let opts1 = DESC_OWN
+                | if i == RX_DESC - 1 { DESC_RING_END } else { 0 }
+                | RX_DESC_BUF_SIZE;
             core::ptr::write_volatile(e, opts1);
             core::ptr::write_volatile(e.add(1), 0);
             core::ptr::write_volatile(e.add(2) as *mut u64, buf_phys);
         }
 
+        // Ordine di rtl_hw_start: unlock -> RxMaxSize -> descrittori -> lock
+        // -> ChipCmd -> RxConfig. Seguito alla lettera, non reinventato.
         core::ptr::write_volatile((mmio + CFG_9346) as *mut u8, 0xC0);
 
-        // Indirizzo del ring RX (registro a 64 bit)
-        core::ptr::write_volatile((mmio + RDSAR_LO) as *mut u32, ring_phys as u32);
+        // RxMaxSize: senza questo il chip filtra tutto ("Low hurts")
+        core::ptr::write_volatile((mmio + RMS) as *mut u16, RX_MAX_SIZE);
+
+        // Indirizzo del ring: PRIMA l'alto, poi il basso (come Linux)
         core::ptr::write_volatile((mmio + RDSAR_HI) as *mut u32, (ring_phys >> 32) as u32);
-
-        // RCR: accetta fisico + multicast + broadcast; RBL = 2048 (come i buffer);
-        // MXDMA unlimited. NON accetta pacchetti rotti né "tutto".
-        let rcr = RCR_APM | RCR_AM | RCR_AB | RCR_RBL_2048 | RCR_MXDMA_UNLIM;
-        core::ptr::write_volatile((mmio + RCR) as *mut u32, rcr);
-
-        // Abilita trasmettitore E ricevitore
-        let cmd = core::ptr::read_volatile((mmio + CHIP_CMD) as *const u8);
-        core::ptr::write_volatile((mmio + CHIP_CMD) as *mut u8, cmd | 0x04 | 0x08);
+        core::ptr::write_volatile((mmio + RDSAR_LO) as *mut u32, ring_phys as u32);
 
         core::ptr::write_volatile((mmio + CFG_9346) as *mut u8, 0x00);
 
-        // Verifica: il ricevitore è davvero acceso? Se no, non mentire.
+        // Abilita trasmettitore E ricevitore (CmdTxEnb | CmdRxEnb)
+        let cmd = core::ptr::read_volatile((mmio + CHIP_CMD) as *const u8);
+        core::ptr::write_volatile((mmio + CHIP_CMD) as *mut u8, cmd | 0x04 | 0x08);
+
+        // RxConfig per ultimo (rtl_init_rxcfg + rtl_set_rx_mode)
+        core::ptr::write_volatile((mmio + RCR) as *mut u32, RX_CONFIG_VALUE);
+
+        // Verifica: il ricevitore è acceso, la config accetta il broadcast,
+        // RxMaxSize ha preso. Se una delle tre non torna, non si mente.
         let cmd_after = core::ptr::read_volatile((mmio + CHIP_CMD) as *const u8);
-        let rcr_after = core::ptr::read_volatile((mmio + RCR) as *const u32);
+        let cfg_after = core::ptr::read_volatile((mmio + RCR) as *const u32);
+        let max_after = core::ptr::read_volatile((mmio + RMS) as *const u16);
         RX_CMD = cmd_after;
-        RX_RCR = rcr_after;
-        RX_INIT_OK = (cmd_after & 0x08) != 0 && (rcr_after & 0xFFFF_FFFF) == rcr;
+        RX_RCR = cfg_after;
+        RX_MAXSZ = max_after;
+        RX_DESC0 = core::ptr::read_volatile(d);
+        RX_INIT_OK = (cmd_after & 0x08) != 0
+            && (cfg_after & 0x3F) == RX_ACCEPT
+            && max_after == RX_MAX_SIZE;
         RX_INIT_OK
     }
 

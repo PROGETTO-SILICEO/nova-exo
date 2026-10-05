@@ -113,12 +113,12 @@ def parse_payload(raw: bytes) -> dict:
     lesplorato = _num(l[1], 0, 2**63, "l[1]")
 
     # Diagnostica RX. OPZIONALE: i kernel fino al 05/10 non la mandano.
-    # [rx_pkts, rx_errs, rx_last_len, rtl_cmd]
+    # [rx_pkts, rx_errs, rx_config, rx_maxsize, chipcmd, desc0_opts1]
     r = d.get("r")
     diag = None
     if r is not None:
-        if not isinstance(r, list) or len(r) != 4:
-            raise Scarto("r: attesi 4 valori di diagnostica")
+        if not isinstance(r, list) or len(r) != 6:
+            raise Scarto("r: attesi 6 valori di diagnostica")
         diag = [_num(v, 0, 2**32, f"r[{i}]") for i, v in enumerate(r)]
 
     out = {
@@ -139,8 +139,9 @@ def formatta(r: dict) -> str:
     ch = ",".join(f"{v:.4f}" for v in chemio)
     rx = ""
     if "r" in r:
-        p, e, ln, cmd = r["r"]
-        rx = f" rx_pkts={p} rx_errs={e} rx_len={ln} rtl_cmd=0x{cmd:02x}"
+        p, e, cfg, mx, cmd, d0 = r["r"]
+        rx = (f" rx_pkts={p} rx_errs={e} rx_cfg=0x{cfg:04x} rx_max={mx}"
+              f" cmd=0x{cmd:02x} d0=0x{d0:08x}")
     return (f"t={r['t']:<9} concept={r['k']:<8} chemio=[{ch}] "
             f"w={r['w']} imparato={r['l'][0]} esplorato={r['l'][1]}{rx}")
 
