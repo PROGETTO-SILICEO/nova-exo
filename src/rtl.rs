@@ -79,7 +79,23 @@ static mut TX_BUF: Aligned2048 = Aligned2048([0u8; 2048]);
 
 // ── RX: ring e buffer (05/10/2026) ──
 // Il ring deve stare su un confine da 256 byte (requisito del chip).
-static mut RX_RING: Aligned256 = Aligned256([0u8; 256]);
+/// Ring RX: `RX_DESC` descrittori da 16 byte. La dimensione si CALCOLA da
+/// RX_DESC — non è più un numero fisso.
+///
+/// PERCHÉ (06/10/2026): era `Aligned256([u8; 256])` = 16 descrittori, mentre
+/// RX_DESC valeva 64. L'init scriveva 64×16 = 1024 byte in un buffer da 256,
+/// cioè **768 byte OLTRE il ring**, corrompendo la BSS accanto. Il 110 si è
+/// congelato e ha bloccato la rete. Non è un errore di distrazione: è una
+/// dimensione scritta a mano che poteva divergere da RX_DESC. Ora deriva.
+#[repr(align(256))]
+struct RxRing([u8; RX_DESC * 16]);
+static mut RX_RING: RxRing = RxRing([0u8; RX_DESC * 16]);
+
+/// Rete di sicurezza: se qualcuno cambia RX_DESC, il ring segue. E questa
+/// asserzione blocca la compilazione se il ring non basta per tutti i
+/// descrittori. Non si può più sbagliare in silenzio.
+const _: () = assert!(RX_DESC * 16 == core::mem::size_of::<RxRing>());
+const _: () = assert!(core::mem::size_of::<RxRing>() >= RX_DESC * 16);
 /// Un buffer per descrittore: il chip ci scrive dentro via DMA.
 /// 64 × 2 KB = 128 KB di BSS. Allineati a 256 (requisito del chip).
 #[repr(align(256))]
