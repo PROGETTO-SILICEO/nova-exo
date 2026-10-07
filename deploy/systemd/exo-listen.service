@@ -1,0 +1,12 @@
+[Unit]
+Description=Listener telemetria UDP di Exo (bare-metal, 192.168.0.200)
+After=network.target
+
+[Service]
+WorkingDirectory=%h/Documenti/GitHub/nova-exo
+ExecStart=/usr/bin/python3 %h/Documenti/GitHub/nova-exo/tools/exo_listen.py --out %h/Documenti/GitHub/nova-exo/experiments/net_telemetry/telemetry.jsonl
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target

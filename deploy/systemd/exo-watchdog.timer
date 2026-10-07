@@ -1,0 +1,10 @@
+[Unit]
+Description=Controlla che il listener di Exo stia davvero scrivendo
+
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec=2min
+AccuracySec=10s
+
+[Install]
+WantedBy=timers.target

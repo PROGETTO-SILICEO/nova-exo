@@ -1,0 +1,12 @@
+[Unit]
+Description=Guardiano del concetto Exo — avvisa quando esce da riposo
+After=exo-listen.service
+
+[Service]
+WorkingDirectory=%h/Documenti/GitHub/nova-exo
+ExecStart=/usr/bin/python3 %h/Documenti/GitHub/nova-exo/tools/exo_concept_watch.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,6 @@
+[Unit]
+Description=Watchdog anti-inceppamento del listener Exo
+
+[Service]
+Type=oneshot
+ExecStart=%h/Documenti/GitHub/nova-exo/tools/exo_watchdog.sh
