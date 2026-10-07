@@ -85,10 +85,69 @@ def load(name):
     return out
 
 
+def pool(sniff, events, window):
+    """Analisi su TUTTI gli eventi insieme.
+
+    Un singolo evento lascia ~8 pacchetti visibili: troppo poco, e con una
+    perdita di cattura misurata fra il 6% e il 25% qualsiasi media su 8
+    numeri è rumore. Con N eventi il campione cresce e la perdita (che e
+    non selettiva per tipo di pacchetto) si medioca.
+    """
+    wins, calms = [], []
+    busy = set()
+    for e in events:
+        t = e["scatto"]["recv"]
+        busy.update(range(int(t * 10) - int(window * 10) - 5,
+                          int(t * 10) + int(window * 10) + 5))
+    for e in events:
+        t = e["scatto"]["recv"]
+        w = [p for p in sniff if p.get("exo") and t - window <= p["ts"] <= t]
+        wins.append(w)
+        c = [p for p in sniff
+             if p.get("exo")
+             and int(p["ts"] * 10) not in busy
+             and t - 90 - window <= p["ts"] <= t - 90]
+        calms.append(c)
+    allw = [p for v in wins for p in v]
+    allc = [p for v in calms for p in v]
+    print(f"\nPOOL su {len(events)} eventi, finestra {window}s")
+    print(f"  campioni di scatto : {len(allw)} pacchetti "
+          f"({len(allw)/max(len(events),1):.1f} per evento)")
+    print(f"  campioni calmi     : {len(allc)} pacchetti")
+
+    def hist(pk):
+        vals = {i: [] for i in range(4)}
+        for p in pk:
+            ch = p.get("chemio")
+            if not ch:
+                ch, _ = chemio_of(bytes.fromhex(p["b"]))
+            if ch:
+                for i, v in enumerate(ch):
+                    vals[i].append(v)
+        return [sum(v)/len(v) if v else 0.0 for v in vals.values()]
+
+    hw, hc = hist(allw), hist(allc)
+    print(f"  chemio media scatto : {[round(x,3) for x in hw]}")
+    print(f"  chemio media calma  : {[round(x,3) for x in hc]}")
+    print(f"  delta               : {[round(hw[i]-hc[i],3) for i in range(4)]}")
+    # differenza per evento: quanti eventi hanno delta positivo su ogni asse
+    conta = [0, 0, 0, 0]
+    for w, c in zip(wins, calms):
+        dw, dc = hist(w), hist(c)
+        for i in range(4):
+            if dw[i] - dc[i] > 0:
+                conta[i] += 1
+    print(f"  eventi con delta>0  : {conta} / {len(events)}")
+    n = len([w for w in wins if w])
+    print(f"  eventi con almeno 1 pkt visibile: {n}/{len(events)}")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--window", type=float, default=2.0, help="secondi prima dello scatto")
     ap.add_argument("--last", action="store_true", help="usa l'ultimo evento, non quello più recente non analizzato")
+    ap.add_argument("--pool", action="store_true",
+                    help="analisi su TUTTI gli eventi insieme, non solo l'ultimo")
     args = ap.parse_args()
 
     events = load("concept_events.jsonl")
@@ -96,6 +155,10 @@ def main():
     if not events or not sniff:
         print("manca qualcosa: eventi=%d sniff=%d" % (len(events), len(sniff)))
         return 1
+
+    if args.pool:
+        pool(sniff, events, args.window)
+        return 0
 
     e = events[-1]
     t = e["scatto"]["recv"]
