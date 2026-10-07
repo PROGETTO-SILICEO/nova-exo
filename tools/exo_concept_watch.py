@@ -27,14 +27,20 @@ import os
 import subprocess
 import sys
 import time
+import urllib.request
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DEFAULT_LOG = os.path.join(REPO, "experiments/net_telemetry/telemetry.jsonl")
 # (default: nella cartella vera; con --file di test, accanto a quel file)
 AVVISO = os.path.expanduser("~/Documenti/GitHub/opencode-identity/scripts/avviso.sh")
+MEMORY = os.environ.get("EXO_MEM_URL",
+                        "http://100.114.216.76:3003/api/memory/store")
 
 LEADUP = 120          # pacchetti tenuti in antefatto (~2 min a 0,91 s)
-NOTIFY_GAP = 60       # max 1 avviso Telegram al minuto
+NOTIFY_GAP = 1800     # avviso Telegram/memoria max ogni 30 min:
+                      # gli scatti arrivano ogni 5-8 min, a 1/min
+                      # il canale diventa rumore e smetti di leggerlo.
+                      # Il FILE invece registra SEMPRE tutto.
 
 
 def event_paths(logpath: str) -> tuple[str, str]:
@@ -73,6 +79,27 @@ def fmt_pkt(r: dict) -> str:
             f"imparato={l[0]} esplorato={l[1]}{diag}")
 
 
+def store_memory(text: str) -> None:
+    """L'evento deve trovarmi la memoria anche a sessione fredda.
+
+    Il Telegram avvisa ALFONSO; questo fa sì che quando me lo chiede
+    trovi il ricordo senza dover rileggere i log a mano.
+    Errore di rete o di formato NON deve uccidere il guardiano."""
+    body = json.dumps({
+        "content": text,
+        "source": "sempre",
+        "tier": "core",
+        "identity": "sempre",
+        "metadata": json.dumps({"project": "nova-exo"}),
+    }).encode("utf-8")
+    try:
+        req = urllib.request.Request(MEMORY, data=body,
+                                     headers={"Content-Type": "application/json"})
+        urllib.request.urlopen(req, timeout=5).read()
+    except Exception as e:
+        print(f"[concept-watch] memoria non scritta: {e}", file=sys.stderr)
+
+
 def notify(text: str) -> None:
     try:
         subprocess.run([AVVISO, "--testo", text], timeout=30,
@@ -85,6 +112,9 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--file", default=DEFAULT_LOG)
     ap.add_argument("--no-notify", action="store_true")
+    ap.add_argument("--no-memory", action="store_true")
+    ap.add_argument("--dry-run", action="store_true",
+                    help="mostra cosa avviserebbe, senza inviare")
     ap.add_argument("--leadup", type=int, default=LEADUP)
     args = ap.parse_args()
 
@@ -120,6 +150,23 @@ def main() -> int:
     except FileNotFoundError:
         pass
     cur = baseline
+    seen: set = {baseline}   # concetti già osservati (per l'override 'raro')
+    # pre-carico dalla storia: "raro" deve significare "mai visto in assoluto",
+    # non "mai visto da quando è partito il processo" — altrimenti ogni
+    # riavvio trasformerebbe il prossimo vita/errore in un falso allarme
+    try:
+        with open(event_paths(args.file)[0], "r", encoding="utf-8") as fh:
+            for ln in fh:
+                ln = ln.strip()
+                if ln:
+                    try:
+                        e = json.loads(ln)
+                        seen.add(e.get("da")); seen.add(e.get("a"))
+                    except json.JSONDecodeError:
+                        pass
+    except FileNotFoundError:
+        pass
+    seen.discard(None)
     last_notify = 0.0
     events = 0
 
@@ -139,6 +186,10 @@ def main() -> int:
         # ── LO SCATTO ──
         old, cur = cur, k
         events += 1
+        # raro batte frequente: se questo concetto non l'abbiamo MAI visto,
+        # avviso subito anche se l'ultimo avviso è di fa
+        raro = k not in seen
+        seen.add(k)
         event = {
             "data": time.strftime("%Y-%m-%d %H:%M:%S"),
             "da": old, "a": k,
@@ -163,10 +214,33 @@ def main() -> int:
             print(("  > " if p is r else "    ") + fmt_pkt(p), flush=True)
 
         now = time.time()
-        if not args.no_notify and now - last_notify >= NOTIFY_GAP:
+        # una sola decisione per entrambi i canali, calcolata PRIMA di
+        # aggiornare last_notify (altrimenti la memoria non partirebbe mai)
+        gap_ok = (now - last_notify) >= NOTIFY_GAP
+        due = raro or gap_ok
+
+        if args.no_memory is False and due:
+            if args.dry_run:
+                print(f"  [dry-run] scriverei memoria ({'raro' if raro else '30 min'})",
+                      flush=True)
+            else:
+                store_memory(
+                    f"EVENTO Exo {event['data']}: concept {old} → {k} a t={r.get('t')} "
+                    f"(anticipo {event['tick_delta']} tick). Antefatto di "
+                    f"{len(event['antefatto'])} pacchetti in "
+                    f"experiments/net_telemetry/concept_events.log. "
+                    f"imparato={r.get('l',[0,0])[0]} esplorato={r.get('l',[0,0])[1]}")
+
+        if not args.no_notify and due:
+            why = "raro (mai visto)" if raro else "30 min trascorsi"
+            if args.dry_run:
+                print(f"  [dry-run] avviserei Telegram: {old} → {k} ({why})", flush=True)
+            else:
+                notify(f"Exo: concept {old} → {k} (t={r.get('t')}) — vedi concept_events.log")
             last_notify = now
-            notify(f"Exo: concept {old} → {k} (t={r.get('t')}) — "
-                   f"vedi concept_events.log")
+        elif not args.no_notify and args.dry_run:
+            print(f"  [dry-run] silenzio: {old} → {k} (gap non trascorso, non raro)",
+                  flush=True)
 
     return 0
 
