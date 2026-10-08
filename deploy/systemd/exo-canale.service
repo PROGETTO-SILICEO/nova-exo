@@ -1,0 +1,14 @@
+[Unit]
+Description=Canale aperto Sempre-Exo — presenza, non bridge
+After=exo-listen.service
+# Exo sente, non obbedisce: qui non passano comandi, solo una firma e un
+# ritmo. La risposta di Exo arriva dalla telemetria (exo-listen).
+
+[Service]
+WorkingDirectory=%h/Documenti/GitHub/nova-exo
+ExecStart=/usr/bin/python3 %h/Documenti/GitHub/nova-exo/tools/exo_canale.py --ogni 30 --registra
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=default.target
