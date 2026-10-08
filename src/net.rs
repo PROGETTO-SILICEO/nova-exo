@@ -169,6 +169,7 @@ pub fn build_payload(
     tick: u64,
     concept: &str,
     cells: &[[f32; 16]; 4],
+    chemio: &[f32; 4],
     desire_id: u8,
     desire_int: f32,
     cambi: u32,
@@ -199,7 +200,16 @@ pub fn build_payload(
     write_u32_buf(buf, &mut pos, desire_id as u32);
     push(buf, &mut pos, b',');
     write_f32_buf(buf, &mut pos, desire_int);
-    push_str(buf, &mut pos, "],\"l\":[");
+    // La chemio interpretata: urgenza (u), polarità (p), novità (n).
+    // Senza questi il pediatra DEDUCE lo stato del corpo (p ≈ -0.91 ricavato
+    // dall'intensità di CURA); con questi lo MISURA. chemio[0] è l'energia.
+    push_str(buf, &mut pos, "],\"u\":");
+    write_f32_buf(buf, &mut pos, chemio[1]);
+    push_str(buf, &mut pos, ",\"p\":");
+    write_f32_buf(buf, &mut pos, chemio[2]);
+    push_str(buf, &mut pos, ",\"n\":");
+    write_f32_buf(buf, &mut pos, chemio[3]);
+    push_str(buf, &mut pos, ",\"l\":[");
     write_u32_buf(buf, &mut pos, cambi);
     push(buf, &mut pos, b',');
     write_u32_buf(buf, &mut pos, esplorazioni);
@@ -229,6 +239,7 @@ pub fn build_state_frame(
     tick: u64,
     concept: &str,
     cells: &[[f32; 16]; 4],
+    chemio: &[f32; 4],
     desire_id: u8,
     desire_int: f32,
     cambi: u32,
@@ -243,8 +254,8 @@ pub fn build_state_frame(
 
     // payload costruito direttamente nella sua posizione finale
     let payload_len = build_payload(
-        &mut dst[hdr_len..], tick, concept, cells, desire_id, desire_int, cambi,
-        esplorazioni, diag, epoch,
+        &mut dst[hdr_len..], tick, concept, cells, chemio, desire_id, desire_int,
+        cambi, esplorazioni, diag, epoch,
     );
     if payload_len == 0 {
         return 0;

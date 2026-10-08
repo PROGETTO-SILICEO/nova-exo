@@ -271,6 +271,7 @@ impl E1000 {
         chemio: &[f32; 16],
         metabol: &[f32; 16],
         integrat: &[f32; 16],
+        chemio_int: &[f32; 4],
         desire_id: u8,
         desire_int: f32,
     ) {
@@ -325,6 +326,15 @@ impl E1000 {
             buf[pos] = b','; pos += 1;
             Self::write_f32_buf(buf, &mut pos, desire_int);
             buf[pos] = b']'; pos += 1;
+            // Chemio interpretata: u, p, n (come nella via RTL).
+            for (name, idx) in [(b'u', 1usize), (b'p', 2), (b'n', 3)] {
+                buf[pos] = b','; pos += 1;
+                buf[pos] = b'"'; pos += 1;
+                buf[pos] = name; pos += 1;
+                buf[pos] = b'"'; pos += 1;
+                buf[pos] = b':'; pos += 1;
+                Self::write_f32_buf(buf, &mut pos, chemio_int[idx]);
+            }
             buf[pos] = b'}'; pos += 1;
 
             let total_len = pos as u16;

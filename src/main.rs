@@ -19,6 +19,7 @@ mod idt;
 mod inference;
 mod interpreter;
 mod interpreter_weights;
+mod kbd;
 mod net;
 mod neurogenesis;
 mod paging;
@@ -872,6 +873,7 @@ pub extern "C" fn _start() -> ! {
 
     unsafe { boot_beep(5); } // IDT in arrivo
     idt::init();
+    kbd::init(); // svuota il buffer: il primo tasto deve essere un tasto, non un residuo
     serial_println!("IDT loaded. 4 cellulae: tatto, chemio, metabol, integrat.");
     unsafe { boot_beep(6); } // IDT ok
     unsafe { gui::diag_paint(200, 0, 180); } // magenta: IDT ok
@@ -1184,6 +1186,18 @@ pub extern "C" fn _start() -> ! {
             }
         }
 
+        // Il contatto umano: un tasto premuto diventa un evento di senso
+        // (atterra su Tatto[2], positivo). Va letto PRIMA di take_sense,
+        // altrimenti il contatto arriva al tick successivo.
+        while let Some(sc) = kbd::read() {
+            if let Some(t) = kbd::pressione(sc) {
+                cfc::sense_key(t);
+                write_str("CONTATTO:");
+                write_str(kbd::nome(t));
+                serial_putc(b'\n');
+            }
+        }
+
         // Check for sensory events (PF, GP).
         // Demo: if no real sense, inject one at tick ~800.
         #[cfg(not(feature = "demo_pf"))]
@@ -1194,7 +1208,7 @@ pub extern "C" fn _start() -> ! {
             // dolore PERSISTENTE per la neurogenesi: ogni 50 tick tra
             // 800 e 2000 (un taglio che continua a fare male)
             None if cfc::tick() >= 800 && cfc::tick() < 2000 && cfc::tick() % 50 < 2 => {
-                Some(cfc::SenseEvent { pf_addr: 0xDEADBEEF, pf_err: 0, gp_err: 0 })
+                Some(cfc::SenseEvent { pf_addr: 0xDEADBEEF, pf_err: 0, gp_err: 0, key: 0 })
             }
             _ => None,
         };
@@ -1204,7 +1218,7 @@ pub extern "C" fn _start() -> ! {
         dolore.scadi();
         let sense = sense.or_else(|| {
             if dolore.attivo() {
-                Some(cfc::SenseEvent { pf_addr: dolore.addr(), pf_err: 0, gp_err: 0 })
+                Some(cfc::SenseEvent { pf_addr: dolore.addr(), pf_err: 0, gp_err: 0, key: 0 })
             } else {
                 None
             }
@@ -1613,6 +1627,7 @@ pub extern "C" fn _start() -> ! {
                         cfc::tick(),
                         interpreter::CONCEPTS[int_rep.concept as usize],
                         &cells,
+                        &int_rep.chemio,
                         d_id,
                         d_int,
                         executive.preferenza.cambi,
@@ -1826,6 +1841,7 @@ pub extern "C" fn _start() -> ! {
                 &tessuto.chemio.h,
                 &tessuto.metabol.h,
                 &tessuto.integrat.h,
+                &int_rep.chemio,
                 d_id,
                 d_int,
             );

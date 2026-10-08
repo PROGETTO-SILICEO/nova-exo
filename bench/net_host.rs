@@ -18,6 +18,8 @@ use net::*;
 const SRC_MAC: [u8; 6] = [0xc8, 0x5b, 0x76, 0xe0, 0xe0, 0x01];
 const OFF_PAYLOAD: usize = 14 + 20 + 8; // eth + ip + udp
 const DIAG: [u32; 8] = [11, 0, 0x870E, 2048, 0x0C, 0xF, 0, 0];
+/// (c, u, p, n) — p = -0.91 come misurato sul corpo in attrattore negativo.
+const CHEMIO: [f32; 4] = [0.05, 0.12, -0.91, 0.30];
 
 fn cell(v: f32) -> [f32; 16] {
     let mut c = [0.0f32; 16];
@@ -34,7 +36,7 @@ fn frame() -> (usize, [u8; 1518]) {
     let mut buf = [0u8; 1518];
     let cells = [cell(0.0), cell(-0.5), cell(1.25), cell(0.0)];
     let n = build_state_frame(
-        &mut buf, SRC_MAC, 12345, "riposo", &cells, 2, 0.5, 3, 7, DIAG, 5,
+        &mut buf, SRC_MAC, 12345, "riposo", &cells, &CHEMIO, 2, 0.5, 3, 7, DIAG, 5,
     );
     (n, buf)
 }
@@ -218,7 +220,7 @@ fn buffer_troppo_piccolo_non_scrive() {
     let mut small = [0u8; 40];
     let cells = [cell(0.0); 4];
     let n = build_state_frame(
-        &mut small, SRC_MAC, 1, "vita", &cells, 0, 0.0, 0, 0, DIAG, 5,
+        &mut small, SRC_MAC, 1, "vita", &cells, &CHEMIO, 0, 0.0, 0, 0, DIAG, 5,
     );
     assert_eq!(n, 0, "con buffer insufficiente deve tornare 0, non scrivere");
 }
@@ -231,8 +233,21 @@ fn concept_diversi_sono_riportati() {
     for nome in ["errore", "vita", "riposo", "novita"].iter() {
         let mut buf = [0u8; 1518];
         let cells = [cell(0.0); 4];
-        let n = build_state_frame(&mut buf, SRC_MAC, 1, nome, &cells, 0, 0.0, 0, 0, DIAG, 5);
+        let n = build_state_frame(&mut buf, SRC_MAC, 1, nome, &cells, &CHEMIO, 0, 0.0, 0, 0, DIAG, 5);
         let p = payload(&buf, n);
         assert!(p.contains(nome), "concept '{}' non riportato: {}", nome, p);
     }
+}
+
+#[test]
+fn json_porta_la_chemio_interpretata() {
+    let (n, buf) = frame();
+    let p = payload(&buf, n);
+    // I tre parametri vitali che il pediatra oggi DEDUCE devono essere MISURATI.
+    for campo in ["\"u\":", "\"p\":", "\"n\":"] {
+        assert!(p.contains(campo), "campo {} assente nel JSON: {}", campo, p);
+    }
+    // Il valore di p deve essere quello passato (-0.91), non un segnaposto.
+    assert!(p.contains("-0.91") || p.contains("-0.9100"),
+            "la polarita' non e' riportata: {}", p);
 }

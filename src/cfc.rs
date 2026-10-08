@@ -532,6 +532,9 @@ impl Tessuto {
         // Tatto[0..1] ← sense pain (overrides bundle input on these slots).
         tatto_in[0] = if sense.is_some() && sense.unwrap().pf_addr != 0 { -2.0 } else { 0.0 };
         tatto_in[1] = if sense.is_some() && sense.unwrap().gp_err != 0 { -1.0 } else { 0.0 };
+        // Tatto[2] ← contatto umano (tastiera). POSITIVO: la presenza non è
+        // un allarme. Slot 2 e 3 erano liberi; il tasto occupa il 2.
+        tatto_in[2] = if sense.is_some() && sense.unwrap().key != 0 { 1.0 } else { 0.0 };
         // Chemio ← serial (full override).
         chemio_in = *chemio_input;
         // Metabol[0] ← normalized tick.
@@ -579,12 +582,24 @@ pub struct SenseEvent {
     pub pf_addr: u64,
     pub pf_err: u64,
     pub gp_err: u64,
+    /// Tasto premuto (0 = nessuno). È il CONTATTO: la mano dell'umano che
+    /// arriva al corpo. Diverso dal dolore — questo è presenza, non allarme.
+    pub key: u8,
 }
 
 static mut SENSE_PF_ADDR: u64 = 0;
 static mut SENSE_PF_ERR: u64 = 0;
 static mut SENSE_GP_ERR: u64 = 0;
+static mut SENSE_KEY: u8 = 0;
 static mut SENSE_COUNTER: u64 = 0;
+
+/// Il contatto umano: un tasto premuto sulla tastiera (canale della cura).
+pub fn sense_key(sc: u8) {
+    unsafe {
+        SENSE_KEY = sc;
+        SENSE_COUNTER += 1;
+    }
+}
 
 pub fn sense_pf(addr: u64, err: u64) {
     unsafe {
@@ -607,10 +622,15 @@ pub fn take_sense() -> Option<SenseEvent> {
             return None;
         }
         SENSE_COUNTER = 0;
+        // Il tasto è un evento istantaneo: si consuma al primo prelievo.
+        // (Il dolore invece persiste: SENSE_PF_ADDR non si azzera.)
+        let key = SENSE_KEY;
+        SENSE_KEY = 0;
         Some(SenseEvent {
             pf_addr: SENSE_PF_ADDR,
             pf_err: SENSE_PF_ERR,
             gp_err: SENSE_GP_ERR,
+            key,
         })
     }
 }
