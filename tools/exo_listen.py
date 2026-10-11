@@ -191,7 +191,7 @@ def ascolta(port: int, out: str | None, once: bool, seconds: float | None,
         fh = open(out, "a", encoding="utf-8")
 
     inizio = time.monotonic()
-    buoni = scartati = 0
+    buoni = scartati = estranei = 0
     # Battito del listener (11/10/2026). Il watchdog NON deve più usare il log
     # come metrica di salute: il log può essere fermo perché i pacchetti sono
     # RIFIUTATI, non perché il listener è morto (lezione: 1.719 riavvii inutili
@@ -205,8 +205,9 @@ def ascolta(port: int, out: str | None, once: bool, seconds: float | None,
         try:
             with open(hb_path, "w", encoding="utf-8") as hb:
                 json.dump({"ts": time.time(), "ultimo_da": last_from,
-                           "ricevuti": buoni + scartati, "validi": buoni,
-                           "scartati": scartati}, hb)
+                           "ricevuti": buoni + scartati + estranei,
+                           "validi": buoni, "scartati": scartati,
+                           "estranei": estranei}, hb)
         except OSError:
             pass
 
@@ -227,6 +228,13 @@ def ascolta(port: int, out: str | None, once: bool, seconds: float | None,
                       flush=True)
                 break
             battito(addr[0])  # battito su OGNI datagramma, valido o no
+            if not raw.startswith(b"{"):
+                # Non è telemetria: es. la firma "SEMP" del canale, che il
+                # broadcast riporta anche qui. NON è uno scarto di contratto —
+                # contarlo come tale inquinerebbe la diagnosi e farebbe scattare
+                # falsi allarmi quando Exo tace ma il canale continua a firmare.
+                estranei += 1
+                continue
             try:
                 r = parse_payload(raw)
             except Scarto as e:
@@ -251,7 +259,8 @@ def ascolta(port: int, out: str | None, once: bool, seconds: float | None,
         if fh:
             fh.close()
         s.close()
-    print(f"[exo-listen] fine: {buoni} validi, {scartati} scartati", flush=True)
+    print(f"[exo-listen] fine: {buoni} validi, {scartati} scartati, "
+          f"{estranei} estranei", flush=True)
     return 0 if buoni > 0 or once is False else 1
 
 
