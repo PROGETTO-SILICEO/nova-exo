@@ -54,6 +54,10 @@ pub static mut LEN: u16 = 0;
 pub static mut PKTS: u32 = 0; // pacchetti ricevuti e consegnati
 pub static mut ERRS: u32 = 0; // errori del driver
 pub static mut LAST_LEN: u16 = 0; // lunghezza dell'ultimo pacchetto
+/// Firma dell'ultimo pacchetto ricevuto: i primi 4 byte del suo payload
+/// (i valori che la chemio "sente"). Serve al diagnostico (11/10/2026):
+/// quando il concetto diventa `novita`, vogliamo sapere COSA è appena arrivato.
+pub static mut LAST_SIG: [u8; 4] = [0; 4];
 
 /// Consegna un pacchetto alla porta. Copia al massimo `CAP` byte.
 /// Se un pacchetto è già in attesa non consumato, il nuovo lo sostituisce:
@@ -69,6 +73,16 @@ pub fn feed(len: u16, src: &[u8]) {
         PENDING = true;
         PKTS = PKTS.wrapping_add(1);
         LAST_LEN = len;
+        // Cattura la firma (primi 4 byte del payload) — diagnostico `novita`.
+        let base = payload_base(&*d);
+        let mut sig = [0u8; 4];
+        for j in 0..4 {
+            let idx = base + j;
+            if idx < CAP && (idx as u16) < LEN {
+                sig[j] = d[idx];
+            }
+        }
+        LAST_SIG = sig;
     }
 }
 
@@ -89,10 +103,17 @@ const IP_PROTO_UDP: u8 = 17;
 ///   - altro (es. 0x88B5) -> offset 14, come prima
 ///
 /// PURA e senza stato: testabile su host senza litigare coi globali.
-pub fn payload_to_chemio(len: u16, data: &[u8; CAP]) -> [f32; 4] {
+pub fn payload_base(data: &[u8; CAP]) -> usize {
     let eth = u16::from_be_bytes([data[12], data[13]]);
-    let is_udp = eth == ETHERTYPE_IPV4 && data[23] == IP_PROTO_UDP;
-    let base = if is_udp { OFF_UDP_PAYLOAD } else { OFF_ETH_PAYLOAD };
+    if eth == ETHERTYPE_IPV4 && data[23] == IP_PROTO_UDP {
+        OFF_UDP_PAYLOAD
+    } else {
+        OFF_ETH_PAYLOAD
+    }
+}
+
+pub fn payload_to_chemio(len: u16, data: &[u8; CAP]) -> [f32; 4] {
+    let base = payload_base(data);
     let mut out = [0.0f32; 4];
     for j in 0..4 {
         let idx = base + j;

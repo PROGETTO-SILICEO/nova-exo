@@ -1633,6 +1633,7 @@ pub extern "C" fn _start() -> ! {
                         executive.preferenza.cambi,
                         executive.preferenza.esplorazioni,
                         diag,
+                        unsafe { rx::LAST_SIG },
                         rtl::NET_EPOCH,
                     );
                     if n > 0 {

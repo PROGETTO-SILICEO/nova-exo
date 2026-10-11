@@ -29,6 +29,7 @@ pub const DST_MAC: [u8; 6] = [0xFF; 6];
 pub const ETHERTYPE_IPV4: u16 = 0x0800;
 const IPV4_PROTO_UDP: u8 = 17;
 const TTL: u8 = 64;
+const HEX: [u8; 16] = *b"0123456789abcdef";
 
 /// Lunghezza minima di un frame Ethernet senza FCS.
 pub const MIN_FRAME: usize = 60;
@@ -175,6 +176,7 @@ pub fn build_payload(
     cambi: u32,
     esplorazioni: u32,
     diag: [u32; 8],
+    sig: [u8; 4],
     epoch: u32,
 ) -> usize {
     let mut pos = 0usize;
@@ -223,7 +225,15 @@ pub fn build_payload(
         }
         write_u32_buf(buf, &mut pos, *v);
     }
-    push_str(buf, &mut pos, "],\"v\":");
+    // Firma dell'ultimo pacchetto ricevuto (11/10/2026): in esadecimale, 8
+    // caratteri, sempre JSON-safe. Serve a capire cosa accende il concetto
+    // `novita` (era un lampo raro: 8 su 105.000, firma quasi identica).
+    push_str(buf, &mut pos, "],\"sig\":\"");
+    for b in sig.iter() {
+        push(buf, &mut pos, HEX[((b >> 4) & 0xF) as usize]);
+        push(buf, &mut pos, HEX[(b & 0xF) as usize]);
+    }
+    push_str(buf, &mut pos, "\",\"v\":");
     write_u32_buf(buf, &mut pos, epoch);
     push(buf, &mut pos, b'}');
     pos
@@ -245,6 +255,7 @@ pub fn build_state_frame(
     cambi: u32,
     esplorazioni: u32,
     diag: [u32; 8],
+    sig: [u8; 4],
     epoch: u32,
 ) -> usize {
     let hdr_len = 14 + 20 + 8;
@@ -255,7 +266,7 @@ pub fn build_state_frame(
     // payload costruito direttamente nella sua posizione finale
     let payload_len = build_payload(
         &mut dst[hdr_len..], tick, concept, cells, chemio, desire_id, desire_int,
-        cambi, esplorazioni, diag, epoch,
+        cambi, esplorazioni, diag, sig, epoch,
     );
     if payload_len == 0 {
         return 0;

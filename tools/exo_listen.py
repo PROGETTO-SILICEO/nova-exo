@@ -45,7 +45,7 @@ CONCEPTS = ("errore", "vita", "riposo", "novita")
 # due (u,p,n aggiunti l'08/10, listener non aggiornato) ha ucciso la telemetria
 # per 2,5 giorni in silenzio -> `tools/test_contratto_telemetria.py` confronta
 # questo set con le chiavi emesse da src/net.rs e fallisce se divergono.
-KEYS_AMMESSE = frozenset({"t", "k", "c", "w", "l", "r", "v", "u", "p", "n"})
+KEYS_AMMESSE = frozenset({"t", "k", "c", "w", "l", "r", "v", "u", "p", "n", "sig"})
 
 DEFAULT_OUT = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
@@ -129,6 +129,15 @@ def parse_payload(raw: bytes) -> dict:
         if nome in d:
             chemio_int[nome] = float(_num(d[nome], -1e6, 1e6, nome))
 
+    # Firma dell'ultimo pacchetto ricevuto (11/10/2026): esadecimale, 8 caratteri.
+    # Diagnostico per capire cosa accende il concetto `novita`.
+    sig = None
+    if "sig" in d:
+        s = d["sig"]
+        if not isinstance(s, str) or len(s) > 16:
+            raise Scarto("sig: attesa stringa esadecimale")
+        sig = s
+
     # Diagnostica RX. OPZIONALE: i kernel fino al 05/10 non la mandano.
     # [pkts, errs, cfg, max, cmd, own_mask, intr, overflows]
     r = d.get("r")
@@ -146,6 +155,8 @@ def parse_payload(raw: bytes) -> dict:
         "l": [int(limparato), int(lesplorato)],
     }
     out.update(chemio_int)
+    if sig is not None:
+        out["sig"] = sig
     # Epoca di build: dice QUALE kernel sta parlando. Opzionale (i kernel
     # precedenti non la mandano).
     v = d.get("v")
@@ -169,8 +180,16 @@ def formatta(r: dict) -> str:
     upn = ""
     if any(k in r for k in ("u", "p", "n")):
         upn = (f" u,p,n=({r.get('u', '?')},{r.get('p', '?')},{r.get('n', '?')})")
+    sig = ""
+    if "sig" in r:
+        try:
+            raw = bytes.fromhex(r["sig"])
+            txt = "".join(chr(b) if 32 <= b < 127 else "." for b in raw)
+            sig = f" sig={txt!r}"
+        except ValueError:
+            sig = f" sig={r['sig']}"
     return (f"t={r['t']:<9} concept={r['k']:<8} chemio=[{ch}] "
-            f"w={r['w']} imparato={r['l'][0]} esplorato={r['l'][1]}{upn}{rx}{ep}")
+            f"w={r['w']} imparato={r['l'][0]} esplorato={r['l'][1]}{upn}{sig}{rx}{ep}")
 
 
 def ascolta(port: int, out: str | None, once: bool, seconds: float | None,
