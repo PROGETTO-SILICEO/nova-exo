@@ -27,7 +27,7 @@ bench:
 	done
 	@echo "banchi compilati in $(HOST_BENCH_DIR)"
 
-test: bench
+test: bench test-tools
 	@set -e; fail=0; \
 	for t in $(HOST_BENCH_DIR)/*; do \
 		echo "── eseguo `basename $$t`"; \
@@ -36,9 +36,15 @@ test: bench
 	if [ $$fail -ne 0 ]; then echo "TEST FALLITI"; exit 1; fi; \
 	echo "TUTTI I BANCHI VERDI"
 
+# Contratto telemetria produttore (net.rs) ↔ consumatore (exo_listen.py):
+# fallisce se le chiavi emesse non sono tutte ammesse. (lezione 11/10/2026)
+test-tools:
+	@echo "── contratto telemetria (tools)"
+	@python3 tools/test_contratto_telemetria.py
+
 # ── Build ───────────────────────────────────────────────────────────────────
 
-.PHONY: all build clean install-deps run run-bios run-uefi usb demo video-demo build-demo iso-demo test bench
+.PHONY: all build clean install-deps run run-bios run-uefi usb demo video-demo build-demo iso-demo test bench test-tools
 
 all: build
 

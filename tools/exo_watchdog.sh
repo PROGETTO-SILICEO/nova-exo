@@ -18,6 +18,7 @@
 set -u
 REPO="$HOME/Documenti/GitHub/nova-exo"
 LOG="$REPO/experiments/net_telemetry/telemetry.jsonl"
+HB="$REPO/experiments/net_telemetry/listener_heartbeat.json"
 WLOG="$REPO/experiments/net_telemetry/watchdog.log"
 STALE=180
 SERVICE=exo-listen.service
@@ -47,9 +48,26 @@ if ! pgrep -f "exo_listen[.]py --out" >/dev/null 2>&1; then
   exit 0
 fi
 
-# caso 2: processo vivo ma log fermo -> inceppato
-if [ -f "$LOG" ]; then
+# caso 2: processo vivo -> il listener sta ricevendo? La metrica è il BATTITO
+# (aggiornato su ogni datagramma), NON il log. Il log può essere fermo perché i
+# pacchetti sono RIFIUTATI, non perché il listener è morto: usare il log come
+# salute ha causato 1.719 riavvii inutili in 2,5 giorni (lezione 11/10/2026).
+if [ -f "$HB" ]; then
+  hb_age=$(( $(date +%s) - $(stat -c %Y "$HB") ))
+  if [ "$hb_age" -gt "$STALE" ]; then
+    restart "nessun datagramma da ${hb_age}s (listener inceppato)"
+  elif command -v jq >/dev/null 2>&1; then
+    # Battito fresco: se riceve ma SCARTA tutto, il formato è cambiato.
+    # Non è un listener morto: è un CONTRATTO rotto. Allarme, non restart.
+    validi=$(jq -r '.validi // 0' "$HB" 2>/dev/null || echo 0)
+    scartati=$(jq -r '.scartati // 0' "$HB" 2>/dev/null || echo 0)
+    if [ "$scartati" -gt 0 ] && [ "$validi" -eq 0 ]; then
+      echo "$(date '+%F %T') [watchdog] ALLARME: listener riceve ma scarta tutto (validi=$validi scartati=$scartati) — contratto telemetria rotto?" >> "$WLOG"
+    fi
+  fi
+elif [ -f "$LOG" ]; then
+  # fallback (vecchia metrica) se il battito non esiste ancora
   age=$(( $(date +%s) - $(stat -c %Y "$LOG") ))
-  [ "$age" -gt "$STALE" ] && restart "log fermo da ${age}s (inceppato)"
+  [ "$age" -gt "$STALE" ] && restart "log fermo da ${age}s (nessun battito disponibile)"
 fi
 exit 0

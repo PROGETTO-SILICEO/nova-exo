@@ -40,6 +40,13 @@ MAX_NEURONS = 16             # NEURONS_PER_CELL in src/cfc.rs
 MAX_CONCEPT_LEN = 16
 CONCEPTS = ("errore", "vita", "riposo", "novita")
 
+# Chiavi ammesse nel payload JSON. UNICO posto (il contratto): se
+# src/net.rs::build_payload ne aggiunge una, va aggiunta QUI. Il drift tra i
+# due (u,p,n aggiunti l'08/10, listener non aggiornato) ha ucciso la telemetria
+# per 2,5 giorni in silenzio -> `tools/test_contratto_telemetria.py` confronta
+# questo set con le chiavi emesse da src/net.rs e fallisce se divergono.
+KEYS_AMMESSE = frozenset({"t", "k", "c", "w", "l", "r", "v", "u", "p", "n"})
+
 DEFAULT_OUT = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
     "experiments", "net_telemetry", "telemetry.jsonl",
@@ -79,7 +86,7 @@ def parse_payload(raw: bytes) -> dict:
     if not isinstance(d, dict):
         raise Scarto("radice non è un oggetto")
 
-    fuori = set(d) - {"t", "k", "c", "w", "l", "r", "v"}
+    fuori = set(d) - KEYS_AMMESSE
     if fuori:
         raise Scarto(f"chiavi inattese: {sorted(fuori)}")
 
@@ -112,6 +119,16 @@ def parse_payload(raw: bytes) -> dict:
     limparato = _num(l[0], 0, 2**63, "l[0]")
     lesplorato = _num(l[1], 0, 2**63, "l[1]")
 
+    # Chemio interpretata (dal build 08/10/2026: "kbd + chemio interpretata"):
+    # urgenza (u), polarità (p), novità (n). OPZIONALE: i kernel precedenti
+    # non la mandano. SENZA queste tre chiavi nel set di sopra, il build con
+    # tastiera veniva SCARTATO ("chiavi inattese: n,p,u") e la telemetria
+    # moriva in silenzio dal 08/10/2026 16:45 (bug trovato l'11/10/2026).
+    chemio_int: dict = {}
+    for nome in ("u", "p", "n"):
+        if nome in d:
+            chemio_int[nome] = float(_num(d[nome], -1e6, 1e6, nome))
+
     # Diagnostica RX. OPZIONALE: i kernel fino al 05/10 non la mandano.
     # [pkts, errs, cfg, max, cmd, own_mask, intr, overflows]
     r = d.get("r")
@@ -128,6 +145,7 @@ def parse_payload(raw: bytes) -> dict:
         "w": [int(wid), float(wint)],
         "l": [int(limparato), int(lesplorato)],
     }
+    out.update(chemio_int)
     # Epoca di build: dice QUALE kernel sta parlando. Opzionale (i kernel
     # precedenti non la mandano).
     v = d.get("v")
@@ -148,8 +166,11 @@ def formatta(r: dict) -> str:
         rx = (f" rx_pkts={p} rx_errs={e} rx_cfg=0x{cfg:04x} rx_max={mx}"
               f" cmd=0x{cmd:02x} own=0x{own:x} intr=0x{intr:04x} ovf={ovf}")
     ep = f" [epoca {r['v']}]" if "v" in r else ""
+    upn = ""
+    if any(k in r for k in ("u", "p", "n")):
+        upn = (f" u,p,n=({r.get('u', '?')},{r.get('p', '?')},{r.get('n', '?')})")
     return (f"t={r['t']:<9} concept={r['k']:<8} chemio=[{ch}] "
-            f"w={r['w']} imparato={r['l'][0]} esplorato={r['l'][1]}{rx}{ep}")
+            f"w={r['w']} imparato={r['l'][0]} esplorato={r['l'][1]}{upn}{rx}{ep}")
 
 
 def ascolta(port: int, out: str | None, once: bool, seconds: float | None,
@@ -171,6 +192,24 @@ def ascolta(port: int, out: str | None, once: bool, seconds: float | None,
 
     inizio = time.monotonic()
     buoni = scartati = 0
+    # Battito del listener (11/10/2026). Il watchdog NON deve più usare il log
+    # come metrica di salute: il log può essere fermo perché i pacchetti sono
+    # RIFIUTATI, non perché il listener è morto (lezione: 1.719 riavvii inutili
+    # in 2,5 giorni mentre il listener riceveva e scartava). Il battito si
+    # aggiorna su OGNI datagramma ricevuto, valido o scartato: se è fresco, il
+    # listener è vivo; e i contatori dicono se sta ricevendo e rifiutando.
+    hb_path = os.path.join(os.path.dirname(out) if out else os.getcwd(),
+                           "listener_heartbeat.json")
+
+    def battito(last_from: str) -> None:
+        try:
+            with open(hb_path, "w", encoding="utf-8") as hb:
+                json.dump({"ts": time.time(), "ultimo_da": last_from,
+                           "ricevuti": buoni + scartati, "validi": buoni,
+                           "scartati": scartati}, hb)
+        except OSError:
+            pass
+
     print(f"[exo-listen] in ascolto su UDP 0.0.0.0:{port}", flush=True)
     if out:
         print(f"[exo-listen] scrivo su {out}", flush=True)
@@ -187,12 +226,18 @@ def ascolta(port: int, out: str | None, once: bool, seconds: float | None,
                 print(f"[exo-listen] errore di socket: {e}", file=sys.stderr,
                       flush=True)
                 break
+            battito(addr[0])  # battito su OGNI datagramma, valido o no
             try:
                 r = parse_payload(raw)
             except Scarto as e:
                 scartati += 1
-                if verbose:
-                    print(f"[exo-listen] scartato da {addr[0]}: {e}", flush=True)
+                # NON silenzioso (lezione 11/10/2026): un pacchetto scartato
+                # deve lasciare traccia. Prima era muto, e un cambio di formato
+                # (u,p,n il 08/10) ha ucciso la telemetria per 2,5 giorni senza
+                # che nessuno lo sapesse. Logghiamo i primi e poi a campione.
+                if verbose or scartati <= 5 or scartati % 100 == 0:
+                    print(f"[exo-listen] SCARTATO da {addr[0]}: {e} "
+                          f"(scartati={scartati})", file=sys.stderr, flush=True)
                 continue
             buoni += 1
             print(formatta(r), flush=True)
