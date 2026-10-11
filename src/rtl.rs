@@ -152,6 +152,13 @@ pub unsafe fn intr_status() -> u16 {
 pub static mut RTL_MMIO: u64 = 0;
 pub static mut RTL_PRESENT: bool = false;
 
+/// Contatori TX VIVI (11/10/2026): rendono il trasmettitore osservabile a
+/// REGIME, non solo all'avvio. Le diagnostiche di init (LINK/TX/TXS) sono foto
+/// del boot: se il TX muore mentre Exo gira, nessuno lo vede (è il punto cieco
+/// che ci è costato 2,5 giorni). Questi due contatori vanno sulla GUI viva.
+pub static mut TX_OK: u64 = 0;
+pub static mut TX_FAIL: u64 = 0;
+
 /// MAC sorgente dei frame di Exo. È la firma "EXO-01" usata dal beacon dal
 /// 04/10/2026, e ha funzionato da subito: la teniamo per continuità tra
 /// beacon e telemetria. DEBITO NOTO: non è il MAC reale del chip
@@ -707,9 +714,11 @@ impl Rtl {
         // attesa: il chip pulisce DescOwn quando ha finito
         for _ in 0..2_000_000u32 {
             if core::ptr::read_volatile(d as *const u32) & DESC_OWN == 0 {
+                TX_OK = TX_OK.wrapping_add(1);
                 return true;
             }
         }
+        TX_FAIL = TX_FAIL.wrapping_add(1);
         false
     }
 }

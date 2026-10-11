@@ -1880,6 +1880,18 @@ pub extern "C" fn _start() -> ! {
                         fam_gui,
                         inference::describe_state(brain.state()),
                     );
+                    // Riga di rete VIVA (11/10/2026): TX e RX osservabili a
+                    // REGIME, non solo all'avvio. Se il trasmettitore si ferma,
+                    // il contatore si ferma e si vede — niente più diagnosi
+                    // solo-al-boot. (y=170 cade nella fascia pulita da
+                    // render_vitals, 0..180: nessun residuo.)
+                    gui::set_cursor(10, 170);
+                    gui::print_str("NET tx=", gui::COL_DIM);
+                    gui::print_u32(rtl::TX_OK as u32, gui::COL_GREEN);
+                    gui::print_str(" xerr=", gui::COL_DIM);
+                    gui::print_u32(rtl::TX_FAIL as u32, gui::COL_RED);
+                    gui::print_str(" rx=", gui::COL_DIM);
+                    gui::print_u32(rx::PKTS as u32, gui::COL_CYAN);
                 }
             }
         }
