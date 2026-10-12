@@ -28,7 +28,7 @@ NET = os.path.join(ROOT, "src", "net.rs")
 
 # Le chiavi sono emesse dentro stringhe Rust come  \"chiave\":  → nel file
 # sorgente compaiono come  \" t \" :  (backslash-quote chiave backslash-quote).
-RE_KEY = re.compile(r'\\"([a-z]{1,4})\\"')
+RE_KEY = re.compile(r'\\"([a-z0-9]{1,4})\\"')
 
 
 def chiavi_emesse(sorgente: str) -> set[str]:

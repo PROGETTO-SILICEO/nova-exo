@@ -532,9 +532,9 @@ impl Tessuto {
         // Tatto[0..1] ← sense pain (overrides bundle input on these slots).
         tatto_in[0] = if sense.is_some() && sense.unwrap().pf_addr != 0 { -2.0 } else { 0.0 };
         tatto_in[1] = if sense.is_some() && sense.unwrap().gp_err != 0 { -1.0 } else { 0.0 };
-        // Tatto[2] ← contatto umano (tastiera). POSITIVO: la presenza non è
-        // un allarme. Slot 2 e 3 erano liberi; il tasto occupa il 2.
-        tatto_in[2] = if sense.is_some() && sense.unwrap().key != 0 { 1.0 } else { 0.0 };
+        // Tatto[2] ← contatto umano (tastiera), SOSTENUTO finché il tasto è
+        // giù (non un lampo di 1 tick). POSITIVO: la presenza non è un allarme.
+        tatto_in[2] = if key_held() != 0 { 1.0 } else { 0.0 };
         // Chemio ← serial (full override).
         chemio_in = *chemio_input;
         // Metabol[0] ← normalized tick.
@@ -599,6 +599,35 @@ pub fn sense_key(sc: u8) {
         SENSE_KEY = sc;
         SENSE_COUNTER += 1;
     }
+}
+
+// ── Contatto SOSTENUTO (tastiera) ─────────────────────────────────────────
+// Il tasto NON è un lampo: resta "giù" finché l'umano non lo rilascia.
+// Così il contatto dura quanto la pressione e il tessuto lo registra davvero.
+// Prima era un impulso di 1 tick: la mano toccava e spariva prima che il
+// corpo se ne accorgesse (misurato: Tatto fermo, escursione 0.0000).
+static mut KEY_HELD: u8 = 0;
+static mut KEY_COUNT: u32 = 0;
+
+pub fn key_press(sc: u8) {
+    unsafe {
+        KEY_HELD = sc;
+        KEY_COUNT = KEY_COUNT.wrapping_add(1);
+    }
+}
+
+pub fn key_release() {
+    unsafe {
+        KEY_HELD = 0;
+    }
+}
+
+pub fn key_held() -> u8 {
+    unsafe { KEY_HELD }
+}
+
+pub fn key_count() -> u32 {
+    unsafe { KEY_COUNT }
 }
 
 pub fn sense_pf(addr: u64, err: u64) {

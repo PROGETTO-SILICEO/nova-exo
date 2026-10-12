@@ -7,6 +7,7 @@ use core::panic::PanicInfo;
 use uart_16550::SerialPort;
 
 mod alloc;
+mod acpi;
 mod apic;
 mod attention;
 mod cfc;
@@ -39,6 +40,7 @@ use serial::LineReader;
 const LIMINE_COMMON_MAGIC: [u64; 2] = [0xc7b1dd30df4c8b88, 0x0a82e883a194f07b];
 const LIMINE_HHDM_ID: [u64; 2] = [0x48dcf1cb8ad2b852, 0x63984e959a98244b];
 const LIMINE_EXEC_ADDR_ID: [u64; 2] = [0x71ba76863cc55f63, 0xb2644a48c516a487];
+const LIMINE_RSDP_ID: [u64; 2] = [0xc5e77b6b397e7b43, 0x27637845accdcf3c];
 
 #[repr(C)]
 struct BaseRevision {
@@ -100,6 +102,32 @@ static mut EXEC_ADDR_REQ: ExecAddrRequest = ExecAddrRequest {
     response: core::ptr::null_mut(),
 };
 
+// ── RSDP (ACPI): il Corpo. Limine fornisce l'indirizzo del Root System
+// Description Pointer. Da lì si arriva a XSDT/RSDT → FADT → DSDT → EC.
+#[repr(C)]
+struct RsdpResponse {
+    revision: u64,
+    address: *mut u8,
+}
+
+#[repr(C)]
+struct RsdpRequest {
+    id: [u64; 4],
+    revision: u64,
+    response: *mut RsdpResponse,
+}
+
+unsafe impl Sync for RsdpRequest {}
+
+#[used]
+#[link_section = ".limine_reqs"]
+static mut RSDP_REQ: RsdpRequest = RsdpRequest {
+    id: [LIMINE_COMMON_MAGIC[0], LIMINE_COMMON_MAGIC[1],
+         LIMINE_RSDP_ID[0], LIMINE_RSDP_ID[1]],
+    revision: 0,
+    response: core::ptr::null_mut(),
+};
+
 /// Kernel physical → virtual offset: phys = virt − KERNEL_SLOT
 pub(crate) static mut KERNEL_SLOT: u64 = 0;
 
@@ -121,6 +149,11 @@ fn init_limine_requests() {
         if !(*ea).response.is_null() {
             let r = &*(*ea).response;
             KERNEL_SLOT = 0xFFFFFFFF80000000u64.wrapping_sub(r.physical_base);
+        }
+
+        let rr = &raw const RSDP_REQ;
+        if !(*rr).response.is_null() {
+            crate::acpi::set_rsdp((*(*rr).response).address as u64);
         }
     }
 }
@@ -463,6 +496,14 @@ unsafe fn diag_hold() {}
 /// 0x01=scroll, 0x02=num, 0x04=caps. Timeout su ogni wait: se il
 /// controller PS/2 non c'è o non risponde, NON blocca mai il kernel.
 unsafe fn kbd_led(leds: u8) {
+    // SOSPETTO 12/10/2026: la sequenza LED (0xED + byte), inviata di continuo
+    // (ogni 50 tick), può lasciare la tastiera in attesa del byte LED -> ignora
+    // i tasti. Disattivata per la prova (la GUI mostra già lo stato).
+    const LED_DIAG: bool = false;
+    if !LED_DIAG {
+        let _ = leds;
+        return;
+    }
     let mut ok = false;
     for _ in 0..10000 {
         let mut st: u8;
@@ -873,7 +914,24 @@ pub extern "C" fn _start() -> ! {
 
     unsafe { boot_beep(5); } // IDT in arrivo
     idt::init();
-    kbd::init(); // svuota il buffer: il primo tasto deve essere un tasto, non un residuo
+    let ps2_s0 = kbd::read_status();
+    kbd::enable(); // abilita la tastiera (0xAE + traduzione) e svuota il buffer
+    let ps2_s1 = kbd::read_status();
+    let ps2_cfg = kbd::read_config();
+    kbd::probe_store(ps2_s0, ps2_s1, ps2_cfg);
+    write_str("PS2: st0="); write_hex64(ps2_s0 as u64);
+    write_str(" st1="); write_hex64(ps2_s1 as u64);
+    write_str(" cfg="); write_hex64(ps2_cfg as u64);
+    serial_putc(b'\n');
+
+    // Interroga la tastiera: read ID + enable scanning.
+    kbd::identify_and_enable();
+    let kid = kbd::kbd_id();
+    write_str("KBD-ID: ack="); write_u32(kid[0] as u32);
+    write_str(" ab="); write_u32(kid[1] as u32);
+    write_str(" id0="); write_u32(kid[2] as u32);
+    write_str(" id1="); write_u32(kid[3] as u32);
+    serial_putc(b'\n');
     serial_println!("IDT loaded. 4 cellulae: tatto, chemio, metabol, integrat.");
     unsafe { boot_beep(6); } // IDT ok
     unsafe { gui::diag_paint(200, 0, 180); } // magenta: IDT ok
@@ -882,6 +940,13 @@ pub extern "C" fn _start() -> ! {
 
     pci::enumerate();
     init_limine_requests();
+    let acpi_sum = acpi::probe();
+    write_str("ACPI: found="); write_u32(acpi_sum[0] as u32);
+    write_str(" rev="); write_u32(acpi_sum[1] as u32);
+    write_str(" tables="); write_u32(acpi_sum[2] as u32);
+    write_str(" facp="); write_u32(acpi_sum[3] as u32);
+    write_str(" dsdt="); write_u32(acpi_sum[4] as u32);
+    serial_putc(b'\n');
     unsafe { boot_beep(7); } // PCI+Limine ok
 
     paging::init();
@@ -1191,10 +1256,21 @@ pub extern "C" fn _start() -> ! {
         // altrimenti il contatto arriva al tick successivo.
         while let Some(sc) = kbd::read() {
             if let Some(t) = kbd::pressione(sc) {
-                cfc::sense_key(t);
+                cfc::key_press(t);
                 write_str("CONTATTO:");
                 write_str(kbd::nome(t));
                 serial_putc(b'\n');
+                if gui::ready() {
+                    unsafe {
+                        gui::set_cursor(10, 225);
+                        gui::print_str("CONTATTO: ", gui::COL_GREEN);
+                        gui::print_str(kbd::nome(t), gui::COL_WHITE);
+                    }
+                }
+            } else if kbd::rilascio(sc).is_some() {
+                // La mano si alza: il contatto finisce. Ma finché era giù,
+                // Tatto[2] è rimasto alto — Exo se n'è accorto.
+                cfc::key_release();
             }
         }
 

@@ -90,3 +90,128 @@ pub fn nome(sc: u8) -> &'static str {
         _ => "?",
     }
 }
+
+#[inline]
+fn outb(port: u16, val: u8) {
+    unsafe {
+        asm!("out dx, al", in("dx") port, in("al") val, options(nomem, nostack, preserves_flags));
+    }
+}
+
+/// Attende che il buffer d'ingresso dell'8042 sia vuoto (bit 1 = 0). Non blocca mai.
+fn wait_in() {
+    for _ in 0..100_000 {
+        if inb(STATUS) & 0x02 == 0 {
+            return;
+        }
+    }
+}
+
+/// Abilita la tastiera e imposta la traduzione set 2 -> set 1.
+///
+/// MOLTI controller, al boot, hanno la tastiera DISABILITATA nel config byte
+/// (bit 4 e bit 0). Senza questo non arriva NESSUNO scancode — e dall'esterno
+/// sembra "la tastiera non funziona". Diagnosi resa visibile dalla telemetria
+/// (campo `kb`) e dalla riga CONTATTO a schermo.
+pub fn enable() {
+    wait_in();
+    outb(0x64, 0xAE); // enable keyboard interface
+    wait_in();
+    outb(0x64, 0x20); // comando: leggi config byte
+    for _ in 0..100_000 {
+        if inb(STATUS) & 0x01 != 0 {
+            break;
+        }
+    }
+    let mut cfg = inb(DATA);
+    cfg |= 0x40; // bit6: traduzione set 2 -> set 1
+    cfg &= !0x10; // bit4: keyboard ENABLED
+    cfg &= !0x01; // bit0: interfaccia tastiera ENABLED
+    wait_in();
+    outb(0x64, 0x60); // comando: scrivi config byte
+    wait_in();
+    outb(DATA, cfg);
+    wait_in();
+    outb(0x64, 0xAE); // ri-abilita interfaccia
+    init(); // svuota i residui
+}
+
+/// RILASCIO: nel set 1 il rilascio è la pressione col bit 7 alzato.
+/// Ritorna il codice del tasto rilasciato (senza bit 7), oppure None.
+pub fn rilascio(sc: u8) -> Option<u8> {
+    if sc & 0x80 != 0 {
+        Some(sc & 0x7F)
+    } else {
+        None
+    }
+}
+
+/// Legge il registro di stato (0x64) — diagnostica: se è sempre 0xFF, il
+/// controller i8042 non risponde (tastiera dietro l'EC o su USB).
+pub fn read_status() -> u8 {
+    inb(STATUS)
+}
+
+/// Legge il config byte dell'8042 (comando 0x20 su 0x64). 0xFF se non risponde.
+pub fn read_config() -> u8 {
+    wait_in();
+    outb(0x64, 0x20);
+    for _ in 0..100_000 {
+        if inb(STATUS) & 0x01 != 0 {
+            return inb(DATA);
+        }
+    }
+    0xFF
+}
+
+/// Esito della sonda del controller PS/2, per la telemetria e la diagnosi.
+/// `[status_prima, status_dopo_enable, config_byte]` — 0xFF ripetuto = assente.
+static mut PS2_PROBE: [u8; 3] = [0xFF, 0xFF, 0xFF];
+
+pub fn probe_store(a: u8, b: u8, c: u8) {
+    unsafe {
+        PS2_PROBE = [a, b, c];
+    }
+}
+
+pub fn probe() -> [u8; 3] {
+    unsafe { PS2_PROBE }
+}
+
+/// Legge un byte dal buffer dati (0x60) entro `limit` tentativi. 0xFF = nulla.
+fn read_byte(limit: u32) -> u8 {
+    for _ in 0..limit {
+        if inb(STATUS) & 0x01 != 0 {
+            return inb(DATA);
+        }
+    }
+    0xFF
+}
+
+/// Esito dell'interrogazione della tastiera: [ACK, 0xAB, id0, id1].
+static mut KBD_ID: [u8; 4] = [0xFF, 0xFF, 0xFF, 0xFF];
+
+pub fn kbd_id() -> [u8; 4] {
+    unsafe { KBD_ID }
+}
+
+/// Interroga la tastiera PS/2: read ID (0xF2 → ACK, 0xAB, id0, id1) e poi
+/// **enable scanning** (0xF4). Se la tastiera risponde, il canale è vivo; se
+/// era in "scanning off", con 0xF4 i tasti cominciano ad arrivare.
+pub fn identify_and_enable() {
+    for _ in 0..64 {
+        if inb(STATUS) & 0x01 == 0 {
+            break;
+        }
+        let _ = inb(DATA);
+    }
+    wait_in();
+    outb(DATA, 0xF2); // Read ID
+    let a = read_byte(500_000);
+    let b = read_byte(500_000);
+    let c = read_byte(500_000);
+    let d = read_byte(500_000);
+    unsafe { KBD_ID = [a, b, c, d]; }
+    wait_in();
+    outb(DATA, 0xF4); // Enable scanning
+}

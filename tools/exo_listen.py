@@ -45,7 +45,7 @@ CONCEPTS = ("errore", "vita", "riposo", "novita")
 # due (u,p,n aggiunti l'08/10, listener non aggiornato) ha ucciso la telemetria
 # per 2,5 giorni in silenzio -> `tools/test_contratto_telemetria.py` confronta
 # questo set con le chiavi emesse da src/net.rs e fallisce se divergono.
-KEYS_AMMESSE = frozenset({"t", "k", "c", "w", "l", "r", "v", "u", "p", "n", "sig"})
+KEYS_AMMESSE = frozenset({"t", "k", "c", "w", "l", "r", "v", "u", "p", "n", "sig", "kb", "ps2", "acpi", "ec", "kbd"})
 
 DEFAULT_OUT = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
@@ -164,6 +164,38 @@ def parse_payload(raw: bytes) -> dict:
         out["v"] = int(_num(v, 0, 2**32, "v"))
     if diag is not None:
         out["r"] = [int(v) for v in diag]
+    # Contatto umano (tastiera): [tasti totali, tasto attualmente giù].
+    # OPZIONALE (i kernel fino al 12/10 non lo mandano).
+    kb = d.get("kb")
+    if kb is not None:
+        if not isinstance(kb, list) or len(kb) != 2:
+            raise Scarto("kb: attesi [tasti_totali, tasto_giu]")
+        out["kb"] = [int(_num(kb[0], 0, 2**63, "kb[0]")),
+                     int(_num(kb[1], 0, 255, "kb[1]"))]
+    # Sonda PS/2: [status_prima, status_dopo, config_byte]. OPZIONALE.
+    ps2 = d.get("ps2")
+    if ps2 is not None:
+        if not isinstance(ps2, list) or len(ps2) != 3:
+            raise Scarto("ps2: attesi [st0, st1, cfg]")
+        out["ps2"] = [int(_num(v, 0, 255, "ps2[]")) for v in ps2]
+    # Corpo/ACPI: [rsdp_ok, revisione, n_tabelle, facp]. OPZIONALE.
+    acpi = d.get("acpi")
+    if acpi is not None:
+        if not isinstance(acpi, list) or len(acpi) != 5:
+            raise Scarto("acpi: attesi [rsdp_ok, rev, n_tabelle, facp, dsdt_ok]")
+        out["acpi"] = [int(_num(v, 0, 2**32, "acpi[]")) for v in acpi]
+    # EC (Embedded Controller): [pnp0c09, st66, dsdt_kb]. OPZIONALE.
+    ec = d.get("ec")
+    if ec is not None:
+        if not isinstance(ec, list) or len(ec) != 3:
+            raise Scarto("ec: attesi [pnp0c09, st66, dsdt_kb]")
+        out["ec"] = [int(_num(v, 0, 2**32, "ec[]")) for v in ec]
+    # Interrogazione tastiera PS/2: [ack, 0xAB, id0, id1]. OPZIONALE.
+    kbd = d.get("kbd")
+    if kbd is not None:
+        if not isinstance(kbd, list) or len(kbd) != 4:
+            raise Scarto("kbd: attesi [ack, ab, id0, id1]")
+        out["kbd"] = [int(_num(v, 0, 255, "kbd[]")) for v in kbd]
     return out
 
 

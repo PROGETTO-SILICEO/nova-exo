@@ -235,6 +235,58 @@ pub fn build_payload(
     }
     push_str(buf, &mut pos, "\",\"v\":");
     write_u32_buf(buf, &mut pos, epoch);
+    // Contatto umano (tastiera): [tasti totali, tasto attualmente giù].
+    // Sul metallo la seriale non esiste: questo è l'unico modo di sapere
+    // se la mano dell'umano arriva al corpo.
+    push_str(buf, &mut pos, ",\"kb\":[");
+    write_u32_buf(buf, &mut pos, crate::cfc::key_count());
+    push(buf, &mut pos, b',');
+    write_u32_buf(buf, &mut pos, crate::cfc::key_held() as u32);
+    push(buf, &mut pos, b']');
+    // Sonda PS/2 (12/10/2026): [status_prima, status_dopo, config_byte].
+    // 0xFF ripetuto = il controller i8042 non risponde (tastiera dietro l'EC
+    // o su USB). Diagnostica, non comportamento.
+    let ps2 = crate::kbd::probe();
+    push_str(buf, &mut pos, ",\"ps2\":[");
+    write_u32_buf(buf, &mut pos, ps2[0] as u32);
+    push(buf, &mut pos, b',');
+    write_u32_buf(buf, &mut pos, ps2[1] as u32);
+    push(buf, &mut pos, b',');
+    write_u32_buf(buf, &mut pos, ps2[2] as u32);
+    push(buf, &mut pos, b']');
+    // Corpo / ACPI (12/10/2026): [rsdp_ok, revisione, n_tabelle, facp].
+    let acpi = crate::acpi::summary();
+    push_str(buf, &mut pos, ",\"acpi\":[");
+    write_u32_buf(buf, &mut pos, acpi[0] as u32);
+    push(buf, &mut pos, b',');
+    write_u32_buf(buf, &mut pos, acpi[1] as u32);
+    push(buf, &mut pos, b',');
+    write_u32_buf(buf, &mut pos, acpi[2] as u32);
+    push(buf, &mut pos, b',');
+    write_u32_buf(buf, &mut pos, acpi[3] as u32);
+    push(buf, &mut pos, b',');
+    write_u32_buf(buf, &mut pos, acpi[4] as u32);
+    push(buf, &mut pos, b']');
+    // EC (Embedded Controller): [pnp0c09_nel_dsdt, status_0x66, dsdt_kb].
+    let ec = crate::acpi::ec_summary();
+    push_str(buf, &mut pos, ",\"ec\":[");
+    write_u32_buf(buf, &mut pos, ec[0] as u32);
+    push(buf, &mut pos, b',');
+    write_u32_buf(buf, &mut pos, ec[1] as u32);
+    push(buf, &mut pos, b',');
+    write_u32_buf(buf, &mut pos, ec[2] as u32);
+    push(buf, &mut pos, b']');
+    // Interrogazione tastiera PS/2: [ack, 0xAB, id0, id1].
+    let kid = crate::kbd::kbd_id();
+    push_str(buf, &mut pos, ",\"kbd\":[");
+    write_u32_buf(buf, &mut pos, kid[0] as u32);
+    push(buf, &mut pos, b',');
+    write_u32_buf(buf, &mut pos, kid[1] as u32);
+    push(buf, &mut pos, b',');
+    write_u32_buf(buf, &mut pos, kid[2] as u32);
+    push(buf, &mut pos, b',');
+    write_u32_buf(buf, &mut pos, kid[3] as u32);
+    push(buf, &mut pos, b']');
     push(buf, &mut pos, b'}');
     pos
 }
