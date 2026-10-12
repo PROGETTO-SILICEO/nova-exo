@@ -103,6 +103,21 @@ Criterio: Nova v2 riceve stato Exo, comanda Exo, Exo risponde.
 
 ---
 
+## Coda periferiche — "sistema nervoso" (deciso con Alfonso 12/10/2026)
+
+Prima dell'imprinting: **completare i sensi**. Oggi Exo ha rete e seriale; la
+tastiera è in riparazione (contatto sostenuto + osservabilità + init 8042).
+Da aggiungere, in coda:
+
+- [ ] **Microfono** (udito) — audio → un canale di senso.
+- [ ] **Touchpad** (tatto esteso) — PS/2 o I2C-HID; secondo punto di contatto umano.
+- [ ] **Telecamera** (vista) — USB (UVC); richiede **stack USB (xHCI + UVC)** → il più pesante.
+
+Nota di metodo: **oggi i sensi sono in polling.** L'obiettivo dichiarato del
+metodo Exo è renderli **interrupt-driven** (IRQ1 tastiera, IRQ rete, …): un
+sistema nervoso non "chiede", **viene interrotto**. Da fare dopo che i sensi
+esistono e funzionano.
+
 ## Blocchi noti
 Nessun blocco bloccante in questo momento.
 
