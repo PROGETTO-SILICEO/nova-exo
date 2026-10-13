@@ -364,3 +364,59 @@ pub fn build_state_frame(
     }
     n
 }
+
+// ── ARP responder (13/10/2026) ────────────────────────────────────────────
+// Exo era MUTA in unicast: non rispondeva all'ARP, quindi nessuno poteva
+// parlarle — riceveva solo broadcast (debito aperto l'08/10). Il reply ARP è
+// la sua voce minima: "sono io, ecco il mio MAC". Logica PURA → testabile.
+
+pub const ETHERTYPE_ARP: u16 = 0x0806;
+
+/// Se `data` è una richiesta ARP "chi ha `our_ip`?", ritorna (mac, ip) del
+/// richiedente. Altrimenti None. Non modifica nulla.
+pub fn arp_request_for(data: &[u8], our_ip: [u8; 4]) -> Option<([u8; 6], [u8; 4])> {
+    if data.len() < 42 {
+        return None;
+    }
+    if u16::from_be_bytes([data[12], data[13]]) != ETHERTYPE_ARP {
+        return None;
+    }
+    if u16::from_be_bytes([data[20], data[21]]) != 1 {
+        return None; // operazione != request
+    }
+    if &data[38..42] != &our_ip[..] {
+        return None; // il target protocol address non è il nostro
+    }
+    let mut mac = [0u8; 6];
+    mac.copy_from_slice(&data[22..28]);
+    let mut ip = [0u8; 4];
+    ip.copy_from_slice(&data[28..32]);
+    Some((mac, ip))
+}
+
+/// Costruisce una risposta ARP (Ethernet + ARP = 14 + 28 = 42 byte).
+/// Ritorna la lunghezza, oppure 0 se il buffer è troppo piccolo.
+pub fn build_arp_reply(
+    dst: &mut [u8],
+    our_mac: [u8; 6],
+    our_ip: [u8; 4],
+    peer_mac: [u8; 6],
+    peer_ip: [u8; 4],
+) -> usize {
+    if dst.len() < 42 {
+        return 0;
+    }
+    dst[0..6].copy_from_slice(&peer_mac);          // eth dst = chi ha chiesto
+    dst[6..12].copy_from_slice(&our_mac);          // eth src = noi
+    dst[12..14].copy_from_slice(&ETHERTYPE_ARP.to_be_bytes());
+    dst[14..16].copy_from_slice(&1u16.to_be_bytes());            // htype = Ethernet
+    dst[16..18].copy_from_slice(&ETHERTYPE_IPV4.to_be_bytes());  // ptype = IPv4
+    dst[18] = 6; // hlen
+    dst[19] = 4; // plen
+    dst[20..22].copy_from_slice(&2u16.to_be_bytes()); // oper = reply
+    dst[22..28].copy_from_slice(&our_mac);         // sender hardware address
+    dst[28..32].copy_from_slice(&our_ip);          // sender protocol address
+    dst[32..38].copy_from_slice(&peer_mac);        // target hardware address
+    dst[38..42].copy_from_slice(&peer_ip);         // target protocol address
+    42
+}

@@ -144,3 +144,17 @@ pub fn err() {
         ERRS = ERRS.wrapping_add(1);
     }
 }
+
+/// Se il pacchetto in attesa è una richiesta ARP per `our_ip`, ritorna
+/// (mac, ip) del richiedente. NON consuma il pacchetto (lo fa `take()`).
+/// Serve all'ARP responder: rende Exo raggiungibile in unicast.
+pub fn arp_requester(our_ip: [u8; 4]) -> Option<([u8; 6], [u8; 4])> {
+    unsafe {
+        if !PENDING {
+            return None;
+        }
+        let d = &*(&raw const DATA);
+        let n = (LEN as usize).min(CAP);
+        crate::net::arp_request_for(&d[..n], our_ip)
+    }
+}

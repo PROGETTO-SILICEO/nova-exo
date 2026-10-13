@@ -358,6 +358,46 @@ impl E1000 {
         }
     }
 
+    /// La NIC Intel è stata inizializzata? (guardia: senza, MMIO_BASE è 0 e
+    /// un TX scriverebbe all'indirizzo fisico zero.)
+    pub fn present() -> bool {
+        unsafe { MMIO_BASE != 0 }
+    }
+
+    /// Invia un frame Ethernet già costruito (es. risposta ARP). Ritorna false
+    /// se il descrittore è occupato o la NIC non c'è.
+    pub fn tx_frame(frame: &[u8]) -> bool {
+        if !Self::present() {
+            return false;
+        }
+        let base = Self::mmio_base();
+        unsafe {
+            let ring = &raw mut TX_RING;
+            let desc = &*(ring as *mut Aligned4K).cast::<TxDesc>().add(TX_NEXT as usize);
+            if desc.status & STATUS_DD == 0 {
+                return false; // descrittore ancora in mano al chip
+            }
+            let buf = &mut *(&raw mut TX_BUF);
+            let n = frame.len().min(buf.len()).min(1514);
+            for j in 0..n {
+                buf[j] = frame[j];
+            }
+            let total_len = n.max(60) as u16;
+            let desc_mut = &mut *(ring as *mut Aligned4K).cast::<TxDesc>().add(TX_NEXT as usize);
+            desc_mut.addr = v2p(&raw const TX_BUF as *const _ as u64);
+            desc_mut.length = total_len;
+            desc_mut.cmd = CMD_EOP | CMD_RS;
+            desc_mut.status = 0;
+            desc_mut.cso = 0;
+            desc_mut.css = 0;
+            desc_mut.special = 0;
+            let next_tdt = (TX_NEXT + 1) % TX_RING_SIZE as u16;
+            mmio_write(base, REG_TDT, next_tdt as u32);
+            TX_NEXT = next_tdt;
+            true
+        }
+    }
+
     fn loopback_test() {
         // Software loopback: copia il buffer TX nel pool RX,
         // marca il descrittore RX come ricevuto.

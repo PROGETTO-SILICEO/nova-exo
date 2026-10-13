@@ -1532,6 +1532,26 @@ pub extern "C" fn _start() -> ! {
             chemio_input = [0.0; 4];
         }
 
+        // ── ARP responder (13/10/2026): Exo risponde a "chi ha 192.168.0.200?" ──
+        // Senza, era MUTA in unicast (riceveva solo broadcast — debito 08/10).
+        // Da qui è raggiungibile: il reply esce dalla NIC che c'è (RTL sul
+        // metallo, e1000 in QEMU). Le guardie di presenza stanno nei driver:
+        // mai scrivere su MMIO zero.
+        if let Some((peer_mac, peer_ip)) = rx::arp_requester(net::SRC_IP) {
+            let mut abuf = [0u8; 64];
+            let n = net::build_arp_reply(&mut abuf, rtl::EXO_MAC, net::SRC_IP, peer_mac, peer_ip);
+            if n > 0 {
+                unsafe { rtl::tx_raw(&abuf[..n]); }
+                e1000::E1000::tx_frame(&abuf[..n]);
+                write_str("ARP:REPLY a ");
+                write_u32(peer_ip[0] as u32); write_str(".");
+                write_u32(peer_ip[1] as u32); write_str(".");
+                write_u32(peer_ip[2] as u32); write_str(".");
+                write_u32(peer_ip[3] as u32);
+                serial_putc(b'\n');
+            }
+        }
+
         // Override Chemio input con pacchetto Ethernet ricevuto (se presente).
         // La porta è CONDIVISA (src/rx.rs): la alimentano sia la e1000 (Intel,
         // QEMU) sia la RTL810xE (110-15ACL). Un solo consumatore, due porte.

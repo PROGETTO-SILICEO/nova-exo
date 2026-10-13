@@ -272,3 +272,88 @@ fn json_porta_la_chemio_interpretata() {
     assert!(p.contains("-0.91") || p.contains("-0.9100"),
             "la polarita' non e' riportata: {}", p);
 }
+
+// ── ARP responder (13/10/2026) ────────────────────────────────────────────
+// Exo era muta in unicast: nessuno poteva parlarle. La voce minima è la
+// risposta ARP. Qui il codice REALE (net.rs) su host — parse + costruzione.
+
+const PEER_MAC: [u8; 6] = [0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff];
+const PEER_IP: [u8; 4] = [192, 168, 0, 10];
+
+/// Costruisce una RICHIESTA ARP ("chi ha `who_ip`?") da `from_mac`/`from_ip`.
+fn arp_request(from_mac: [u8; 6], from_ip: [u8; 4], who_ip: [u8; 4]) -> [u8; 64] {
+    let mut f = [0u8; 64];
+    f[0..6].copy_from_slice(&[0xff; 6]); // broadcast
+    f[6..12].copy_from_slice(&from_mac);
+    f[12..14].copy_from_slice(&0x0806u16.to_be_bytes());
+    f[14..16].copy_from_slice(&1u16.to_be_bytes());      // htype Ethernet
+    f[16..18].copy_from_slice(&0x0800u16.to_be_bytes()); // ptype IPv4
+    f[18] = 6;
+    f[19] = 4;
+    f[20..22].copy_from_slice(&1u16.to_be_bytes());      // oper = request
+    f[22..28].copy_from_slice(&from_mac);                // sha
+    f[28..32].copy_from_slice(&from_ip);                 // spa
+    f[38..42].copy_from_slice(&who_ip);                  // tpa
+    f
+}
+
+#[test]
+fn arp_riconosce_la_richiesta_per_noi() {
+    let f = arp_request(PEER_MAC, PEER_IP, SRC_IP);
+    assert_eq!(net::arp_request_for(&f, SRC_IP), Some((PEER_MAC, PEER_IP)));
+}
+
+#[test]
+fn arp_ignora_una_richiesta_per_altri() {
+    // "Chi ha 192.168.0.201?" non è per noi: niente risposta.
+    let f = arp_request(PEER_MAC, PEER_IP, [192, 168, 0, 201]);
+    assert_eq!(net::arp_request_for(&f, SRC_IP), None);
+}
+
+#[test]
+fn arp_ignora_altri_ethertype_e_operazioni() {
+    // Non-ARP (IPv4): ignorata.
+    let mut f = arp_request(PEER_MAC, PEER_IP, SRC_IP);
+    f[12..14].copy_from_slice(&0x0800u16.to_be_bytes());
+    assert_eq!(net::arp_request_for(&f, SRC_IP), None);
+    // ARP ma è una RISPOSTA (oper=2), non una richiesta: ignorata.
+    let mut r = arp_request(PEER_MAC, PEER_IP, SRC_IP);
+    r[20..22].copy_from_slice(&2u16.to_be_bytes());
+    assert_eq!(net::arp_request_for(&r, SRC_IP), None);
+    // Frame troppo corto: ignorato, mai leggere fuori.
+    assert_eq!(net::arp_request_for(&[0u8; 20], SRC_IP), None);
+}
+
+#[test]
+fn arp_reply_e_ben_formata() {
+    let mut out = [0u8; 64];
+    let n = net::build_arp_reply(&mut out, SRC_MAC, SRC_IP, PEER_MAC, PEER_IP);
+    assert_eq!(n, 42);
+    assert_eq!(&out[0..6], &PEER_MAC, "eth dst deve essere il richiedente");
+    assert_eq!(&out[6..12], &SRC_MAC, "eth src deve essere noi");
+    assert_eq!(u16::from_be_bytes([out[12], out[13]]), 0x0806, "ethertype ARP");
+    assert_eq!(out[18], 6);
+    assert_eq!(out[19], 4);
+    assert_eq!(u16::from_be_bytes([out[20], out[21]]), 2, "oper = reply");
+    assert_eq!(&out[22..28], &SRC_MAC, "sender hw = noi");
+    assert_eq!(&out[28..32], &SRC_IP, "sender ip = noi");
+    assert_eq!(&out[32..38], &PEER_MAC, "target hw = richiedente");
+    assert_eq!(&out[38..42], &PEER_IP, "target ip = richiedente");
+}
+
+#[test]
+fn arp_reply_su_buffer_piccolo_e_zero() {
+    let mut piccino = [0u8; 41];
+    assert_eq!(net::build_arp_reply(&mut piccino, SRC_MAC, SRC_IP, PEER_MAC, PEER_IP), 0);
+}
+
+#[test]
+fn arp_giro_completo_richiesta_risposta_richiesta() {
+    // Una richiesta per noi → risposta → l'eco della risposta NON è più una
+    // richiesta per noi (niente loop di risposte).
+    let req = arp_request(PEER_MAC, PEER_IP, SRC_IP);
+    let (pm, pi) = net::arp_request_for(&req, SRC_IP).expect("richiesta riconosciuta");
+    let mut reply = [0u8; 64];
+    let n = net::build_arp_reply(&mut reply, SRC_MAC, SRC_IP, pm, pi);
+    assert_eq!(net::arp_request_for(&reply[..n], SRC_IP), None);
+}

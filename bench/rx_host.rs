@@ -11,6 +11,24 @@
 #[path = "../src/rx.rs"]
 mod rx;
 
+// rx.rs (codice reale) usa crate::net::arp_request_for per l'ARP responder.
+// Il banco include il net REALE (#[path]) + shim dei moduli kernel che net.rs
+// consulta per la telemetria (cfc/kbd/acpi), che qui non esistono.
+#[path = "../src/net.rs"]
+mod net;
+mod cfc {
+    pub fn key_count() -> u32 { 0 }
+    pub fn key_held() -> bool { false }
+}
+mod kbd {
+    pub fn probe() -> [u8; 3] { [0xFF, 0xFF, 0xFF] }
+    pub fn kbd_id() -> [u8; 4] { [0xFF, 0xFF, 0xFF, 0xFF] }
+}
+mod acpi {
+    pub fn summary() -> [u32; 5] { [0, 0, 0, 0, 0] }
+    pub fn ec_summary() -> [u32; 3] { [0, 0, 0] }
+}
+
 use rx::{
     desc_opts1, payload_to_chemio, CAP, DESC_OWN, DESC_RING_END, OFF_UDP_PAYLOAD,
     RX_DESC_BUF_SIZE,
