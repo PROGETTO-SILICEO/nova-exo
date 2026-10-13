@@ -157,6 +157,23 @@ run-bios: iso
 		-serial stdio \
 		-debugcon file:qemu-debug.log
 
+# ── QEMU test con audio (UDITO / HDA) ──────────────────────────────────────
+# Necessario per lo stadio 1 del microfono: `intel-hda` + `hda-micro` danno
+# un controller HDA con codec (1af4:0032) e un ADC di ingresso al nodo 4.
+# `-audiodev none` = nessun backend host: il DEVICE c'è, il CONTENUTO è silenzio
+# (il suono vero si misurerà sul Lenovo, che ha il microfono fisico).
+
+run-audio: iso
+	stdbuf -oL qemu-system-x86_64 \
+		-cpu qemu64 \
+		-m 512M \
+		-device intel-hda \
+		-device hda-micro,audiodev=snd0 \
+		-audiodev none,id=snd0 \
+		-cdrom build/nova-exo.iso \
+		-serial stdio \
+		-debugcon file:qemu-debug.log
+
 # ── Demo build (with PF trigger for recordings) ───────────────────────────
 
 BUILD_DEMO := target/$(TARGET)/release

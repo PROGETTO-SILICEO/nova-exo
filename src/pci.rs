@@ -83,6 +83,27 @@ pub fn find_network_device() -> Option<(u8, u8, u8, u16, u16)> {
     None
 }
 
+/// Trova il primo device PCI di una certa **classe** (es. 0x04:0x03 =
+/// multimedia audio → il controller HDA dell'udito). Scan completo bus 0-7:
+/// sul metallo i device stanno anche dietro i root port PCIe (bus secondari).
+pub fn find_class(class: u8, subclass: u8) -> Option<(u8, u8, u8)> {
+    for bus in 0..8u8 {
+        for slot in 0..32u8 {
+            for func in 0..8u8 {
+                let vendor = pci_config_read(bus, slot, func, 0);
+                if (vendor & 0xFFFF) == 0xFFFF {
+                    continue;
+                }
+                let cl = pci_config_read(bus, slot, func, 8);
+                if ((cl >> 24) & 0xFF) as u8 == class && ((cl >> 16) & 0xFF) as u8 == subclass {
+                    return Some((bus, slot, func));
+                }
+            }
+        }
+    }
+    None
+}
+
 pub fn pci_config_read(bus: u8, slot: u8, func: u8, offset: u8) -> u32 {
     let addr = (1u32 << 31)
         | ((bus as u32) << 16)

@@ -15,6 +15,7 @@ mod e1000;
 mod executive;
 mod gguf;
 mod gui;
+mod hda;
 mod hexutil;
 mod idt;
 mod inference;
@@ -981,6 +982,11 @@ pub extern "C" fn _start() -> ! {
         e1000::E1000::init(mmio_virt);
     }
     unsafe { gui::phase_bar(gui::color(255, 255, 0)); } // giallo: PCI ok
+
+    // ── UDITO (HDA) — stadio 1: trova e identifica il codec ──
+    // Il microfono è il primo senso nuovo della coda periferiche (12/10/2026).
+    // In QEMU serve `-device intel-hda -device hda-micro` (target run-audio).
+    let _hda_ok = hda::init();
 
     // ── DIAG 04/10/2026 — visibile sul VIDEO (il Lenovo non ha seriale) ──
     // SER: la UART è stata rilevata?  NET: che NIC c'è davvero?

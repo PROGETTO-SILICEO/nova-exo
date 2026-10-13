@@ -110,6 +110,14 @@ tastiera è in riparazione (contatto sostenuto + osservabilità + init 8042).
 Da aggiungere, in coda:
 
 - [ ] **Microfono** (udito) — audio → un canale di senso.
+      **Stadio 1 FATTO (13/10/2026)**: `src/hda.rs` — Exo trova il controller HDA
+      su PCI (cls 04:03), lo resetta, enumera il codec (id 1af4:0032 su QEMU) e ne
+      percorre l'albero dei widget (root→func→{2 dac, 3 out, **4 adc**, **5 in-pin**}).
+      Comandi via **CORB/RIRB** (le IC/IR non rispondono su QEMU). Verificato in QEMU
+      con `make run-audio` (`intel-hda` + `hda-micro`).
+      **Stadio 2 (prossimo)**: stream di cattura (BDL + buffer ciclico + formato su
+      SD_IN #1, ADC nodo 4) + ENERGIA del suono → canale di senso. Il CONTENUTO si
+      misura sul Lenovo (in QEMU il backend è `none` = silenzio).
 - [ ] **Touchpad** (tatto esteso) — PS/2 o I2C-HID; secondo punto di contatto umano.
 - [ ] **Telecamera** (vista) — USB (UVC); richiede **stack USB (xHCI + UVC)** → il più pesante.
 
