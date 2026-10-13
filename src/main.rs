@@ -1998,11 +1998,13 @@ pub extern "C" fn _start() -> ! {
                     gui::print_str(" rx=", gui::COL_DIM);
                     gui::print_u32(rx::PKTS as u32, gui::COL_CYAN);
                     // Riga UDITO (13/10/2026): l'energia del suono che entra.
-                    // Con audiodev none (QEMU) è silenzio (~0); sul Lenovo è il vero.
-                    let e = hda::energy();
-                    gui::set_cursor(10, 182);
-                    gui::print_str("MIC ", gui::COL_DIM);
-                    gui::print_u32((e * 1000.0) as u32, gui::COL_GREEN);
+                    // Mostrata solo se l'udito c'è (senza, niente MMIO).
+                    if hda::present() {
+                        let e = hda::energy();
+                        gui::set_cursor(10, 182);
+                        gui::print_str("MIC ", gui::COL_DIM);
+                        gui::print_u32((e * 1000.0) as u32, gui::COL_GREEN);
+                    }
                     if cfc::tick() % 1000 == 0 { hda::report(); }
                 }
             }

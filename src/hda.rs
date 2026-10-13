@@ -386,13 +386,19 @@ pub fn stream_init() -> bool {
 }
 
 /// Posizione del puntatore DMA (avanza se la cattura gira).
-pub fn lpib() -> u32 { rd32(SD0 + SD_LPIB) }
+/// 0 se l'udito non c'è: MAI leggere l'MMIO quando il device è assente
+/// (MMIO=0 → si leggerebbe un indirizzo illegale — bug chiuso il 13/10).
+pub fn lpib() -> u32 {
+    if !present() { return 0; }
+    rd32(SD0 + SD_LPIB)
+}
 
 /// ENERGIA del suono catturato: media del valore assoluto, normalizzata 0..1.
 /// Con `-audiodev none` (QEMU) il contenuto è silenzio → ~0. Sul Lenovo il
 /// microfono vero dà il valore reale. Nessun dato finto, mai.
 /// La matematica vive in `dsp::energia`, testata su host (bench/hda_host.rs).
 pub fn energy() -> f32 {
+    if !present() { return 0.0; }
     let s: &[i16] = unsafe { &AUDIO.0 };
     crate::dsp::energia(s)
 }
@@ -401,6 +407,7 @@ pub fn stream_on() -> bool { unsafe { AUDIO_ON } }
 
 /// Riga diagnostica periodica (LPIB + energia) per il monitor.
 pub fn report() {
+    if !present() { return; } // senza udito non si tocca l'MMIO
     wstr("HDA:t lpib="); wh32(lpib());
     let e = energy();
     wstr(" energia="); wh32((e * 10000.0) as u32);
