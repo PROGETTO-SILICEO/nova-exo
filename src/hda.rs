@@ -289,6 +289,124 @@ pub fn init() -> bool {
     unsafe { PRESENT }
 }
 
+// ── STADIO 2 — stream di cattura (il suono che entra) ────────────────────
+// Verbi del codec per il flusso di ingresso
+const VERB_SET_STREAM_FORMAT:  u16 = 0x002;
+const VERB_SET_AMP_GAIN_MUTE:  u16 = 0x003; // all nodes (ADC: input amp)
+const VERB_SET_CONV_STREAMID:  u16 = 0x706;
+const VERB_SET_PIN_CTL:        u16 = 0x707;
+
+// Nodi del codec hda-micro (dal layout verificato): 4 = ADC, 5 = pin microfono
+const ADC_NODE: u8 = 4;
+const PIN_NODE: u8 = 5;
+
+// Stream descriptor di INGRESSO #0 (QEMU implementa gli ingressi da 0x80)
+const SD0:     u32 = 0x80;
+const SD_CTL:  u32 = 0x00; // u32: [4:0] SRST/RUN, [23:20] stream tag
+const SD_STS:  u32 = 0x03; // u8
+const SD_LPIB: u32 = 0x04; // u32: posizione link (avanza = la DMA gira)
+const SD_CBL:  u32 = 0x08; // u32: cyclic buffer length
+const SD_LVI:  u32 = 0x0C; // u16: last valid index
+const SD_FIFOW: u32 = 0x0E;
+const SD_FMT:  u32 = 0x12; // u16: formato
+const SD_BDPL: u32 = 0x18; // u32
+const SD_BDPU: u32 = 0x1C; // u32
+
+const STREAM_TAG: u32 = 1;
+// Formato: 16 bit, 2 canali, 48 kHz → 0x0011 (come hda_codec_parse_fmt di QEMU)
+const FMT_16BIT_2CH_48K: u16 = 0x0011;
+
+const CHUNK: usize = 4096;
+const CHUNKS: usize = 2;
+const BUF_BYTES: usize = CHUNK * CHUNKS;
+
+#[repr(align(4096))]
+struct AudioBuf([i16; BUF_BYTES / 2]);
+#[repr(align(128))]
+struct BdlBuf([u8; 16 * CHUNKS]);
+
+static mut AUDIO: AudioBuf = AudioBuf([0; BUF_BYTES / 2]);
+static mut BDL: BdlBuf = BdlBuf([0; 16 * CHUNKS]);
+static mut AUDIO_ON: bool = false;
+
+/// Allestisce lo stream di cattura: BDL, buffer ciclico, formato, poi il
+/// codec (ADC nodo 4 + pin nodo 5) e infine RUN. Da chiamare dopo `init()`.
+pub fn stream_init() -> bool {
+    if !present() { return false; }
+    let codec = unsafe { CODEC };
+
+    let buf_phys = crate::virt_to_phys(&raw const AUDIO as *const _ as u64);
+    let bdl_phys = crate::virt_to_phys(&raw const BDL as *const _ as u64);
+
+    // BDL: CHUNKS descrittori {addr u64, len u32, flags u32}; l'ultimo ha IOC
+    unsafe {
+        let b = &raw mut BDL as *mut u8;
+        for i in 0..CHUNKS {
+            let addr = buf_phys + (i * CHUNK) as u64;
+            let len = CHUNK as u32;
+            let flags: u32 = if i == CHUNKS - 1 { 0x1 } else { 0 };
+            core::ptr::write_unaligned(b.add(i * 16) as *mut u64, addr);
+            core::ptr::write_unaligned(b.add(i * 16 + 8) as *mut u32, len);
+            core::ptr::write_unaligned(b.add(i * 16 + 12) as *mut u32, flags);
+        }
+    }
+
+    // Registri dello stream: BDL, lunghezza ciclica, LVI, formato
+    wr32(SD0 + SD_BDPL, bdl_phys as u32);
+    wr32(SD0 + SD_BDPU, (bdl_phys >> 32) as u32);
+    wr32(SD0 + SD_CBL, BUF_BYTES as u32);
+    wr16(SD0 + SD_LVI, (CHUNKS - 1) as u16);
+    wr16(SD0 + SD_FIFOW, 4);
+    wr16(SD0 + SD_FMT, FMT_16BIT_2CH_48K);
+
+    // Reset dello stream (SRST) poi pronto a girare
+    wr32(SD0 + SD_CTL, 0x01);
+    delay(50_000);
+    wr32(SD0 + SD_CTL, 0x00);
+    delay(50_000);
+
+    // Codec: formato, stream-id, amp d'ingresso, pin d'ingresso
+    codec_cmd(codec, ADC_NODE, VERB_SET_STREAM_FORMAT, FMT_16BIT_2CH_48K);
+    codec_cmd(codec, ADC_NODE, VERB_SET_CONV_STREAMID, ((STREAM_TAG as u16) << 4) | 0);
+    codec_cmd(codec, ADC_NODE, VERB_SET_AMP_GAIN_MUTE, 0x707F); // input amp, L+R, gain max
+    codec_cmd(codec, PIN_NODE, VERB_SET_PIN_CTL, 0x0020);      // AC_PINCTL_IN_EN
+
+    // RUN: tag nei bit 20-23 + bit1 (run). Il controller avvisa il codec
+    // (intel_hda_notify_codecs) e la cattura parte.
+    wr32(SD0 + SD_CTL, (STREAM_TAG << 20) | 0x02);
+    delay(50_000);
+
+    let on = rd32(SD0 + SD_CTL) & 0x02 != 0;
+    unsafe { AUDIO_ON = on; }
+    wstr("HDA: stream ctl=0x"); wh32(rd32(SD0 + SD_CTL));
+    wstr(" lpib="); wh32(rd32(SD0 + SD_LPIB));
+    wstr(" on="); wh16(if on { 1 } else { 0 });
+    crate::serial_putc(b'\n');
+    on
+}
+
+/// Posizione del puntatore DMA (avanza se la cattura gira).
+pub fn lpib() -> u32 { rd32(SD0 + SD_LPIB) }
+
+/// ENERGIA del suono catturato: media del valore assoluto, normalizzata 0..1.
+/// Con `-audiodev none` (QEMU) il contenuto è silenzio → ~0. Sul Lenovo il
+/// microfono vero dà il valore reale. Nessun dato finto, mai.
+/// La matematica vive in `dsp::energia`, testata su host (bench/hda_host.rs).
+pub fn energy() -> f32 {
+    let s: &[i16] = unsafe { &AUDIO.0 };
+    crate::dsp::energia(s)
+}
+
+pub fn stream_on() -> bool { unsafe { AUDIO_ON } }
+
+/// Riga diagnostica periodica (LPIB + energia) per il monitor.
+pub fn report() {
+    wstr("HDA:t lpib="); wh32(lpib());
+    let e = energy();
+    wstr(" energia="); wh32((e * 10000.0) as u32);
+    crate::serial_putc(b'\n');
+}
+
 /// Serve al consumatore (telemetria/pediatra) per sapere se l'udito c'è.
 pub fn present() -> bool { unsafe { PRESENT } }
 /// [found, reset_ok, codec_ok, codec_addr]

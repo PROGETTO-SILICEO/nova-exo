@@ -20,6 +20,25 @@ const OFF_PAYLOAD: usize = 14 + 20 + 8; // eth + ip + udp
 const DIAG: [u32; 8] = [11, 0, 0x870E, 2048, 0x0C, 0xF, 0, 0];
 /// (c, u, p, n) — p = -0.91 come misurato sul corpo in attrattore negativo.
 const CHEMIO: [f32; 4] = [0.05, 0.12, -0.91, 0.30];
+/// Firma `SEMP`: i 4 byte che la chemio di Exo legge dall'ultimo pacchetto.
+const SIG: [u8; 4] = *b"SEMP";
+
+// ── Shim dei moduli del kernel che net.rs consulta per la telemetria ──
+// net.rs (codice reale) legge contatori da cfc/kbd/acpi. Nel banco host quei
+// moduli non esistono → valori noti e deterministici. Il banco verifica il
+// FORMATO del frame, non i valori del corpo (quelli li prova il metallo).
+mod cfc {
+    pub fn key_count() -> u32 { 7 }
+    pub fn key_held() -> bool { false }
+}
+mod kbd {
+    pub fn probe() -> [u8; 3] { [0x14, 0x14, 0x45] }
+    pub fn kbd_id() -> [u8; 4] { [0xFA, 0xAB, 0x83, 0xAB] }
+}
+mod acpi {
+    pub fn summary() -> [u32; 5] { [1, 2, 37, 0x1000, 0x2000] }
+    pub fn ec_summary() -> [u32; 3] { [1, 0xFF, 2] }
+}
 
 fn cell(v: f32) -> [f32; 16] {
     let mut c = [0.0f32; 16];
@@ -36,7 +55,7 @@ fn frame() -> (usize, [u8; 1518]) {
     let mut buf = [0u8; 1518];
     let cells = [cell(0.0), cell(-0.5), cell(1.25), cell(0.0)];
     let n = build_state_frame(
-        &mut buf, SRC_MAC, 12345, "riposo", &cells, &CHEMIO, 2, 0.5, 3, 7, DIAG, 5,
+        &mut buf, SRC_MAC, 12345, "riposo", &cells, &CHEMIO, 2, 0.5, 3, 7, DIAG, SIG, 5,
     );
     (n, buf)
 }
@@ -181,9 +200,11 @@ fn payload_porta_i_quattro_tessuti_interi() {
         "inizio cella malformato: {}", p
     );
     assert!(p.contains(",14.0000,15.0000]"), "cella troncata (manca 14/15): {}", p);
-    // 4 celle + w + l = 6 array; il '[' esterno di "c" ne aggiunge uno -> 7
-    assert_eq!(p.matches('[').count(), 8, "numero di array inatteso: {}", p);
-    assert_eq!(p.matches(']').count(), 8, "parentesi non bilanciate: {}", p);
+    // Array nel payload (13): "c" = 1 esterno + 4 celle, poi w, l, r,
+    // kb, ps2, acpi, ec, kbd. (Aggiornato 13/10/2026: il payload è cresciuto
+    // con le sonde kb/ps2/acpi/ec/kbd del 12/10 — l'attesa era rimasta a 8.)
+    assert_eq!(p.matches('[').count(), 13, "numero di array inatteso: {}", p);
+    assert_eq!(p.matches(']').count(), 13, "parentesi non bilanciate: {}", p);
     assert!(p.contains("-0.5000"), "manca un valore negativo atteso: {}", p);
 }
 
@@ -220,7 +241,7 @@ fn buffer_troppo_piccolo_non_scrive() {
     let mut small = [0u8; 40];
     let cells = [cell(0.0); 4];
     let n = build_state_frame(
-        &mut small, SRC_MAC, 1, "vita", &cells, &CHEMIO, 0, 0.0, 0, 0, DIAG, 5,
+        &mut small, SRC_MAC, 1, "vita", &cells, &CHEMIO, 0, 0.0, 0, 0, DIAG, SIG, 5,
     );
     assert_eq!(n, 0, "con buffer insufficiente deve tornare 0, non scrivere");
 }
@@ -233,7 +254,7 @@ fn concept_diversi_sono_riportati() {
     for nome in ["errore", "vita", "riposo", "novita"].iter() {
         let mut buf = [0u8; 1518];
         let cells = [cell(0.0); 4];
-        let n = build_state_frame(&mut buf, SRC_MAC, 1, nome, &cells, &CHEMIO, 0, 0.0, 0, 0, DIAG, 5);
+        let n = build_state_frame(&mut buf, SRC_MAC, 1, nome, &cells, &CHEMIO, 0, 0.0, 0, 0, DIAG, SIG, 5);
         let p = payload(&buf, n);
         assert!(p.contains(nome), "concept '{}' non riportato: {}", nome, p);
     }

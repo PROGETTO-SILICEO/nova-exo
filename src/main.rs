@@ -11,6 +11,7 @@ mod acpi;
 mod apic;
 mod attention;
 mod cfc;
+mod dsp;
 mod e1000;
 mod executive;
 mod gguf;
@@ -987,6 +988,7 @@ pub extern "C" fn _start() -> ! {
     // Il microfono è il primo senso nuovo della coda periferiche (12/10/2026).
     // In QEMU serve `-device intel-hda -device hda-micro` (target run-audio).
     let _hda_ok = hda::init();
+    let _audio_ok = if _hda_ok { hda::stream_init() } else { false };
 
     // ── DIAG 04/10/2026 — visibile sul VIDEO (il Lenovo non ha seriale) ──
     // SER: la UART è stata rilevata?  NET: che NIC c'è davvero?
@@ -1975,6 +1977,13 @@ pub extern "C" fn _start() -> ! {
                     gui::print_u32(rtl::TX_FAIL as u32, gui::COL_RED);
                     gui::print_str(" rx=", gui::COL_DIM);
                     gui::print_u32(rx::PKTS as u32, gui::COL_CYAN);
+                    // Riga UDITO (13/10/2026): l'energia del suono che entra.
+                    // Con audiodev none (QEMU) è silenzio (~0); sul Lenovo è il vero.
+                    let e = hda::energy();
+                    gui::set_cursor(10, 182);
+                    gui::print_str("MIC ", gui::COL_DIM);
+                    gui::print_u32((e * 1000.0) as u32, gui::COL_GREEN);
+                    if cfc::tick() % 1000 == 0 { hda::report(); }
                 }
             }
         }

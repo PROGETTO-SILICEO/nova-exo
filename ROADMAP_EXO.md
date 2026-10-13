@@ -115,9 +115,14 @@ Da aggiungere, in coda:
       percorre l'albero dei widget (root→func→{2 dac, 3 out, **4 adc**, **5 in-pin**}).
       Comandi via **CORB/RIRB** (le IC/IR non rispondono su QEMU). Verificato in QEMU
       con `make run-audio` (`intel-hda` + `hda-micro`).
-      **Stadio 2 (prossimo)**: stream di cattura (BDL + buffer ciclico + formato su
-      SD_IN #1, ADC nodo 4) + ENERGIA del suono → canale di senso. Il CONTENUTO si
-      misura sul Lenovo (in QEMU il backend è `none` = silenzio).
+      **Stadio 2 FATTO (13/10/2026)**: `hda::stream_init` — BDL + buffer ciclico 8 KB
+      (2 chunk, IOC), formato 16-bit/2ch/48 kHz, stream descriptor di ingresso #0
+      (tag 1, RUN), codec configurato (ADC nodo 4: formato + stream-id + amp; pin
+      nodo 5: IN_EN). In QEMU lo stream gira (**LPIB avanza**) ed `hda::energy()` misura
+      l'energia (0 = **silenzio**: in QEMU non c'è backend audio → `-audiodev none`).
+      La matematica del suono vive in `src/dsp.rs`, testata su host (`bench/hda_host.rs`).
+      **Prossimo**: collegare l'energia a un canale di senso (quale cellula è l'udito?)
+      — decisione con Alfonso. Il CONTENUTO si misura sul Lenovo (microfono vero).
 - [ ] **Touchpad** (tatto esteso) — PS/2 o I2C-HID; secondo punto di contatto umano.
 - [ ] **Telecamera** (vista) — USB (UVC); richiede **stack USB (xHCI + UVC)** → il più pesante.
 
