@@ -38,7 +38,7 @@ impl CfcWeights {
         let mut w_g_in = [[0.0f32; 4]; NEURONS_PER_CELL];
 
         // Xavier: fan_in = NEURONS_PER_CELL, scale ≈ sqrt(6 / (fan_in + fan_out))
-        let scale = libm::sqrtf(6.0 / (2.0 * NEURONS_PER_CELL as f32));
+        let scale = crate::math::sqrtf(6.0 / (2.0 * NEURONS_PER_CELL as f32));
 
         for i in 0..NEURONS_PER_CELL {
             for j in 0..NEURONS_PER_CELL {
@@ -444,6 +444,10 @@ pub enum CellId {
     #[allow(dead_code)]
     Metabol,
     Integrat,
+    /// UDITO (14/10/2026): il 5° senso. Riceve l'energia del suono (driver HDA)
+    /// e la proietta su Integrat. Creato su richiesta di Alfonso: "l'udito non
+    /// c'è, dobbiamo crearlo".
+    Udito,
 }
 
 /// A bundle of N axons from src.h[src_offset..src_offset+count]
@@ -467,6 +471,8 @@ pub struct Tessuto {
     pub chemio: CfcState,
     pub metabol: CfcState,
     pub integrat: CfcState,
+    /// 5° cellula (14/10/2026): l'udito.
+    pub udito: CfcState,
 }
 
 impl Tessuto {
@@ -476,6 +482,7 @@ impl Tessuto {
             chemio: CfcState::new(),
             metabol: CfcState::new(),
             integrat: CfcState::new(),
+            udito: CfcState::new(),
         }
     }
 
@@ -488,11 +495,13 @@ impl Tessuto {
         &mut self,
         bundles: &[AxonBundle],
         chemio_input: &[f32; 4],
+        udito_input: &[f32; 4],
         sense: Option<&SenseEvent>,
         w_tatto: &CfcWeights,
         w_chemio: &CfcWeights,
         w_metabol: &CfcWeights,
         w_integrat: &CfcWeights,
+        w_udito: &CfcWeights,
         dt_tatto: f32,
         dt_rest: f32,
     ) {
@@ -501,12 +510,14 @@ impl Tessuto {
         let h_chemio = self.chemio.h;
         let h_metabol = self.metabol.h;
         let h_integrat = self.integrat.h;
+        let h_udito = self.udito.h;
 
         // Start input arrays at zero.
         let mut tatto_in  = [0.0f32; 4];
         let mut chemio_in = [0.0f32; 4];
         let mut metabol_in = [0.0f32; 4];
         let mut integrat_in = [0.0f32; 4];
+        let mut udito_in = [0.0f32; 4];
 
         // 1. Apply axon bundles (inter-cell projections).
         for b in bundles {
@@ -515,16 +526,23 @@ impl Tessuto {
                 CellId::Chemio => &h_chemio,
                 CellId::Metabol => &h_metabol,
                 CellId::Integrat => &h_integrat,
+                CellId::Udito => &h_udito,
             };
             let dst = match b.dst {
                 CellId::Tatto => &mut tatto_in,
                 CellId::Chemio => &mut chemio_in,
                 CellId::Metabol => &mut metabol_in,
                 CellId::Integrat => &mut integrat_in,
+                CellId::Udito => &mut udito_in,
             };
             let n = b.count.min(4 - b.dst_offset);
             for i in 0..n {
-                dst[b.dst_offset + i] = src[b.src_offset + i];
+                // SOMMA (14/10/2026): il commento del contratto dice "values are
+                // summed", ma il codice ASSEGNAVA — due fasci sugli stessi slot si
+                // sovrascrivevano. Con la 5ª cellula (Udito) che proietta sugli
+                // stessi slot del Tatto, l'assegnazione avrebbe cancellato il tatto.
+                // Per i fasci esistenti (slot disgiunti) somma == assegna: invariato.
+                dst[b.dst_offset + i] += src[b.src_offset + i];
             }
         }
 
@@ -537,6 +555,9 @@ impl Tessuto {
         tatto_in[2] = if key_held() != 0 { 1.0 } else { 0.0 };
         // Chemio ← serial (full override).
         chemio_in = *chemio_input;
+        // Udito ← energia del suono (full override). Il 5° senso: quello che
+        // il driver HDA misura arriva qui e viene proiettato su Integrat.
+        udito_in = *udito_input;
         // Metabol[0] ← normalized tick.
         metabol_in[0] = (crate::cfc::tick() % 1000) as f32 * 0.001;
 
@@ -545,6 +566,7 @@ impl Tessuto {
         self.chemio.step(&chemio_in, dt_rest, w_chemio);
         self.metabol.step(&metabol_in, dt_rest, w_metabol);
         self.integrat.step(&integrat_in, dt_rest, w_integrat);
+        self.udito.step(&udito_in, dt_rest, w_udito);
     }
 }
 
@@ -870,7 +892,7 @@ fn pattern_similarity(a: &[i16; TOTAL_NEURONS], b: &[i16; TOTAL_NEURONS]) -> f32
     if na == 0 || nb == 0 { return 0.0; }
     let naf = na as f32;
     let nbf = nb as f32;
-    (dot as f32) / (libm::sqrtf(naf) * libm::sqrtf(nbf))
+    (dot as f32) / (crate::math::sqrtf(naf) * crate::math::sqrtf(nbf))
 }
 
 pub fn pattern_count() -> usize {

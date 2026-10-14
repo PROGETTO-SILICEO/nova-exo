@@ -403,6 +403,14 @@ pub fn energy() -> f32 {
     crate::dsp::energia(s)
 }
 
+/// PICCO del suono catturato (max |x|, 0..1). Distingue un suono forte da un
+/// brusio diffuso a parità di energia. Stessa guardia di `energy()`.
+pub fn picco() -> f32 {
+    if !present() { return 0.0; }
+    let s: &[i16] = unsafe { &AUDIO.0 };
+    crate::dsp::picco(s)
+}
+
 pub fn stream_on() -> bool { unsafe { AUDIO_ON } }
 
 /// Riga diagnostica periodica (LPIB + energia) per il monitor.

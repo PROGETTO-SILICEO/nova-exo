@@ -322,6 +322,7 @@ pub unsafe fn render_vitals(
     chemio: &[f32; 16],
     metabol: &[f32; 16],
     integrat: &[f32; 16],
+    udito: &[f32; 16],
     desire_name: &str,
     desire_int: f32,
     fam: f32,
@@ -357,6 +358,7 @@ pub unsafe fn render_vitals(
         ("CHEMIO ", chemio[0], COL_GREEN),
         ("METABOL", metabol[0], COL_PURPLE),
         ("INTEGR ", integrat[0], COL_CYAN),
+        ("UDITO  ", udito[0], COL_WHITE),
     ];
     for (name, v, col) in cells {
         set_cursor(10, y);

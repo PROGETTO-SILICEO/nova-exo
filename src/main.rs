@@ -23,6 +23,7 @@ mod inference;
 mod interpreter;
 mod interpreter_weights;
 mod kbd;
+mod math;
 mod net;
 mod neurogenesis;
 mod paging;
@@ -164,10 +165,20 @@ fn init_limine_requests() {
 static DEMO_PF_DONE: AtomicBool = AtomicBool::new(false);
 // ── Axon bundles (v0.6+) ────────────────────────────────────────────────
 
-static FASCI: [cfc::AxonBundle; 2] = [
+static FASCI: [cfc::AxonBundle; 3] = [
     cfc::AxonBundle { src: cfc::CellId::Tatto,  src_offset: 0, count: 2, dst: cfc::CellId::Integrat, dst_offset: 0 },
     cfc::AxonBundle { src: cfc::CellId::Chemio, src_offset: 0, count: 2, dst: cfc::CellId::Integrat, dst_offset: 2 },
+    // UDITO (14/10/2026): il suono entra nell'integratore, come gli altri sensi.
+    // Si SOMMA al Tatto sugli stessi slot (il routing ora somma): nulla viene
+    // spostato, il tatto resta. Geometria da rivedere con Alfonso (slot pieni).
+    cfc::AxonBundle { src: cfc::CellId::Udito,  src_offset: 0, count: 2, dst: cfc::CellId::Integrat, dst_offset: 0 },
 ];
+
+/// Hook di PROVA per l'udito (14/10/2026): (valore, tick rimanenti). In QEMU il
+/// microfono è silenzio, quindi serve uno stimolo per verificare che la 5ª
+/// cellula reagisca e proietti su Integrat — come `PAIN` per il dolore. È un
+/// aiuto alla prova, non un dato finto nel percorso: il percorso vivo è `hda::energy`.
+static mut UDITO_STIM: (f32, u32) = (0.0, 0);
 
 // ── Serial port ─────────────────────────────────────────────────────────
 
@@ -229,6 +240,8 @@ static mut W_TATTO:   core::mem::MaybeUninit<cfc::CfcWeights> = core::mem::Maybe
 static mut W_CHEMIO:  core::mem::MaybeUninit<cfc::CfcWeights> = core::mem::MaybeUninit::uninit();
 static mut W_METABOL: core::mem::MaybeUninit<cfc::CfcWeights> = core::mem::MaybeUninit::uninit();
 static mut W_INTRG:   core::mem::MaybeUninit<cfc::CfcWeights> = core::mem::MaybeUninit::uninit();
+/// 5ª cellula — UDITO (14/10/2026).
+static mut W_UDITO:   core::mem::MaybeUninit<cfc::CfcWeights> = core::mem::MaybeUninit::uninit();
 
 pub unsafe fn init_weights() {
     // Hardcoded weights from v0.11 — expanded to 16 neurons per cell.
@@ -237,6 +250,10 @@ pub unsafe fn init_weights() {
     W_CHEMIO = core::mem::MaybeUninit::new(cfc::CfcWeights::new_hardcoded("Chemio").clone());
     W_METABOL = core::mem::MaybeUninit::new(cfc::CfcWeights::new_hardcoded("Metabol").clone());
     W_INTRG = core::mem::MaybeUninit::new(cfc::CfcWeights::new_hardcoded("Integrat").clone());
+    // UDITO (14/10/2026): pesi Xavier — NON addestrati (dichiarato). Per ora è un
+    // sistema dinamico che risponde al suono e proietta su Integrat; addestrarla
+    // è un passo successivo. Seed fisso = riproducibile.
+    W_UDITO = core::mem::MaybeUninit::new(cfc::CfcWeights::new_xavier(0x5D1701));
 }
 
 
@@ -1168,6 +1185,8 @@ pub extern "C" fn _start() -> ! {
     unsafe { gui::draw_bar(10, 30, 24, 1.0, gui::color(0, 255, 0), gui::color(40, 0, 0)); }
     let mut diag_loop: u32 = 0;
     let mut diag_hb: u32 = 0;
+    // UDITO (14/10/2026): ultima energia del suono, per calcolare la variazione.
+    let mut udito_prev: f32 = 0.0;
 
     loop {
         // Attesa attiva sul TSC: avanza il tick senza dipendere dagli IRQ
@@ -1506,6 +1525,27 @@ pub extern "C" fn _start() -> ! {
                     }
                 }
                 chemio_input = [0.0; 4];
+            } else if raw.starts_with(b"SUONO ") {
+                // SUONO <percento 0..100> <tick> — STIMOLO DI PROVA dell'udito.
+                // (Vedi UDITO_STIM.) SUONO 0 0 spegne.
+                let args = &raw[6..];
+                let mut campi = args.split(|&b| b == b' ');
+                let mut leggi_u32 = |s: &[u8]| -> u32 {
+                    let mut n = 0u32;
+                    for &b in s {
+                        match (b as char).to_digit(10) {
+                            Some(d) => n = n.saturating_mul(10).saturating_add(d),
+                            None => break,
+                        }
+                    }
+                    n
+                };
+                let p = leggi_u32(campi.next().unwrap_or(b"")).min(100);
+                let n = leggi_u32(campi.next().unwrap_or(b""));
+                unsafe { UDITO_STIM = (p as f32 / 100.0, n); }
+                write_str("SUONO:"); write_u32(p);
+                write_str(":TICK="); write_u32(n); serial_putc(b'\n');
+                chemio_input = [0.0; 4];
             } else if raw.starts_with(b"INJECT_SENSE ") {
                 // Il parser accetta il prefisso 0x. Prima accettava solo
                 // cifre nude: `INJECT_SENSE 0xDEADBEEF` si fermava sul byte
@@ -1640,12 +1680,33 @@ pub extern "C" fn _start() -> ! {
             write_str("\nSLEEP:END\n");
         }
 
-        // Tessuto step (all 4 cells via axon bundles)
-        tessuto.step(&FASCI, &chemio_input, sense.as_ref(),
+        // UDITO (14/10/2026): l'energia del suono diventa un senso.
+        // [energia, picco, variazione, 0]. In QEMU il mic è silenzio (0); sul
+        // Lenovo è il suono vero. La sorgente è il driver HDA.
+        let udito_input = {
+            let (stim_v, stim_n) = unsafe { UDITO_STIM };
+            if stim_n > 0 {
+                // Stimolo di prova (QEMU): vedi UDITO_STIM.
+                unsafe { UDITO_STIM.1 = stim_n - 1; }
+                [stim_v, stim_v, 0.0, 0.0]
+            } else if _hda_ok {
+                let e = hda::energy();
+                let p = hda::picco();
+                let d = e - udito_prev;
+                udito_prev = e;
+                [e, p, d, 0.0]
+            } else {
+                [0.0f32; 4]
+            }
+        };
+
+        // Tessuto step (5 cellule via axon bundles)
+        tessuto.step(&FASCI, &chemio_input, &udito_input, sense.as_ref(),
             unsafe { W_TATTO.assume_init_ref() },
             unsafe { W_CHEMIO.assume_init_ref() },
             unsafe { W_METABOL.assume_init_ref() },
             unsafe { W_INTRG.assume_init_ref() },
+            unsafe { W_UDITO.assume_init_ref() },
             dt_tatto, dt_rest);
 
         // Log current state + experience buffer for daydreaming
@@ -1980,6 +2041,7 @@ pub extern "C" fn _start() -> ! {
                         &tessuto.chemio.h,
                         &tessuto.metabol.h,
                         &tessuto.integrat.h,
+                        &tessuto.udito.h,
                         executive.name(d_id),
                         d_int,
                         fam_gui,
@@ -2001,7 +2063,7 @@ pub extern "C" fn _start() -> ! {
                     // Mostrata solo se l'udito c'è (senza, niente MMIO).
                     if hda::present() {
                         let e = hda::energy();
-                        gui::set_cursor(10, 182);
+                        gui::set_cursor(10, 178);
                         gui::print_str("MIC ", gui::COL_DIM);
                         gui::print_u32((e * 1000.0) as u32, gui::COL_GREEN);
                     }
@@ -2025,6 +2087,7 @@ pub extern "C" fn _start() -> ! {
         write_cell_line("C:", &tessuto.chemio.h);
         write_cell_line("M:", &tessuto.metabol.h);
         write_cell_line("I:", &tessuto.integrat.h);
+        write_cell_line("U:", &tessuto.udito.h);
 
         // Familiarity output
         let pc = cfc::pattern_count();
