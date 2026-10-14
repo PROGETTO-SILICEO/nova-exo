@@ -57,6 +57,20 @@ const PAR_VENDOR_ID:  u16 = 0x00; // [31:16]=vendor [15:0]=device
 const PAR_REVISION:   u16 = 0x02;
 const PAR_NODE_COUNT: u16 = 0x04; // [7:0]=start [15:8]=count
 const PAR_WIDGET_CAP: u16 = 0x09; // [23:20]=widget type
+const PAR_PIN_CAP:    u16 = 0x0C; // [5]=INPUT capace
+const PAR_CONNLIST_LEN: u16 = 0x0E; // quanti nodi nella lista di connessione
+const VERB_GET_CONN_LIST:      u16 = 0xF02; // lista sorgenti di un widget
+const VERB_GET_CONFIG_DEFAULT: u16 = 0xF1C; // tipo di jack di un pin ([23:20]=device)
+const VERB_SET_POWER_STATE:    u16 = 0x705; // D0 = acceso
+const VERB_SET_CONN_SELECT:    u16 = 0x701; // sceglie la sorgente di ingresso
+
+// Tipi di widget (HDA): 1 = Audio Input (ADC), 4 = Pin Complex
+const WID_AUD_IN: u8 = 1;
+const WID_PIN: u8 = 4;
+// Tipo di jack (config default): 0xA = Mic In
+const JACK_MIC_IN: u8 = 0xA;
+// Pin cap: bit5 = ingresso
+const PINCAP_INPUT: u32 = 0x20;
 
 // CORB 256 entry × 4 B = 1 KB · RIRB 256 entry × 8 B = 2 KB (allineati)
 const RING_ENTRIES: usize = 256;
@@ -331,6 +345,47 @@ static mut AUDIO_ON: bool = false;
 
 /// Allestisce lo stream di cattura: BDL, buffer ciclico, formato, poi il
 /// codec (ADC nodo 4 + pin nodo 5) e infine RUN. Da chiamare dopo `init()`.
+/// SCOPERTA DEI NODI (14/10/2026): trova da sé l'ADC (Audio Input) e il pin del
+/// microfono percorrendo l'albero dei widget. PRIMA erano fissi ai nodi di QEMU
+/// (4 e 5): sul codec VERO (Realtek) sono altri → l'udito leggeva 0. Ora il
+/// driver **chiede al codec chi è**, invece di indovinare. (Lezione del 14/10:
+/// QEMU mi rendeva cieca all'hardware vero.)
+fn scopri_nodi() -> (u8, u8) {
+    let c = unsafe { CODEC };
+    let mut adc: u8 = 0xFF;
+    let mut pin: u8 = 0xFF;
+    let mut pin_mic: u8 = 0xFF;
+
+    let nc0 = codec_cmd(c, 0, VERB_GET_PARAM, PAR_NODE_COUNT);
+    let fs = ((nc0 >> 16) & 0xFF) as u8;
+    let fcount = (nc0 & 0xFF) as u8;
+    for fi in 0..fcount.min(4) {
+        let func = fs.wrapping_add(fi);
+        let nc1 = codec_cmd(c, func, VERB_GET_PARAM, PAR_NODE_COUNT);
+        let ws = ((nc1 >> 16) & 0xFF) as u8;
+        let wcount = (nc1 & 0xFF) as u8;
+        for wi in 0..wcount.min(32) {
+            let node = ws.wrapping_add(wi);
+            let cap = codec_cmd(c, node, VERB_GET_PARAM, PAR_WIDGET_CAP);
+            if cap == 0xFFFF_FFFF { continue; }
+            let wtype = ((cap >> 20) & 0xF) as u8;
+            if wtype == WID_AUD_IN && adc == 0xFF {
+                adc = node;
+            } else if wtype == WID_PIN {
+                let pincap = codec_cmd(c, node, VERB_GET_PARAM, PAR_PIN_CAP);
+                if pincap & PINCAP_INPUT != 0 {
+                    if pin == 0xFF { pin = node; }
+                    let cfg = codec_cmd(c, node, VERB_GET_CONFIG_DEFAULT, 0);
+                    let dev = ((cfg >> 20) & 0xF) as u8;
+                    if dev == JACK_MIC_IN && pin_mic == 0xFF { pin_mic = node; }
+                }
+            }
+        }
+    }
+    if pin_mic != 0xFF { pin = pin_mic; }
+    (adc, pin)
+}
+
 pub fn stream_init() -> bool {
     if !present() { return false; }
     let codec = unsafe { CODEC };
@@ -365,11 +420,31 @@ pub fn stream_init() -> bool {
     wr32(SD0 + SD_CTL, 0x00);
     delay(50_000);
 
-    // Codec: formato, stream-id, amp d'ingresso, pin d'ingresso
-    codec_cmd(codec, ADC_NODE, VERB_SET_STREAM_FORMAT, FMT_16BIT_2CH_48K);
-    codec_cmd(codec, ADC_NODE, VERB_SET_CONV_STREAMID, ((STREAM_TAG as u16) << 4) | 0);
-    codec_cmd(codec, ADC_NODE, VERB_SET_AMP_GAIN_MUTE, 0x707F); // input amp, L+R, gain max
-    codec_cmd(codec, PIN_NODE, VERB_SET_PIN_CTL, 0x0020);      // AC_PINCTL_IN_EN
+    // ── SCOPERTA: ADC e pin del microfono (non più fissi ai nodi di QEMU) ──
+    let (adc, pin) = scopri_nodi();
+    wstr("HDA: adc="); wh16(adc as u16); wstr(" pin="); wh16(pin as u16);
+    crate::serial_putc(b'\n');
+    if adc == 0xFF || pin == 0xFF {
+        wstr("HDA: nodi ADC/pin non trovati\n");
+        return false;
+    }
+    codec_cmd(codec, adc, VERB_SET_POWER_STATE, 0x0000); // D0 (acceso)
+    codec_cmd(codec, pin, VERB_SET_POWER_STATE, 0x0000);
+    // l'ADC sceglie il pin come sorgente d'ingresso (indice nella sua lista)
+    let clen = (codec_cmd(codec, adc, VERB_GET_PARAM, PAR_CONNLIST_LEN) & 0x7F) as u32;
+    if clen > 0 {
+        let list = codec_cmd(codec, adc, VERB_GET_CONN_LIST, 0);
+        let mut idx: u16 = 0;
+        for b in 0..clen.min(4) {
+            if ((list >> (8 * b)) & 0xFF) as u8 == pin { idx = b as u16; }
+        }
+        codec_cmd(codec, adc, VERB_SET_CONN_SELECT, idx);
+    }
+    // formato, stream-id, amp d'ingresso (sull'ADC), pin in ingresso
+    codec_cmd(codec, adc, VERB_SET_STREAM_FORMAT, FMT_16BIT_2CH_48K);
+    codec_cmd(codec, adc, VERB_SET_CONV_STREAMID, ((STREAM_TAG as u16) << 4) | 0);
+    codec_cmd(codec, adc, VERB_SET_AMP_GAIN_MUTE, 0x707F); // input amp, L+R, gain max
+    codec_cmd(codec, pin, VERB_SET_PIN_CTL, 0x0020);      // AC_PINCTL_IN_EN
 
     // RUN: tag nei bit 20-23 + bit1 (run). Il controller avvisa il codec
     // (intel_hda_notify_codecs) e la cattura parte.

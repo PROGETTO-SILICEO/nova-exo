@@ -1032,47 +1032,47 @@ pub extern "C" fn _start() -> ! {
     write_str("DISCO: init rimandato (rischio porta SATA)\n");
     let _disco_ok = false;
 
-    // ── DIAG 04/10/2026 — visibile sul VIDEO (il Lenovo non ha seriale) ──
-    // SER: la UART è stata rilevata?  NET: che NIC c'è davvero?
-    // (sul T460 è Intel I219 8086:156f/1570, NON la 82540EM di QEMU)
-    unsafe {
-        gui::set_cursor(10, 195);
-        if SERIAL_PRESENT {
-            gui::print_str("SER: presente", gui::COL_GREEN);
-        } else {
-            gui::print_str("SER: assente", gui::COL_DIM);
-        }
-        gui::set_cursor(10, 207);
-        match pci::find_network_device() {
-            Some((b, sl, fnc, v, d)) => {
-                let hex = b"0123456789abcdef";
-                // "NET: BB:SS.F VVVV:DDDD" — posizione + ID
-                let buf = [
-                    b'N', b'E', b'T', b':', b' ',
-                    hex[((b >> 4) & 0xF) as usize], hex[(b & 0xF) as usize],
-                    b':',
-                    hex[((sl >> 4) & 0xF) as usize], hex[(sl & 0xF) as usize],
-                    b'.',
-                    hex[(fnc & 0xF) as usize],
-                    b' ',
-                    hex[((v >> 12) & 0xF) as usize], hex[((v >> 8) & 0xF) as usize],
-                    hex[((v >> 4) & 0xF) as usize], hex[(v & 0xF) as usize],
-                    b':',
-                    hex[((d >> 12) & 0xF) as usize], hex[((d >> 8) & 0xF) as usize],
-                    hex[((d >> 4) & 0xF) as usize], hex[(d & 0xF) as usize],
-                ];
-                if let Ok(s) = core::str::from_utf8(&buf) {
-                    gui::print_str(s, gui::COL_CYAN);
-                }
+    // ── DIAG del boot (14/10/2026): solo su SERIALE ──
+    // Prima erano sul VIDEO (il Lenovo non ha seriale). Ora il pannello è la
+    // finestra sul CORPO: le diagnosi di boot restano, ma non sporcano lo schermo.
+    if unsafe { SERIAL_PRESENT } {
+        write_str("SER: presente\n");
+    } else {
+        write_str("SER: assente\n");
+    }
+    match pci::find_network_device() {
+        Some((b, sl, fnc, v, d)) => {
+            let hex = b"0123456789abcdef";
+            // "NET: BB:SS.F VVVV:DDDD" — posizione + ID
+            let buf = [
+                b'N', b'E', b'T', b':', b' ',
+                hex[((b >> 4) & 0xF) as usize], hex[(b & 0xF) as usize],
+                b':',
+                hex[((sl >> 4) & 0xF) as usize], hex[(sl & 0xF) as usize],
+                b'.',
+                hex[(fnc & 0xF) as usize],
+                b' ',
+                hex[((v >> 12) & 0xF) as usize], hex[((v >> 8) & 0xF) as usize],
+                hex[((v >> 4) & 0xF) as usize], hex[(v & 0xF) as usize],
+                b':',
+                hex[((d >> 12) & 0xF) as usize], hex[((d >> 8) & 0xF) as usize],
+                hex[((d >> 4) & 0xF) as usize], hex[(d & 0xF) as usize],
+            ];
+            write_str("NET: ");
+            if let Ok(s) = core::str::from_utf8(&buf) {
+                write_str(s);
             }
-            None => gui::print_str("NET: nessuna", gui::COL_DIM),
+            serial_putc(b'\n');
         }
+        None => write_str("NET: nessuna\n"),
+    }
+    unsafe {
 
-        // ── DUMP PCI completo sul video (max 20 device, bus 0-7) ──
-        // Per l'inventario del Lenovo: Ethernet Realtek (10ec:8136) attesa
-        // dietro un root port PCIe (bus secondario, come la WiFi a 01:00.0).
+        // ── Inventario PCI: solo su SERIALE ──
+        // (14/10/2026) Prima lo scriveva sulla GUI: ora il pannello è la finestra
+        // sul CORPO, non la sala macchine. L'inventario resta, ma non sporca lo
+        // schermo. Utile per riconoscere i device del Lenovo.
         let hex = b"0123456789abcdef";
-        let mut yy = 225usize;
         let mut count = 0u32;
         'dump: for bus in 0..8u8 {
             for slot in 0..32u8 {
@@ -1099,11 +1099,11 @@ pub extern "C" fn _start() -> ! {
                         hex[((d >> 12) & 0xF) as usize], hex[((d >> 8) & 0xF) as usize],
                         hex[((d >> 4) & 0xF) as usize], hex[(d & 0xF) as usize],
                     ];
-                    gui::set_cursor(10, yy);
+                    write_str("PCI:");
                     if let Ok(s) = core::str::from_utf8(&line) {
-                        gui::print_str(s, gui::COL_DIM);
+                        write_str(s);
                     }
-                    yy += 11;
+                    serial_putc(b'\n');
                     count += 1;
                 }
             }
