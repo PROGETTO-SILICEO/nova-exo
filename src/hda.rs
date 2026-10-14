@@ -92,6 +92,10 @@ static mut REVISION: u32 = 0xFFFF_FFFF;
 static mut GCAP: u16 = 0;
 static mut PRESENT: bool = false;
 static mut CORB_OK: bool = false;
+/// Maschera dei codec presenti (bit N = codec N su STATESTS). Il Lenovo ne ha
+/// DUE: l'HDMI della scheda video (solo uscite) e il Realtek (col microfono):
+/// bisogna SCEGLIERE quello con l'ingresso, non il primo.
+static mut CODEC_MASK: u16 = 0;
 /// Nodi SCOPERTI (ADC e pin del microfono): esposti per la GUI, così si vedono
 /// senza seriale (il Lenovo non ha seriale) e si capisce se sono quelli giusti.
 static mut ADC_NODO: u8 = 0xFF;
@@ -273,7 +277,7 @@ pub fn init() -> bool {
         if st & (1 << i) != 0 { codec = i; break; }
     }
     wr16(HDA_STATESTS, st); // pulizia
-    unsafe { CODEC = codec; PROBE[2] = 1; PROBE[3] = codec; }
+    unsafe { CODEC = codec; CODEC_MASK = st; PROBE[2] = 1; PROBE[3] = codec; }
 
     // 4b. CORB/RIRB e primo comando
     corb_init();
@@ -354,8 +358,7 @@ static mut AUDIO_ON: bool = false;
 /// (4 e 5): sul codec VERO (Realtek) sono altri → l'udito leggeva 0. Ora il
 /// driver **chiede al codec chi è**, invece di indovinare. (Lezione del 14/10:
 /// QEMU mi rendeva cieca all'hardware vero.)
-fn scopri_nodi() -> (u8, u8) {
-    let c = unsafe { CODEC };
+fn scopri_nodi(c: u8) -> (u8, u8) {
     let mut adc: u8 = 0xFF;
     let mut pin: u8 = 0xFF;
     let mut pin_mic: u8 = 0xFF;
@@ -425,14 +428,32 @@ pub fn stream_init() -> bool {
     delay(50_000);
 
     // ── SCOPERTA: ADC e pin del microfono (non più fissi ai nodi di QEMU) ──
-    let (adc, pin) = scopri_nodi();
-    unsafe { ADC_NODO = adc; PIN_NODO = pin; }
-    wstr("HDA: adc="); wh16(adc as u16); wstr(" pin="); wh16(pin as u16);
-    crate::serial_putc(b'\n');
+    // ── SCEGLI IL CODEC COL MICROFONO ──
+    // Il Lenovo ha DUE codec (HDMI + Realtek): il primo (HDMI) NON ha ingressi.
+    // Si prova ogni codec presente e si prende quello che HA un ADC.
+    let mut adc = 0xFFu8;
+    let mut pin = 0xFFu8;
+    let mut codec = codec;
+    let mask = unsafe { CODEC_MASK };
+    for i in 0..16u8 {
+        if mask & (1 << i) == 0 { continue; }
+        let (a, p) = scopri_nodi(i);
+        wstr("HDA: prova codec="); wh16(i as u16);
+        wstr(" adc="); wh16(a as u16); wstr(" pin="); wh16(p as u16);
+        crate::serial_putc(b'\n');
+        if a != 0xFF && p != 0xFF {
+            codec = i; adc = a; pin = p;
+            break;
+        }
+    }
+    unsafe { CODEC = codec; ADC_NODO = adc; PIN_NODO = pin; }
     if adc == 0xFF || pin == 0xFF {
-        wstr("HDA: nodi ADC/pin non trovati\n");
+        wstr("HDA: nessun codec con ADC/pin — udito assente\n");
         return false;
     }
+    wstr("HDA: SCELTO codec="); wh16(codec as u16);
+    wstr(" adc="); wh16(adc as u16); wstr(" pin="); wh16(pin as u16);
+    crate::serial_putc(b'\n');
     codec_cmd(codec, adc, VERB_SET_POWER_STATE, 0x0000); // D0 (acceso)
     codec_cmd(codec, pin, VERB_SET_POWER_STATE, 0x0000);
     // l'ADC sceglie il pin come sorgente d'ingresso (indice nella sua lista)
