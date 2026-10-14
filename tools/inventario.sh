@@ -16,7 +16,10 @@
 # audio, temperatura/ventole, dischi, rete, ACPI (EC), e lshw -short.
 set -u
 
-OUT="${1:-inventario-$(hostname 2>/dev/null || echo macchina)-$(date +%Y%m%d-%H%M).txt}"
+# Salva ACCANTO allo script (se sta su una chiavetta, il risultato finisce sulla
+# chiavetta: la riporti e la leggiamo). Override col primo argomento.
+DIR="$(cd "$(dirname "$0")" 2>/dev/null && pwd || echo .)"
+OUT="${1:-$DIR/inventario-$(hostname 2>/dev/null || echo macchina).txt}"
 
 have() { command -v "$1" >/dev/null 2>&1; }
 sez() { echo; echo "==================================================================="; echo "== $*"; echo "==================================================================="; }
