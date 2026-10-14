@@ -26,6 +26,7 @@ mod kbd;
 mod math;
 mod net;
 mod neurogenesis;
+mod omeostasi;
 mod paging;
 mod pain;
 mod pci;
@@ -183,6 +184,9 @@ static FASCI: [cfc::AxonBundle; 3] = [
 /// cellula reagisca e proietti su Integrat — come `PAIN` per il dolore. È un
 /// aiuto alla prova, non un dato finto nel percorso: il percorso vivo è `hda::energy`.
 static mut UDITO_STIM: (f32, u32) = (0.0, 0);
+/// Hook di PROVA per l'omeostasi (15/10/2026): forza la lettura del sé.
+/// -1.0 = usa la lettura VERA (memoria dell'allocatore). Come PAIN/SUONO.
+static mut SPINTA: f32 = -1.0;
 
 // ── Serial port ─────────────────────────────────────────────────────────
 
@@ -1202,6 +1206,15 @@ pub extern "C" fn _start() -> ! {
     // risponde senza il cervello — è la prima funzione della spina dorsale.
     let mut soprassalto = riflesso::Riflesso::new(0.5, 0.2, 200);
 
+    // ── OMEOSTASI (15/10/2026): il corpo che si TENE ──
+    // Attuatori (chi agisce) + regolatore (chi regola). Organo AUTONOMO: non
+    // passa dall'intelletto (§7 — se la mente tace, la ventola gira ancora).
+    // Primo esempio: memoria del corpo → ventola.
+    let mut attuatori = omeostasi::Attuatori::new();
+    attuatori.registra("ventola", false);
+    let mut reg_mem = omeostasi::Regolatore::new(0.75, 0.05);
+    let mut mark_omeo: u64 = 0;
+
     // ── IL SISTEMA DEI SENSI (15/10/2026) ──
     // Un senso è una SCHEDA, non un caso speciale nel codice. Aggiungere un
     // senso (touchpad, telecamera, interocezione) = aggiungere una scheda qui.
@@ -1610,6 +1623,15 @@ pub extern "C" fn _start() -> ! {
                 write_str("SUONO:"); write_u32(p);
                 write_str(":TICK="); write_u32(n); serial_putc(b'\n');
                 chemio_input = [0.0; 4];
+            } else if raw.starts_with(b"SPINTA ") {
+                // SPINTA <percento 0..100 | -1> — stimolo di PROVA dell'omeostasi
+                // (come PAIN/SUONO): forza la lettura del se'. -1 = torna al vero.
+                let s = core::str::from_utf8(&raw[7..]).unwrap_or("");
+                let v: i32 = s.trim().parse().unwrap_or(-1);
+                unsafe { SPINTA = if v < 0 { -1.0 } else { (v.min(100) as f32) / 100.0 }; }
+                write_str("SPINTA:"); write_u32(if v < 0 { 0 } else { v as u32 });
+                serial_putc(b'\n');
+                chemio_input = [0.0; 4];
             } else if raw.starts_with(b"INJECT_SENSE ") {
                 // Il parser accetta il prefisso 0x. Prima accettava solo
                 // cifre nude: `INJECT_SENSE 0xDEADBEEF` si fermava sul byte
@@ -1775,6 +1797,24 @@ pub extern "C" fn _start() -> ! {
         if soprassalto.percepisce(percezione) {
             write_str("RIFLESSO:SOPRASSALTO t="); write_u32(cfc::tick() as u32);
             write_str(" n="); write_u32(soprassalto.scatti());
+            serial_putc(b'\n');
+        }
+
+        // ── OMEOSTASI (15/10/2026): il corpo legge il proprio stato e si regola ──
+        // Organo AUTONOMO: la decisione non passa dall'intelletto. Se la memoria
+        // del corpo si riempie → la ventola agisce (con isteresi, senza tremolio).
+        if cfc::tick_passed(500, &mut mark_omeo) {
+            let forza = unsafe { SPINTA };
+            let mem = if forza >= 0.0 {
+                forza
+            } else {
+                alloc::allocated_bytes() as f32 / alloc::capacity_bytes() as f32
+            };
+            let stringi = reg_mem.aggiorna(mem);
+            attuatori.imposta("ventola", stringi);
+            write_str("SE: mem="); write_u32((mem * 100.0) as u32);
+            write_str("% ventola="); write_str(if stringi { "ON" } else { "OFF" });
+            write_str(" accesi="); write_u32(attuatori.conta_accesi() as u32);
             serial_putc(b'\n');
         }
 

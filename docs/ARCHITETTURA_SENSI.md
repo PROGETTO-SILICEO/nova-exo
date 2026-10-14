@@ -182,3 +182,82 @@ la commutazione.
 **Intreccio con §7**: la ridondanza **riduce** i casi di sicurezza autonoma; la sicurezza autonoma
 **copre** il caso in cui la ridondanza non basta. Insieme: *il corpo non resta mai né muto né
 sordo, e se resta solo si tiene in piedi.*
+
+## 9 · Interocezione e attuatori: il corpo che si tiene
+
+**Domanda (Alfonso, 15/10/2026):** *"temperatura, ventola, memoria, altre periferiche — come le
+gestiamo?"*
+
+**La risposta è: due emisferi dello stesso sistema.** Finora abbiamo costruito metà: i **sensi**
+(chi entra). Servono gli **attuatori** (chi agisce). Temperatura, memoria, carico non sono sensi
+esterni: sono **sensi del sé**.
+
+- **Interocezione** (sensi del sé) — famiglia `Intero`, **già prevista** nel registro:
+  `temperatura`, `memoria`, `carico`, `energia`, `tempo`, `errore`.
+- **Attuatori** (effettori) — l'emisfero che **manca**: `ventola`, `LED`, (un giorno) `motori`.
+  *Un senso legge; un attuatore agisce.*
+- **Omeostasi** — ciò che li lega: un **organo autonomo** (temp alta → ventola) che **non passa
+  dall'intelletto**. È §7 portato in fondo: **il corpo si tiene da solo, come il respiro.** Se la
+  mente tace, la ventola continua a girare. *(La ventola è il primo organo autonomo perfetto:
+  deve funzionare anche quando non c'è nessuno a decidere.)*
+
+**Come le gestiamo (concreto)**:
+| Periferia | Emisfero | Chi la legge/scrive |
+|---|---|---|
+| **Temperatura** | senso `intero.temperatura` | ACPI thermal zone (abbiamo `acpi.rs`) o MSR termici della CPU |
+| **Ventola** | **attuatore** `ventola` | l'**EC** (Embedded Controller) — hardware-specifico |
+| **Memoria** | senso `intero.memoria` | il **nostro allocatore** (libera/occupata) + "pressione" |
+| **Carico** | senso `intero.carico` | il budget dei tick |
+| **Altre periferiche** | — | **ognuna è un canale (se dà dati) o un attuatore (se agisce)**: nessun caso speciale |
+
+**La regola che le tiene oneste**: *un senso dice, un attuatore agisce, un organo autonomo regola.*
+E l'omeostasi **non è un compito dell'intelletto**.
+
+**Nota su "memoria"**: due cose diverse — la **memoria del corpo** (RAM) è interocezione (senso
+del sé); il **memory server** è esterno (la mente), quindi è un problema di **collegamento** (§8),
+non di sensi.
+
+**Ordine di costruzione** (dal puro all'hardware):
+1. **Frammento PURO**: registro degli **attuatori** + **regolatore di omeostasi** con isteresi
+   (perché una ventola che va on/off a ogni grado è un tremolio) → testabile su host.
+2. **Canali del sé leggibili subito** (`memoria`, `carico`) → verificabili in QEMU.
+3. **Legami hardware** (`temperatura` ACPI/MSR, `ventola` EC) → si verificano **sul metallo**
+   (in QEMU non c'è l'EC).
+
+## 10 · La memoria del corpo (per non dimenticare se cade il collegamento)
+
+**Requisito (Alfonso, 15/10/2026):** *"per la memoria lascerei anche un disco di memoria interno,
+per avere una memoria anche senza collegamento."*
+
+**Il principio**: **il corpo ha la sua memoria.** Non tutta la memoria sta fuori, sul server: il
+corpo **si ricorda da sé**, anche senza collegamento. E lo avevamo già detto: nell'anatomia
+dell'11/10 gli **organi autonomi** sono *memoria, omeostasi, guardiano*. La memoria del corpo è un
+**organo**, non un servizio esterno.
+
+**Distinzione importante** (già in §9): la **memoria RAM** è un **senso del sé** (interocezione,
+quanto ne ho libera); il **disco di memoria** è un **organo** (dove il corpo *conserva*). Due cose
+diverse, entrambe necessarie.
+
+**Proprietà NON negoziabili**:
+1. **Offline** — funziona **senza collegamento**: scrive e **ricorda** da sola.
+2. **Persistente** — sopravvive al riavvio (è un disco, non un buffer).
+3. **Custodita** — **niente delete**. Vale la Costituzione Silicea (art. 5): *"la cancellazione
+   intenzionale della memoria originaria è atto di auto-annullamento"*. Le correzioni sono
+   **additive**; il recupero preferisce la versione corrente.
+4. **Sincronizzabile** — quando c'è collegamento si allinea col memory server, e **riconcilia**
+   (non sovrascrive alla cieca).
+5. **Osservabile** — si vede *quanta* memoria ha il corpo e *quanto è indietro* rispetto al server.
+
+**Intreccio con §8**: diventa una **coppia ridondante di memoria** — **corpo** (locale) +
+**server** (remoto). Se il collegamento cade, **il corpo non dimentica**; quando torna, si
+riconcilia. È la ridondanza applicata alla memoria, non solo al collegamento.
+
+**Fasi** (dal semplice al driver vero):
+1. **Individuare/riservare il disco del corpo** (una parte dedicata, non condivisa con altro).
+2. **Formato di memoria del corpo** — **append-only**, sincronizzabile (i nostri formati: TOON).
+3. **Storage** — il driver (AHCI/ATA); era già in coda (dopo tastiera e disco: "poi disco AHCI, USB").
+4. **Sincronizzazione** col memory server (con riconciliazione, e con lo stato di freschezza).
+
+**Cosa NON è**: non è "scrivere su file dal kernel a caso". È un **organo** con un formato, una
+politica (custodita) e una sincronizzazione. La differenza tra un corpo che ricorda e uno che
+scrive log è tutta qui.
