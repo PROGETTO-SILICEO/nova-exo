@@ -30,6 +30,7 @@ mod paging;
 mod pain;
 mod pci;
 mod predictor;
+mod riflesso;
 mod rtl;
 mod rx;
 mod serial;
@@ -1187,6 +1188,9 @@ pub extern "C" fn _start() -> ! {
     let mut diag_hb: u32 = 0;
     // UDITO (14/10/2026): ultima energia del suono, per calcolare la variazione.
     let mut udito_prev: f32 = 0.0;
+    // RIFLESSO (14/10/2026): il soprassalto a un suono che appare. Il corpo
+    // risponde senza il cervello — è la prima funzione della spina dorsale.
+    let mut soprassalto = riflesso::Riflesso::new(0.5, 0.2, 200);
 
     loop {
         // Attesa attiva sul TSC: avanza il tick senza dipendere dagli IRQ
@@ -1683,22 +1687,36 @@ pub extern "C" fn _start() -> ! {
         // UDITO (14/10/2026): l'energia del suono diventa un senso.
         // [energia, picco, variazione, 0]. In QEMU il mic è silenzio (0); sul
         // Lenovo è il suono vero. La sorgente è il driver HDA.
-        let udito_input = {
+        // L'energia del suono PERCEPITA: lo stimolo di prova (QEMU), oppure il
+        // microfono vero (Lenovo). È la stessa sorgente che alimenta l'udito.
+        let percezione = {
             let (stim_v, stim_n) = unsafe { UDITO_STIM };
             if stim_n > 0 {
-                // Stimolo di prova (QEMU): vedi UDITO_STIM.
                 unsafe { UDITO_STIM.1 = stim_n - 1; }
-                [stim_v, stim_v, 0.0, 0.0]
+                stim_v
             } else if _hda_ok {
-                let e = hda::energy();
-                let p = hda::picco();
-                let d = e - udito_prev;
-                udito_prev = e;
-                [e, p, d, 0.0]
+                hda::energy()
             } else {
-                [0.0f32; 4]
+                0.0
             }
         };
+        let udito_input = {
+            let e = percezione;
+            let p = if _hda_ok { hda::picco() } else { e };
+            let d = e - udito_prev;
+            udito_prev = e;
+            [e, p, d, 0.0]
+        };
+
+        // ── RIFLESSO (14/10/2026): il corpo risponde SENZA il cervello ──
+        // Il soprassalto scatta nello STESSO tick in cui il suono appare: non
+        // aspetta il passo del tessuto. È la prima funzione della spina dorsale
+        // (decisione 11/10: riflessi, autonomia, trasporto senza comprensione).
+        if soprassalto.percepisce(percezione) {
+            write_str("RIFLESSO:SOPRASSALTO t="); write_u32(cfc::tick() as u32);
+            write_str(" n="); write_u32(soprassalto.scatti());
+            serial_putc(b'\n');
+        }
 
         // Tessuto step (5 cellule via axon bundles)
         tessuto.step(&FASCI, &chemio_input, &udito_input, sense.as_ref(),
@@ -2066,6 +2084,13 @@ pub extern "C" fn _start() -> ! {
                         gui::set_cursor(10, 178);
                         gui::print_str("MIC ", gui::COL_DIM);
                         gui::print_u32((e * 1000.0) as u32, gui::COL_GREEN);
+                        // Il riflesso, visibile anche senza seriale (Lenovo).
+                        gui::set_cursor(120, 178);
+                        if soprassalto.in_refrattario() {
+                            gui::print_str("SOPRASSALTO", gui::COL_WHITE);
+                        } else {
+                            gui::print_str("           ", gui::COL_BG);
+                        }
                     }
                     if cfc::tick() % 1000 == 0 { hda::report(); }
                 }
