@@ -553,6 +553,9 @@ impl Tessuto {
         // Tatto[2] ← contatto umano (tastiera), SOSTENUTO finché il tasto è
         // giù (non un lampo di 1 tick). POSITIVO: la presenza non è un allarme.
         tatto_in[2] = if key_held() != 0 { 1.0 } else { 0.0 };
+        // Tatto[3] ← touchpad (tatto esteso, 15/10/2026): il gesto dell'umano
+        // che scorre/agisce. POSITIVO come il contatto: presenza, non allarme.
+        tatto_in[3] = if touchpad_attivo() { 1.0 } else { 0.0 };
         // Chemio ← serial (full override).
         chemio_in = *chemio_input;
         // Udito ← energia del suono (full override). Il 5° senso: quello che
@@ -650,6 +653,19 @@ pub fn key_held() -> u8 {
 
 pub fn key_count() -> u32 {
     unsafe { KEY_COUNT }
+}
+
+// ── Tatto esteso (touchpad, 15/10/2026) ──────────────────────────────────
+// Il secondo punto di contatto: dove la tastiera dice "ha toccato QUI", il
+// touchpad dice "si muove". Atterra su Tatto[3] (slot libero).
+static mut TOUCHPAD_ATTIVO: bool = false;
+
+pub fn sense_touchpad(attivo: bool) {
+    unsafe { TOUCHPAD_ATTIVO = attivo; }
+}
+
+pub fn touchpad_attivo() -> bool {
+    unsafe { TOUCHPAD_ATTIVO }
 }
 
 pub fn sense_pf(addr: u64, err: u64) {

@@ -58,6 +58,15 @@ pub fn read() -> Option<u8> {
     None
 }
 
+/// Legge un byte dal controller 8042 e dice **di chi è**: `true` = mouse (AUX),
+/// `false` = tastiera. Tastiera e touchpad condividono la porta 0x60: chi legge
+/// DEVE smistare, altrimenti i pacchetti del mouse diventano scancode.
+pub fn read_source() -> Option<(bool, u8)> {
+    let st = inb(STATUS);
+    if st & OBF == 0 { return None; }
+    Some((st & 0x20 != 0, inb(DATA)))
+}
+
 /// Distingue una PRESSIONE da un RILASCIO.
 ///
 /// Nel set 1 il rilascio è la pressione con il bit 7 alzato (0x80 | code).

@@ -30,6 +30,7 @@ mod paging;
 mod pain;
 mod pci;
 mod predictor;
+mod ps2;
 mod riflesso;
 mod rtl;
 mod rx;
@@ -37,6 +38,7 @@ mod sensi;
 mod serial;
 mod state;
 mod tensor;
+mod touchpad;
 
 use serial::LineReader;
 
@@ -953,6 +955,13 @@ pub extern "C" fn _start() -> ! {
     write_str(" id0="); write_u32(kid[2] as u32);
     write_str(" id1="); write_u32(kid[3] as u32);
     serial_putc(b'\n');
+    // ── TATTO ESTESO (touchpad, 15/10/2026) — il secondo punto di contatto ──
+    let _tp_ok = touchpad::init();
+    let tpr = touchpad::probe();
+    write_str("TP-ID: presente="); write_u32(if touchpad::presente() { 1 } else { 0 });
+    write_str(" selftest="); write_u32(tpr[1] as u32);
+    write_str(" id="); write_u32(touchpad::id() as u32);
+    serial_putc(b'\n');
     serial_println!("IDT loaded. 4 cellulae: tatto, chemio, metabol, integrat.");
     unsafe { boot_beep(6); } // IDT ok
     unsafe { gui::diag_paint(200, 0, 180); } // magenta: IDT ok
@@ -1204,6 +1213,9 @@ pub extern "C" fn _start() -> ! {
     sensi.registra(sensi::Canale { id: "dolore", famiglia: sensi::Famiglia::Intero, via: sensi::Via::Riflesso,     latenza_max: 1,    politica: sensi::Politica::Fresca,   priorita: 0, stato: sensi::Stato::Valido });
     sensi.registra(sensi::Canale { id: "chemio", famiglia: sensi::Famiglia::Estero, via: sensi::Via::Integrazione, latenza_max: 100,  politica: sensi::Politica::Fresca,   priorita: 2, stato: sensi::Stato::Valido });
     sensi.registra(sensi::Canale { id: "tempo",  famiglia: sensi::Famiglia::Intero, via: sensi::Via::Integrazione, latenza_max: 1000, politica: sensi::Politica::Completa, priorita: 3, stato: sensi::Stato::Valido });
+    // TATTO ESTESO (touchpad, 15/10/2026): il gesto della mano. Stato vivo.
+    let st_tp = if touchpad::presente() { sensi::Stato::Valido } else { sensi::Stato::Guasto };
+    sensi.registra(sensi::Canale { id: "tatto.esteso", famiglia: sensi::Famiglia::Estero, via: sensi::Via::Integrazione, latenza_max: 2, politica: sensi::Politica::Fresca, priorita: 1, stato: st_tp });
     {
         let mut ordine = [0usize; sensi::MAX_CANALI];
         let m = sensi.ordine(&mut ordine);
@@ -1311,8 +1323,30 @@ pub extern "C" fn _start() -> ! {
         // Il contatto umano: un tasto premuto diventa un evento di senso
         // (atterra su Tatto[2], positivo). Va letto PRIMA di take_sense,
         // altrimenti il contatto arriva al tick successivo.
-        while let Some(sc) = kbd::read() {
-            if let Some(t) = kbd::pressione(sc) {
+        while let Some((aux, b)) = kbd::read_source() {
+            if aux {
+                // Byte del TOUCHPAD (15/10/2026): il tatto esteso. Un tasto o
+                // un movimento contano come contatto → Tatto[3].
+                if let Some(p) = touchpad::feed(b) {
+                    let attivo = p.bottoni != 0 || p.dx != 0 || p.dy != 0;
+                    cfc::sense_touchpad(attivo);
+                    if attivo {
+                        // Prova diretta del gesto (dx,dy firmati via +1000).
+                        write_str("GESTO:");
+                        write_u32((p.dx + 1000) as u32); serial_putc(b',');
+                        write_u32((p.dy + 1000) as u32); serial_putc(b',');
+                        write_str("b="); write_u32(p.bottoni as u32);
+                        serial_putc(b'\n');
+                    }
+                }
+                continue;
+            }
+            // Byte della TASTIERA: filtra ACK / self-test / prefisso esteso.
+            match b {
+                0xFA | 0xAA | 0xE0 => continue,
+                _ => {}
+            }
+            if let Some(t) = kbd::pressione(b) {
                 cfc::key_press(t);
                 write_str("CONTATTO:");
                 write_str(kbd::nome(t));
@@ -1324,7 +1358,7 @@ pub extern "C" fn _start() -> ! {
                         gui::print_str(kbd::nome(t), gui::COL_WHITE);
                     }
                 }
-            } else if kbd::rilascio(sc).is_some() {
+            } else if kbd::rilascio(b).is_some() {
                 // La mano si alza: il contatto finisce. Ma finché era giù,
                 // Tatto[2] è rimasto alto — Exo se n'è accorto.
                 cfc::key_release();
