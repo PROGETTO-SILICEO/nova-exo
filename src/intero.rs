@@ -15,8 +15,34 @@
 
 use core::arch::asm;
 
-const MSR_THERM_TARGET: u32 = 0x1A2; // IA32_TEMPERATURE_TARGET (TjMax)
-const MSR_THERM_STATUS: u32 = 0x19C; // IA32_THERM_STATUS (lettura digitale)
+const MSR_THERM_TARGET: u32 = 0x1A2; // IA32_TEMPERATURE_TARGET (TjMax) — SOLO Intel
+const MSR_THERM_STATUS: u32 = 0x19C; // IA32_THERM_STATUS — SOLO Intel
+
+/// CPUID: vendor del processore. "GenuineIntel" → true.
+/// PERCHÉ (lezione 14/10/2026, sul METALLO): su una CPU AMD gli MSR termici Intel
+/// NON esistono → `rdmsr` → **#GP → blocco all'avvio**. Gli MSR sono per-vendor:
+/// si legge solo dove esistono. (In QEMU non si vede: gli MSR non sono emulati e
+/// leggono 0/FFFF, quindi il difetto si manifesta SOLO sul metallo.)
+fn vendor_intel() -> bool {
+    let ebx: u32;
+    let edx: u32;
+    let ecx: u32;
+    unsafe {
+        // rbx è riservato a LLVM: si salva, si esegue cpuid, si copia ebx, si ripristina.
+        asm!(
+            "push rbx",
+            "cpuid",
+            "mov {ebx:e}, ebx",
+            "pop rbx",
+            ebx = out(reg) ebx,
+            inout("eax") 0u32 => _,
+            out("ecx") ecx,
+            out("edx") edx,
+        );
+    }
+    // "GenuineIntel" = EBX "Genu" · EDX "ineI" · ECX "ntel"
+    ebx == 0x756e_6547 && edx == 0x4965_6e69 && ecx == 0x6c65_746e
+}
 
 /// Decodifica PURA: TjMax + status → gradi Celsius (o None se non c'è sensore).
 /// IA32_THERM_STATUS bit 31 = lettura valida; bit 22:16 = gradi sotto TjMax.
@@ -48,6 +74,10 @@ pub fn rdmsr(msr: u32) -> u64 {
 }
 
 /// La temperatura del corpo, se c'è un sensore. None = non c'è (onesto).
+/// ⚠️ Legge SOLO su Intel: altrove gli MSR non esistono (→ #GP). Non si indovina.
 pub fn temperatura() -> Option<f32> {
+    if !vendor_intel() {
+        return None; // AMD/altro: questi MSR non ci sono. Meglio un "non c'è" che un blocco.
+    }
     temperatura_da(rdmsr(MSR_THERM_TARGET), rdmsr(MSR_THERM_STATUS))
 }
