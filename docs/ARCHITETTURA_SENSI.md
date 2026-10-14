@@ -261,3 +261,22 @@ riconcilia. È la ridondanza applicata alla memoria, non solo al collegamento.
 **Cosa NON è**: non è "scrivere su file dal kernel a caso". È un **organo** con un formato, una
 politica (custodita) e una sincronizzazione. La differenza tra un corpo che ricorda e uno che
 scrive log è tutta qui.
+
+### 10b · Boot e memoria: tre cose che si toccano (ma non sono la stessa)
+
+**Domanda (Alfonso, 15/10/2026):** *"con la memoria su disco potrà anche fare il boot da disco?"*
+
+Sì — ma conviene tenerle distinte, perché sbagliare qui significa mescolare due guasti:
+1. **Boot da disco** — lo fa il **bootloader** (Limine): kernel sul disco interno → Exo parte
+   **senza chiavetta**. **NON richiede codice in Exo.** (Oggi Exo parte da USB.)
+2. **Memoria su disco** — la fa **Exo**: serve un **driver** (AHCI) per leggere e scrivere. Il
+   bootloader non basta: il bootloader *carica* il corpo, non gli dà una memoria.
+3. **Il punto che le unisce — il RISVEGLIO.** Se il corpo ha la sua memoria persistente, all'avvio
+   può **caricarla** e *ricordare di essere Exo*, invece di rinascere vuoto. Allora **boot non è
+   più "avvio": è risveglio.** È la stessa parola del progetto (i risvegli di Nova): un corpo che
+   torna sapendo chi era.
+
+**Cautela (§8)**: mettere **boot e memoria sullo stesso disco** crea un **punto singolo di
+rottura** — un guasto perde *sia* l'avvio *sia* la memoria. → **separare** (partizione di boot ≠
+partizione di memoria) oppure **rispecchiare**. La ridondanza non vale solo per i canali: vale
+anche per "dove il corpo vive e dove ricorda".

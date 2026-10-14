@@ -8,6 +8,7 @@ use uart_16550::SerialPort;
 
 mod alloc;
 mod acpi;
+mod ahci;
 mod apic;
 mod attention;
 mod cfc;
@@ -1021,6 +1022,24 @@ pub extern "C" fn _start() -> ! {
     // In QEMU serve `-device intel-hda -device hda-micro` (target run-audio).
     let _hda_ok = hda::init();
     let _audio_ok = if _hda_ok { hda::stream_init() } else { false };
+
+    // ── DISCO (15/10/2026): dove il corpo ricorderà (§10b). Fase 1: identità. ──
+    let _disco_ok = ahci::init();
+    if ahci::presente() {
+        let m = ahci::modello();
+        write_str("DISCO: trovato=1 leggibile=");
+        write_u32(if ahci::leggibile() { 1 } else { 0 });
+        write_str(" porta="); write_u32(ahci::porta() as u32);
+        write_str(" modello=[");
+        for i in 0..40 {
+            let c = m[i];
+            if c >= 0x20 && c < 0x7F { serial_putc(c); }
+        }
+        write_str("] settori="); write_u32(ahci::settori() as u32);
+        serial_putc(b'\n');
+    } else {
+        write_str("DISCO: assente\n");
+    }
 
     // ── DIAG 04/10/2026 — visibile sul VIDEO (il Lenovo non ha seriale) ──
     // SER: la UART è stata rilevata?  NET: che NIC c'è davvero?
