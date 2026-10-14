@@ -23,7 +23,7 @@ bench:
 	@set -e; for b in bench/*.rs; do \
 		name=`basename $$b .rs`; \
 		echo "── compilo $$name"; \
-		rustc --test -O $$b -o $(HOST_BENCH_DIR)/$$name; \
+		rustc --test --edition 2021 -O $$b -o $(HOST_BENCH_DIR)/$$name; \
 	done
 	@echo "banchi compilati in $(HOST_BENCH_DIR)"
 

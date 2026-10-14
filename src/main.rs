@@ -21,6 +21,7 @@ mod hda;
 mod hexutil;
 mod idt;
 mod inference;
+mod intero;
 mod interpreter;
 mod interpreter_weights;
 mod kbd;
@@ -1232,6 +1233,8 @@ pub extern "C" fn _start() -> ! {
     let mut attuatori = omeostasi::Attuatori::new();
     attuatori.registra("ventola", false);
     let mut reg_mem = omeostasi::Regolatore::new(0.75, 0.05);
+    // Il secondo regolatore: la TEMPERATURA (interocezione). Soglia 80 °C, banda 5.
+    let mut reg_temp = omeostasi::Regolatore::new(80.0, 5.0);
     let mut mark_omeo: u64 = 0;
 
     // ── IL SISTEMA DEI SENSI (15/10/2026) ──
@@ -1248,6 +1251,13 @@ pub extern "C" fn _start() -> ! {
     // TATTO ESTESO (touchpad, 15/10/2026): il gesto della mano. Stato vivo.
     let st_tp = if touchpad::presente() { sensi::Stato::Valido } else { sensi::Stato::Guasto };
     sensi.registra(sensi::Canale { id: "tatto.esteso", famiglia: sensi::Famiglia::Estero, via: sensi::Via::Integrazione, latenza_max: 2, politica: sensi::Politica::Fresca, priorita: 1, stato: st_tp });
+    // INTEROCEZIONE (15/10/2026): la temperatura del corpo — senso del SÉ.
+    let temp0 = intero::temperatura();
+    let st_temp = if temp0.is_some() { sensi::Stato::Valido } else { sensi::Stato::Guasto };
+    sensi.registra(sensi::Canale { id: "intero.temperatura", famiglia: sensi::Famiglia::Intero, via: sensi::Via::Integrazione, latenza_max: 100, politica: sensi::Politica::Fresca, priorita: 1, stato: st_temp });
+    write_str("INTERO: temperatura=");
+    match temp0 { Some(t) => { write_u32(t as u32); write_str("C"); } None => write_str("-- (nessun sensore)") }
+    serial_putc(b'\n');
     {
         let mut ordine = [0usize; sensi::MAX_CANALI];
         let m = sensi.ordine(&mut ordine);
@@ -1829,10 +1839,16 @@ pub extern "C" fn _start() -> ! {
             } else {
                 alloc::allocated_bytes() as f32 / alloc::capacity_bytes() as f32
             };
-            let stringi = reg_mem.aggiorna(mem);
+            let carico = reg_mem.aggiorna(mem);
+            // Interocezione: la temperatura del sé (se c'è un sensore).
+            let temp = intero::temperatura();
+            let cocente = match temp { Some(t) => reg_temp.aggiorna(t), None => false };
+            let stringi = carico || cocente;
             attuatori.imposta("ventola", stringi);
             write_str("SE: mem="); write_u32((mem * 100.0) as u32);
-            write_str("% ventola="); write_str(if stringi { "ON" } else { "OFF" });
+            write_str("% temp=");
+            match temp { Some(t) => write_u32(t as u32), None => write_str("--") }
+            write_str(" ventola="); write_str(if stringi { "ON" } else { "OFF" });
             write_str(" accesi="); write_u32(attuatori.conta_accesi() as u32);
             serial_putc(b'\n');
         }
