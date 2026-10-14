@@ -342,6 +342,7 @@ pub unsafe fn render_vitals(
     udito: &[f32; 16],
     sensi: (u32, u32, u32), // (n, riflessi, guasti)
     mic: f32,               // energia dell'udito (0..1)
+    hda_nodi: (u8, u8),     // (ADC, pin) scoperti — 0xFF = non trovati
     gesto: bool,            // tatto esteso: gesto in corso
     desire_name: &str,
     desire_int: f32,
@@ -402,7 +403,13 @@ pub unsafe fn render_vitals(
     set_cursor(10, y + 2);
     print_str("MIC ", COL_DIM);
     print_f32(mic, COL_GREEN);
-    print_str("   TATTO ESTESO ", COL_DIM);
+    let (adc, pin) = hda_nodi;
+    print_str(" adc=", COL_DIM);
+    if adc == 0xFF { print_str("--", COL_RED); } else { print_u32(adc as u32, COL_WHITE); }
+    print_str(" pin=", COL_DIM);
+    if pin == 0xFF { print_str("--", COL_RED); } else { print_u32(pin as u32, COL_WHITE); }
+    set_cursor(230, y + 2);
+    print_str("TATTO ESTESO ", COL_DIM);
     print_str(if gesto { "GESTO" } else { "-" }, if gesto { COL_WHITE } else { COL_DIM });
 
     // Volontà

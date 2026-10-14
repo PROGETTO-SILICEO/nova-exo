@@ -92,6 +92,10 @@ static mut REVISION: u32 = 0xFFFF_FFFF;
 static mut GCAP: u16 = 0;
 static mut PRESENT: bool = false;
 static mut CORB_OK: bool = false;
+/// Nodi SCOPERTI (ADC e pin del microfono): esposti per la GUI, così si vedono
+/// senza seriale (il Lenovo non ha seriale) e si capisce se sono quelli giusti.
+static mut ADC_NODO: u8 = 0xFF;
+static mut PIN_NODO: u8 = 0xFF;
 /// [0]=found [1]=reset_ok [2]=codec_ok [3]=codec_addr
 static mut PROBE: [u8; 4] = [0, 0, 0, 0xFF];
 
@@ -422,6 +426,7 @@ pub fn stream_init() -> bool {
 
     // ── SCOPERTA: ADC e pin del microfono (non più fissi ai nodi di QEMU) ──
     let (adc, pin) = scopri_nodi();
+    unsafe { ADC_NODO = adc; PIN_NODO = pin; }
     wstr("HDA: adc="); wh16(adc as u16); wstr(" pin="); wh16(pin as u16);
     crate::serial_putc(b'\n');
     if adc == 0xFF || pin == 0xFF {
@@ -499,6 +504,8 @@ pub fn report() {
 
 /// Serve al consumatore (telemetria/pediatra) per sapere se l'udito c'è.
 pub fn present() -> bool { unsafe { PRESENT } }
+/// (ADC, pin) scoperti per il microfono: 0xFF = non trovati. Per la GUI.
+pub fn nodi() -> (u8, u8) { unsafe { (ADC_NODO, PIN_NODO) } }
 /// [found, reset_ok, codec_ok, codec_addr]
 pub fn probe() -> [u8; 4] { unsafe { PROBE } }
 pub fn vendor_device() -> (u16, u16) { unsafe { (VENDOR, DEVICE) } }

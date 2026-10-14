@@ -2193,6 +2193,7 @@ pub extern "C" fn _start() -> ! {
                          sensi.conta_via(sensi::Via::Riflesso) as u32,
                          sensi.conta_guasti() as u32),
                         mic,
+                        hda::nodi(),
                         cfc::touchpad_attivo(),
                         executive.name(d_id),
                         d_int,
