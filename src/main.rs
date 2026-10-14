@@ -33,6 +33,7 @@ mod predictor;
 mod riflesso;
 mod rtl;
 mod rx;
+mod sensi;
 mod serial;
 mod state;
 mod tensor;
@@ -1191,6 +1192,31 @@ pub extern "C" fn _start() -> ! {
     // RIFLESSO (14/10/2026): il soprassalto a un suono che appare. Il corpo
     // risponde senza il cervello — è la prima funzione della spina dorsale.
     let mut soprassalto = riflesso::Riflesso::new(0.5, 0.2, 200);
+
+    // ── IL SISTEMA DEI SENSI (15/10/2026) ──
+    // Un senso è una SCHEDA, non un caso speciale nel codice. Aggiungere un
+    // senso (touchpad, telecamera, interocezione) = aggiungere una scheda qui.
+    // UDITO è il primo costruito *attraverso* il sistema.
+    let mut sensi = sensi::Registro::new();
+    let st_udito = if _hda_ok && hda::present() { sensi::Stato::Valido } else { sensi::Stato::Guasto };
+    sensi.registra(sensi::Canale { id: "udito",  famiglia: sensi::Famiglia::Estero, via: sensi::Via::Riflesso,     latenza_max: 1,    politica: sensi::Politica::Fresca,   priorita: 0, stato: st_udito });
+    sensi.registra(sensi::Canale { id: "tatto",  famiglia: sensi::Famiglia::Estero, via: sensi::Via::Riflesso,     latenza_max: 1,    politica: sensi::Politica::Fresca,   priorita: 0, stato: sensi::Stato::Valido });
+    sensi.registra(sensi::Canale { id: "dolore", famiglia: sensi::Famiglia::Intero, via: sensi::Via::Riflesso,     latenza_max: 1,    politica: sensi::Politica::Fresca,   priorita: 0, stato: sensi::Stato::Valido });
+    sensi.registra(sensi::Canale { id: "chemio", famiglia: sensi::Famiglia::Estero, via: sensi::Via::Integrazione, latenza_max: 100,  politica: sensi::Politica::Fresca,   priorita: 2, stato: sensi::Stato::Valido });
+    sensi.registra(sensi::Canale { id: "tempo",  famiglia: sensi::Famiglia::Intero, via: sensi::Via::Integrazione, latenza_max: 1000, politica: sensi::Politica::Completa, priorita: 3, stato: sensi::Stato::Valido });
+    {
+        let mut ordine = [0usize; sensi::MAX_CANALI];
+        let m = sensi.ordine(&mut ordine);
+        serial_println!("SENSI: n={} riflessi={} guasti={} ordine={}",
+            sensi.len(), sensi.conta_via(sensi::Via::Riflesso), sensi.conta_guasti(), m);
+        write_str("SENSI:v ");
+        for k in 0..m {
+            if let Some(can) = sensi.get(ordine[k]) {
+                write_str(can.id); serial_putc(b' ');
+            }
+        }
+        serial_putc(b'\n');
+    }
 
     loop {
         // Attesa attiva sul TSC: avanza il tick senza dipendere dagli IRQ
