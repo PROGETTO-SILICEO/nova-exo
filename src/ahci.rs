@@ -105,6 +105,21 @@ pub fn init() -> bool {
     wr32(HBA_GHC, rd32(HBA_GHC) | HBA_AE);
     delay(50_000);
 
+    // DIAG: quali porte hanno un device, e con che firma
+    let pi = rd32(HBA_PI);
+    crate::write_str("DISCO:pi=0x"); crate::write_hex32(pi); crate::serial_putc(b'\n');
+    for i in 0..8u32 {
+        let b = 0x100 + i * 0x80;
+        let ssts = rd32(b + P_SSTS);
+        if ssts & 0x0F != 0 {
+            crate::write_str("DISCO:p"); crate::write_u32(i);
+            crate::write_str(" sig=0x"); crate::write_hex32(rd32(b + P_SIG));
+            crate::write_str(" ssts=0x"); crate::write_hex32(ssts);
+            crate::write_str(" cmd=0x"); crate::write_hex32(rd32(b + P_CMD));
+            crate::serial_putc(b'\n');
+        }
+    }
+
     // 4. una porta con un disco
     let porta = match trova_porta() {
         Some(p) => p,
@@ -113,15 +128,24 @@ pub fn init() -> bool {
     unsafe { DISCO_PORTA = porta; }
     let pb = 0x100 + (porta as u32) * 0x80;
 
-    // 5. ferma la porta (ST=0) e configura command list + FIS
-    if rd32(pb + P_CMD) & CMD_ST != 0 {
-        wr32(pb + P_CMD, rd32(pb + P_CMD) & !CMD_ST);
-        for _ in 0..100_000 { if rd32(pb + P_CMD) & CMD_FR == 0 { break; } }
-    }
+    // 5. ferma DAVVERO la porta (ST=0 E FRE=0, attendi CR/FR) e configura
+    // i base. La porta è già avviata dal BIOS: senza fermare anche FRE il base
+    // della command list NON viene applicato (bug trovato il 15/10).
+    let mut c = rd32(pb + P_CMD);
+    wr32(pb + P_CMD, c & !CMD_ST);
+    for _ in 0..200_000 { if rd32(pb + P_CMD) & CMD_CR == 0 { break; } }
+    c = rd32(pb + P_CMD);
+    wr32(pb + P_CMD, c & !CMD_FRE);
+    for _ in 0..200_000 { if rd32(pb + P_CMD) & CMD_FR == 0 { break; } }
     let cl_phys  = crate::virt_to_phys(&raw const CL as *const _ as u64);
     let fa_phys  = crate::virt_to_phys(&raw const FA as *const _ as u64);
     let ct_phys  = crate::virt_to_phys(&raw const CT as *const _ as u64);
     let idb_phys = crate::virt_to_phys(&raw const IDB as *const _ as u64);
+    crate::write_str("DISCO:phys cl=0x"); crate::write_hex32(cl_phys as u32);
+    crate::write_str(" fa=0x"); crate::write_hex32(fa_phys as u32);
+    crate::write_str(" ct=0x"); crate::write_hex32(ct_phys as u32);
+    crate::write_str(" idb=0x"); crate::write_hex32(idb_phys as u32);
+    crate::serial_putc(b'\n');
     wr32(pb + P_CLB,  cl_phys as u32);
     wr32(pb + P_CLBU, (cl_phys >> 32) as u32);
     wr32(pb + P_FB,   fa_phys as u32);
@@ -147,7 +171,7 @@ pub fn init() -> bool {
         // CFIS (H2D register): type 0x27, C=1, cmd 0xEC, device 0
         *ct.add(0) = 0x27;
         *ct.add(1) = 0x80;
-        *ct.add(2) = 0xEC;
+        *ct.add(2) = 0xEC; // IDENTIFY DEVICE
         *ct.add(7) = 0x00; // device (LBA)
         // PRDT (offset 128): DBA=idb, DBC=512-1
         core::ptr::write_unaligned(ct.add(128) as *mut u64, idb_phys);
