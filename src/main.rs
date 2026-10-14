@@ -1226,6 +1226,7 @@ pub extern "C" fn _start() -> ! {
     // Il secondo regolatore: la TEMPERATURA (interocezione). Soglia 80 °C, banda 5.
     let mut reg_temp = omeostasi::Regolatore::new(80.0, 5.0);
     let mut mark_omeo: u64 = 0;
+    let mut mem_omeo: f32 = 0.0;
 
     // ── IL SISTEMA DEI SENSI (15/10/2026) ──
     // Un senso è una SCHEDA, non un caso speciale nel codice. Aggiungere un
@@ -1829,6 +1830,7 @@ pub extern "C" fn _start() -> ! {
             } else {
                 alloc::allocated_bytes() as f32 / alloc::capacity_bytes() as f32
             };
+            mem_omeo = mem;
             let carico = reg_mem.aggiorna(mem);
             // Interocezione: la temperatura del sé (se c'è un sensore).
             let temp = intero::temperatura();
@@ -2178,6 +2180,7 @@ pub extern "C" fn _start() -> ! {
                     None => 0.0,
                 };
                 unsafe {
+                    let mic = if hda::present() { hda::energy() } else { 0.0 };
                     gui::render_vitals(
                         cfc::tick(),
                         &tessuto.tatto.h,
@@ -2185,37 +2188,38 @@ pub extern "C" fn _start() -> ! {
                         &tessuto.metabol.h,
                         &tessuto.integrat.h,
                         &tessuto.udito.h,
+                        (sensi.len() as u32,
+                         sensi.conta_via(sensi::Via::Riflesso) as u32,
+                         sensi.conta_guasti() as u32),
+                        mic,
+                        cfc::touchpad_attivo(),
                         executive.name(d_id),
                         d_int,
                         fam_gui,
                         inference::describe_state(brain.state()),
                     );
-                    // Riga di rete VIVA (11/10/2026): TX e RX osservabili a
-                    // REGIME, non solo all'avvio. Se il trasmettitore si ferma,
-                    // il contatore si ferma e si vede — niente più diagnosi
-                    // solo-al-boot. (y=170 cade nella fascia pulita da
-                    // render_vitals, 0..180: nessun residuo.)
-                    gui::set_cursor(10, 170);
+                    // Riga di rete VIVA (sotto il pannello, 0..204).
+                    gui::set_cursor(10, 178);
                     gui::print_str("NET tx=", gui::COL_DIM);
                     gui::print_u32(rtl::TX_OK as u32, gui::COL_GREEN);
                     gui::print_str(" xerr=", gui::COL_DIM);
                     gui::print_u32(rtl::TX_FAIL as u32, gui::COL_RED);
                     gui::print_str(" rx=", gui::COL_DIM);
                     gui::print_u32(rx::PKTS as u32, gui::COL_CYAN);
-                    // Riga UDITO (13/10/2026): l'energia del suono che entra.
-                    // Mostrata solo se l'udito c'è (senza, niente MMIO).
-                    if hda::present() {
-                        let e = hda::energy();
-                        gui::set_cursor(10, 178);
-                        gui::print_str("MIC ", gui::COL_DIM);
-                        gui::print_u32((e * 1000.0) as u32, gui::COL_GREEN);
-                        // Il riflesso, visibile anche senza seriale (Lenovo).
-                        gui::set_cursor(120, 178);
-                        if soprassalto.in_refrattario() {
-                            gui::print_str("SOPRASSALTO", gui::COL_WHITE);
-                        } else {
-                            gui::print_str("           ", gui::COL_BG);
-                        }
+                    // Riga OMEOSTASI (organo autonomo) + il riflesso: visibili
+                    // anche senza seriale (il Lenovo non ha seriale).
+                    gui::set_cursor(10, 194);
+                    gui::print_str("OMEO mem=", gui::COL_DIM);
+                    gui::print_u32((mem_omeo * 100.0) as u32, gui::COL_DIM);
+                    gui::print_str("% ventola=", gui::COL_DIM);
+                    let vent = attuatori.acceso("ventola");
+                    gui::print_str(if vent { "ON" } else { "OFF" },
+                                   if vent { gui::COL_WHITE } else { gui::COL_DIM });
+                    gui::set_cursor(230, 194);
+                    if soprassalto.in_refrattario() {
+                        gui::print_str("SOPRASSALTO", gui::COL_WHITE);
+                    } else {
+                        gui::print_str("           ", gui::COL_BG);
                     }
                     if cfc::tick() % 1000 == 0 { hda::report(); }
                 }

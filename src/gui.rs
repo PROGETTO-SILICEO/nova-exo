@@ -323,6 +323,9 @@ pub unsafe fn render_vitals(
     metabol: &[f32; 16],
     integrat: &[f32; 16],
     udito: &[f32; 16],
+    sensi: (u32, u32, u32), // (n, riflessi, guasti)
+    mic: f32,               // energia dell'udito (0..1)
+    gesto: bool,            // tatto esteso: gesto in corso
     desire_name: &str,
     desire_int: f32,
     fam: f32,
@@ -330,10 +333,9 @@ pub unsafe fn render_vitals(
 ) {
     if !FB_READY { return; }
 
-    // Pulizia mirata (veloce): solo le aree usate dalla dashboard,
-    // NON tutto lo schermo (clear pieno = 3.1M write su QEMU TCG = hang).
-    // Aree: y 0-30 (titolo), y 50-170 (cellule+volontà+brain+fam)
-    for y in 0..180 {
+    // Pulizia mirata: solo l'area usata. Il pannello e' cresciuto (5 cellule +
+    // i nuovi organi + le righe di stato) -> 0..204. NON un clear pieno.
+    for y in 0..204 {
         let row_off = y * FB_PITCH;
         for x in 0..420 {
             let off = row_off + x * 4;
@@ -344,15 +346,24 @@ pub unsafe fn render_vitals(
         }
     }
 
-    // Titolo
+    // Titolo + tick
     set_cursor(10, 10);
     print_str("EXO - MONITOR VITALE", COL_CYAN);
-    set_cursor(10, 24);
+    set_cursor(250, 10);
     print_str("tick:", COL_DIM);
     print_u32(tick as u32, COL_WHITE);
 
-    // Cellule
-    let mut y = 50;
+    // SENSI: il registro dei canali (era solo su seriale -> ora visibile)
+    set_cursor(10, 24);
+    print_str("SENSI ", COL_DIM);
+    print_u32(sensi.0, COL_WHITE);
+    print_str("  riflessi ", COL_DIM);
+    print_u32(sensi.1, COL_WHITE);
+    print_str("  guasti ", if sensi.2 > 0 { COL_RED } else { COL_DIM });
+    print_u32(sensi.2, if sensi.2 > 0 { COL_RED } else { COL_DIM });
+
+    // Cellule (5): 42, 56, 70, 84, 98
+    let mut y = 42;
     let cells = [
         ("TATTO  ", tattoo[0], COL_RED),
         ("CHEMIO ", chemio[0], COL_GREEN),
@@ -370,8 +381,15 @@ pub unsafe fn render_vitals(
         y += 14;
     }
 
+    // Udito (microfono) + tatto esteso (gesto) — riga unica
+    set_cursor(10, y + 2);
+    print_str("MIC ", COL_DIM);
+    print_f32(mic, COL_GREEN);
+    print_str("   TATTO ESTESO ", COL_DIM);
+    print_str(if gesto { "GESTO" } else { "-" }, if gesto { COL_WHITE } else { COL_DIM });
+
     // Volontà
-    y += 10;
+    y += 18;
     set_cursor(10, y);
     print_str("VOGLIO:", COL_PURPLE);
     set_cursor(70, y);
@@ -380,16 +398,16 @@ pub unsafe fn render_vitals(
     draw_bar(160, y, 150, desire_int.clamp(0.0, 1.0), COL_PURPLE, COL_BG);
     set_cursor(320, y);
     print_f32(desire_int, COL_PURPLE);
-    y += 16;
 
     // Cervello
+    y += 16;
     set_cursor(10, y);
     print_str("BRAIN:", COL_DIM);
     set_cursor(70, y);
     print_str(brain_state, COL_CYAN);
-    y += 16;
 
     // Familiarità
+    y += 16;
     set_cursor(10, y);
     print_str("FAM:", COL_DIM);
     set_cursor(50, y);
