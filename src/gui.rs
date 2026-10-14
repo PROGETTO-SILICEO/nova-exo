@@ -315,6 +315,23 @@ pub const COL_BG: u32 = px(8, 10, 20);
 /// Renderizza la dashboard vitale di Exo.
 /// Ogni cellula: barra del primo neurone + label.
 /// Volontà: barra intensità + nome.
+/// Ripulisce una RIGA (y) da `x0` a `x1` col colore di sfondo.
+/// PERCHÉ (14/10/2026): la riga `CONTATTO` sta FUORI dall'area che render_vitals
+/// ripulisce (0..204) e non veniva cancellata prima di riscriverla → il testo
+/// vecchio restava, si accumulava e "saturava" sovrapponendosi. Chi scrive fuori
+/// dal pannello DEVE ripulire la propria riga.
+pub unsafe fn clear_line(x0: usize, y: usize, x1: usize) {
+    if !FB_READY { return; }
+    let row_off = y * FB_PITCH;
+    for x in x0..x1 {
+        let off = row_off + x * 4;
+        FB_ADDR.add(off).write_volatile((COL_BG >> 16) as u8);
+        FB_ADDR.add(off + 1).write_volatile((COL_BG >> 8) as u8);
+        FB_ADDR.add(off + 2).write_volatile(COL_BG as u8);
+        FB_ADDR.add(off + 3).write_volatile(0xFF);
+    }
+}
+
 /// Familiarità: barra.
 pub unsafe fn render_vitals(
     tick: u64,

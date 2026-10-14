@@ -1386,6 +1386,7 @@ pub extern "C" fn _start() -> ! {
                 serial_putc(b'\n');
                 if gui::ready() {
                     unsafe {
+                        gui::clear_line(10, 225, 360); // ripulisce PRIMA (fuori dal pannello)
                         gui::set_cursor(10, 225);
                         gui::print_str("CONTATTO: ", gui::COL_GREEN);
                         gui::print_str(kbd::nome(t), gui::COL_WHITE);
