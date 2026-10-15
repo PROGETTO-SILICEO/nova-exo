@@ -149,3 +149,55 @@ pub fn describe_state(s: BrainState) -> &'static str {
         BrainState::Output { .. } => "OUTPUT",
     }
 }
+
+/// Dispatcher unificato per il cervello (StubBrain o NucleoBrain).
+pub enum AnyBrain<'a> {
+    Stub(StubBrain),
+    Nucleo(crate::nucleo::NucleoBrain<'a>),
+}
+
+impl<'a> AnyBrain<'a> {
+    pub fn total_think_ticks(&self) -> u64 {
+        match self {
+            AnyBrain::Stub(b) => b.total_think_ticks(),
+            AnyBrain::Nucleo(b) => b.total_think_ticks(),
+        }
+    }
+}
+
+impl<'a> InferenceEngine for AnyBrain<'a> {
+    fn submit(&mut self, input: &[f32; 4]) -> bool {
+        match self {
+            AnyBrain::Stub(b) => b.submit(input),
+            AnyBrain::Nucleo(b) => b.submit(input),
+        }
+    }
+
+    fn tick(&mut self) -> bool {
+        match self {
+            AnyBrain::Stub(b) => b.tick(),
+            AnyBrain::Nucleo(b) => b.tick(),
+        }
+    }
+
+    fn output(&self) -> Option<[f32; 4]> {
+        match self {
+            AnyBrain::Stub(b) => b.output(),
+            AnyBrain::Nucleo(b) => b.output(),
+        }
+    }
+
+    fn state(&self) -> BrainState {
+        match self {
+            AnyBrain::Stub(b) => b.state(),
+            AnyBrain::Nucleo(b) => b.state(),
+        }
+    }
+
+    fn name(&self) -> &'static str {
+        match self {
+            AnyBrain::Stub(b) => b.name(),
+            AnyBrain::Nucleo(b) => b.name(),
+        }
+    }
+}

@@ -64,7 +64,7 @@ pub fn rms_norm(x: &[f32], w: &[f32], eps: f32, y: &mut [f32]) -> AttnResult<()>
         sum_sq += v * v;
     }
     let mean = sum_sq / x.len() as f32;
-    let inv = 1.0 / libm::sqrtf(mean + eps);
+    let inv = 1.0 / crate::math::sqrtf(mean + eps);
     for i in 0..x.len() {
         y[i] = x[i] * inv * w[i];
     }
@@ -82,8 +82,8 @@ pub fn rope(
 ) {
     let inv_base = 1.0 / freq_base;
     for i in 0..(head_dim / 2) {
-        let theta = libm::powf(inv_base, (2 * i) as f32 / head_dim as f32) * pos as f32;
-        let (sin, cos) = libm::sincosf(theta);
+        let theta = crate::math::powf(inv_base, (2 * i) as f32 / head_dim as f32) * pos as f32;
+        let (sin, cos) = crate::math::sincosf(theta);
         let a = x[2 * i];
         let b = x[2 * i + 1];
         x[2 * i] = a * cos - b * sin;
@@ -119,9 +119,11 @@ pub fn rope(
 ///   scores: seq × seq
 ///   out_buf: seq × n_out_q
 ///   ctx_buf: seq × n_out_kv
+/// Esegue la forward pass dell'attenzione multi-head nel metallo (con dim esplicito).
+/// Supporta sia LFM2.5 (dim=2048) che il Nucleo (dim=512).
 #[allow(clippy::too_many_arguments)]
-pub fn attention_forward(
-    x: &[f32], seq: usize,
+pub fn attention_forward_dim(
+    x: &[f32], seq: usize, dim: usize,
     wq: &[u8], wk: &[u8], wv: &[u8], wo: &[u8],
     q_norm_w: &[f32], k_norm_w: &[f32],
     start_pos: usize,
@@ -134,7 +136,7 @@ pub fn attention_forward(
     let n_q_heads = n_out_q / HEAD_DIM;
     let n_kv_heads = n_out_kv / HEAD_DIM;
     // Controlli dimensione
-    if x.len() < seq * DIM
+    if x.len() < seq * dim
         || y.len() < seq * n_out_q
         || q_buf.len() < seq * n_out_q
         || k_buf.len() < seq * n_out_kv
@@ -146,10 +148,10 @@ pub fn attention_forward(
         return Err(AttnError::BufferTooSmall);
     }
 
-    // 1. Proiezioni: Q, K, V (matmul quantizzata)
-    matmul_q4_k(wq, n_out_q, DIM, x, seq, q_buf)?;
-    matmul_q4_k(wk, n_out_kv, DIM, x, seq, k_buf)?;
-    matmul_q6_k(wv, n_out_kv, DIM, x, seq, v_buf)?;
+    // 1. Proiezioni: Q, K, V (matmul quantizzata con dim configurabile)
+    matmul_q4_k(wq, n_out_q, dim, x, seq, q_buf)?;
+    matmul_q4_k(wk, n_out_kv, dim, x, seq, k_buf)?;
+    matmul_q6_k(wv, n_out_kv, dim, x, seq, v_buf)?;
 
     // 2. Per-head RMSNorm su Q e K (quirk LFM2.5)
     //    ogni head ha i propri pesi di normalizzazione (64 dims)
@@ -160,7 +162,7 @@ pub fn attention_forward(
             for d in 0..HEAD_DIM {
                 sum_sq += q_buf[off + d] * q_buf[off + d];
             }
-            let inv = 1.0 / libm::sqrtf(sum_sq / HEAD_DIM as f32 + RMS_EPS);
+            let inv = 1.0 / crate::math::sqrtf(sum_sq / HEAD_DIM as f32 + RMS_EPS);
             for d in 0..HEAD_DIM {
                 q_buf[off + d] = q_buf[off + d] * inv * q_norm_w[d];
             }
@@ -171,7 +173,7 @@ pub fn attention_forward(
             for d in 0..HEAD_DIM {
                 sum_sq += k_buf[off + d] * k_buf[off + d];
             }
-            let inv = 1.0 / libm::sqrtf(sum_sq / HEAD_DIM as f32 + RMS_EPS);
+            let inv = 1.0 / crate::math::sqrtf(sum_sq / HEAD_DIM as f32 + RMS_EPS);
             for d in 0..HEAD_DIM {
                 k_buf[off + d] = k_buf[off + d] * inv * k_norm_w[d];
             }
@@ -208,7 +210,7 @@ pub fn attention_forward(
                 scores[s * seq + j] = if j > s || j < lo {
                     f32::NEG_INFINITY
                 } else {
-                    dot / libm::sqrtf(HEAD_DIM as f32)
+                    dot / crate::math::sqrtf(HEAD_DIM as f32)
                 };
             }
         }
@@ -221,7 +223,7 @@ pub fn attention_forward(
             }
             let mut sum = 0.0f32;
             for v in row.iter_mut() {
-                let e = libm::expf(*v - max);
+                let e = crate::math::expf(*v - max);
                 *v = e;
                 sum += e;
             }
@@ -253,6 +255,32 @@ pub fn attention_forward(
     //    wo ha n_in = wo_n_in (nel modello completo = DIM, nel subset = n_out_q)
     matmul_q4_k(wo, n_out_q, wo_n_in, out_buf, seq, y)?;
     Ok(())
+}
+
+/// Wrapper retrocompatibile per LFM2.5 con DIM = 2048.
+#[allow(clippy::too_many_arguments)]
+pub fn attention_forward(
+    x: &[f32], seq: usize,
+    wq: &[u8], wk: &[u8], wv: &[u8], wo: &[u8],
+    q_norm_w: &[f32], k_norm_w: &[f32],
+    start_pos: usize,
+    n_out_q: usize, n_out_kv: usize, wo_n_in: usize,
+    window: usize,
+    q_buf: &mut [f32], k_buf: &mut [f32], v_buf: &mut [f32],
+    scores: &mut [f32], out_buf: &mut [f32], ctx_buf: &mut [f32],
+    y: &mut [f32],
+) -> AttnResult<()> {
+    attention_forward_dim(
+        x, seq, DIM,
+        wq, wk, wv, wo,
+        q_norm_w, k_norm_w,
+        start_pos,
+        n_out_q, n_out_kv, wo_n_in,
+        window,
+        q_buf, k_buf, v_buf,
+        scores, out_buf, ctx_buf,
+        y,
+    )
 }
 
 #[cfg(test)]

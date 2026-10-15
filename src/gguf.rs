@@ -1,5 +1,4 @@
 // ── GGUF Parser (no_std) — Sempre, 13 Ago 2026 ──
-#![no_std]
 //
 // Parses the GGUF format (GGML Universal File) used by llama.cpp and
 // LFM2.5-GGUF. The kernel needs this to load model weights from a

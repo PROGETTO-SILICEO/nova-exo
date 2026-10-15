@@ -10,3 +10,18 @@
 pub fn sqrtf(x: f32) -> f32 {
     libm::sqrtf(x)
 }
+
+/// Esponenziale (no_std).
+pub fn expf(x: f32) -> f32 {
+    libm::expf(x)
+}
+
+/// Potenza (no_std).
+pub fn powf(x: f32, y: f32) -> f32 {
+    libm::powf(x, y)
+}
+
+/// Seno e coseno (no_std).
+pub fn sincosf(x: f32) -> (f32, f32) {
+    libm::sincosf(x)
+}

@@ -28,6 +28,7 @@ mod kbd;
 mod math;
 mod net;
 mod neurogenesis;
+mod nucleo;
 mod omeostasi;
 mod paging;
 mod pain;
@@ -51,6 +52,7 @@ const LIMINE_COMMON_MAGIC: [u64; 2] = [0xc7b1dd30df4c8b88, 0x0a82e883a194f07b];
 const LIMINE_HHDM_ID: [u64; 2] = [0x48dcf1cb8ad2b852, 0x63984e959a98244b];
 const LIMINE_EXEC_ADDR_ID: [u64; 2] = [0x71ba76863cc55f63, 0xb2644a48c516a487];
 const LIMINE_RSDP_ID: [u64; 2] = [0xc5e77b6b397e7b43, 0x27637845accdcf3c];
+const LIMINE_MODULE_ID: [u64; 2] = [0x3e7e279702be32af, 0xca1c4f3bd1280cee];
 
 #[repr(C)]
 struct BaseRevision {
@@ -138,6 +140,52 @@ static mut RSDP_REQ: RsdpRequest = RsdpRequest {
     response: core::ptr::null_mut(),
 };
 
+// ── Modulo Limine (Pesi Nucleo): caricati direttamente in memoria fisica da Limine
+#[repr(C)]
+pub struct LimineFile {
+    pub revision: u64,
+    pub address: *mut u8,
+    pub size: u64,
+    pub path: *const u8,
+    pub cmdline: *const u8,
+    pub media_type: u32,
+    pub unused: u32,
+    pub tftp_ip: u32,
+    pub tftp_port: u32,
+    pub partition_index: u32,
+    pub mbr_disk_id: u32,
+    pub gpt_disk_uuid: [u8; 16],
+    pub gpt_part_uuid: [u8; 16],
+    pub part_uuid: [u8; 16],
+}
+
+#[repr(C)]
+struct ModuleResponse {
+    revision: u64,
+    module_count: u64,
+    modules: *mut *mut LimineFile,
+}
+
+#[repr(C)]
+struct ModuleRequest {
+    id: [u64; 4],
+    revision: u64,
+    response: *mut ModuleResponse,
+}
+
+unsafe impl Sync for ModuleRequest {}
+
+#[used]
+#[link_section = ".limine_reqs"]
+static mut MODULE_REQ: ModuleRequest = ModuleRequest {
+    id: [LIMINE_COMMON_MAGIC[0], LIMINE_COMMON_MAGIC[1],
+         LIMINE_MODULE_ID[0], LIMINE_MODULE_ID[1]],
+    revision: 0,
+    response: core::ptr::null_mut(),
+};
+
+pub(crate) static mut MODULE_WEIGHTS: Option<(*const u8, usize)> = None;
+
 /// Kernel physical → virtual offset: phys = virt − KERNEL_SLOT
 pub(crate) static mut KERNEL_SLOT: u64 = 0;
 
@@ -164,6 +212,15 @@ fn init_limine_requests() {
         let rr = &raw const RSDP_REQ;
         if !(*rr).response.is_null() {
             crate::acpi::set_rsdp((*(*rr).response).address as u64);
+        }
+
+        let mr = &raw const MODULE_REQ;
+        if !(*mr).response.is_null() {
+            let r = &*(*mr).response;
+            if r.module_count > 0 && !r.modules.is_null() {
+                let first_mod = &**r.modules;
+                MODULE_WEIGHTS = Some((first_mod.address, first_mod.size as usize));
+            }
         }
     }
 }
@@ -983,7 +1040,15 @@ pub extern "C" fn _start() -> ! {
     write_str(" facp="); write_u32(acpi_sum[3] as u32);
     write_str(" dsdt="); write_u32(acpi_sum[4] as u32);
     serial_putc(b'\n');
-    unsafe { boot_beep(7); } // PCI+Limine ok
+    unsafe {
+        if let Some((addr, sz)) = MODULE_WEIGHTS {
+            write_str("MODULO: caricato a "); write_hex64(addr as u64);
+            write_str(" dim="); write_u32(sz as u32); write_str(" byte\n");
+        } else {
+            write_str("MODULO: nessuno (StubBrain)\n");
+        }
+        boot_beep(7); // PCI+Limine ok
+    }
 
     paging::init();
     unsafe { boot_beep(8); } // paging ok
@@ -1136,9 +1201,27 @@ pub extern "C" fn _start() -> ! {
     // NOTA: static mut (il pool è ~510KB — non sta nello stack Limine)
     static mut NEURO_POOL: neurogenesis::NeuroPool = neurogenesis::NeuroPool::new();
     let neuro_pool = unsafe { &mut *(&raw mut NEURO_POOL) };
-    // Il cervello nel metallo: oggi stub, domani LFM2.5 portato in no_std.
-    // Stessa interfaccia (InferenceEngine): si scambia senza toccare il loop.
-    let mut brain = inference::StubBrain::new();
+    static mut NUCLEO_SCRATCH: nucleo::NucleoScratch = nucleo::NucleoScratch::new();
+
+    // Il cervello nel metallo:
+    // Se Limine ha precaricato il modulo del Nucleo (~41M) in RAM e il formato è valido,
+    // eseguiamo inferenza reale a 12 layer con 1 layer per APIC tick (10 ms).
+    // Altrimenti fallback elegante su StubBrain (stessa interfaccia InferenceEngine).
+    let mut brain: inference::AnyBrain = unsafe {
+        if let Some((addr, sz)) = MODULE_WEIGHTS {
+            let slice = core::slice::from_raw_parts(addr, sz);
+            if let Some(model) = nucleo::NucleoModel::parse(slice) {
+                write_str("NUCLEO: modello 41M caricato e pronto per inferenza\n");
+                let scratch = &mut *(&raw mut NUCLEO_SCRATCH);
+                inference::AnyBrain::Nucleo(nucleo::NucleoBrain::new(model, scratch))
+            } else {
+                write_str("NUCLEO: formato modulo non valido, fallback su StubBrain\n");
+                inference::AnyBrain::Stub(inference::StubBrain::new())
+            }
+        } else {
+            inference::AnyBrain::Stub(inference::StubBrain::new())
+        }
+    };
     // L'ultimo output del cervello, consumato dall'executive
     let mut brain_output: [f32; 4] = [0.0; 4];
     let mut brain_has_output = false;

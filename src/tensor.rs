@@ -1,5 +1,4 @@
 // ── Tensor ops (no_std) — Sempre, 13 Ago 2026 ──
-#![no_std]
 //
 // Le operazioni fondamentali di inferenza nel metallo:
 //   - matmul f32 (senza alloc: input/output forniti dal chiamante)
@@ -396,7 +395,7 @@ pub fn relu_inplace(x: &mut [f32]) {
 
 /// SiLU (swish): x * sigmoid(x) = x / (1 + e^-x)
 pub fn silu(x: f32) -> f32 {
-    x / (1.0 + libm::expf(-x))
+    x / (1.0 + crate::math::expf(-x))
 }
 
 /// ShortConv (LFM2.5, blocco ricorrente): gate element-wise + conv1d causale.
@@ -486,7 +485,7 @@ pub fn softmax(x: &[f32], out: &mut [f32]) -> TensorResult<()> {
     for &v in x { if v > max { max = v; } }
     let mut sum = 0.0f32;
     for i in 0..x.len() {
-        let e = libm::expf(x[i] - max);
+        let e = crate::math::expf(x[i] - max);
         out[i] = e;
         sum += e;
     }
@@ -604,7 +603,8 @@ mod tests {
         let mut w = [0u8; 2 + Q8_0_BLOCK];
         w[0] = 0x00; w[1] = 0x40; // fp16 2.0
         w[2] = 1; // qs[0]=1 → w[0] = 2.0
-        let a = [1.0f32, 0.0, 0.0, 0.0]; // m=1, k=32 (ma solo 4 usati)
+        let mut a = [0.0f32; 32];
+        a[0] = 1.0;
         let mut c = [0.0f32; 1];
         let mut dbuf = [0.0f32; 32];
         matmul_q8_0(&w, 1, 32, &a, 1, &mut c, &mut dbuf).unwrap();
@@ -670,8 +670,10 @@ mod tests {
         let mut w = [0u8; Q6_K_BLOCK_BYTES];
         w[0] = 0x00; w[1] = 0x3C; // d = 1.0
         w[194] = 1; // sc[0] = 1
-        w[2] = 0x1F; // ql[0] = 0x1F → q1 = -1
-        let a = [1.0f32, 0.0, 0.0, 0.0]; // m=1, k=256
+        w[2] = 0x0F; // ql[0] = 0x0F (low 4 bits = 15)
+        w[130] = 0x01; // qh[0] = 1 (high 2 bits << 4 = 16) -> q1 = 15 + 16 - 32 = -1
+        let mut a = [0.0f32; 256];
+        a[0] = 1.0;
         let mut c = [0.0f32; 1];
         matmul_q6_k(&w, 1, 256, &a, 1, &mut c).unwrap();
         assert!((c[0] + 1.0).abs() < 1e-3, "atteso -1, got {}", c[0]);
