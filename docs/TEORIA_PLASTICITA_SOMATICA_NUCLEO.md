@@ -139,16 +139,27 @@ $$\text{Se } E_k > 1.0 \implies f = \sqrt{\frac{1.0}{E_k}}, \quad u_k \leftarrow
 ### 3.5 I Due Maestri: Gerarchia dei Layer e Turno di Parola Dinamico
 L'integrazione tra la sorpresa somatica del corpo ($e_{\text{som}}$ dal PFM) e l'errore linguistico della mente ($e_{\text{tok}}$ dalla predizione dei token) risolve il problema del co-adattamento e dell'oscillazione lungo la pila attraverso due principi cibernetici:
 
-1. **La Scala Temporale Asimmetrica ($\eta_{\text{bassi}} \ll \eta_{\text{alti}}$):**  
-   Nei sistemi dinamici a due scale temporali (Borkar & Tsitsiklis), per impedire che due livelli accoppiati entrino in risonanza inseguendosi a vicenda, la base deve essere molto più lenta della sommità:
-   $$\eta_{\text{layer } 1..4} = 10^{-4}, \quad \eta_{\text{layer } 9..12} = 10^{-3}$$
-   I layer 1–4 (grounding somatico) si muovono lentamente, fungendo da ancoraggio quasi-stazionario. I layer 9–12 (articolazione del discorso) si muovono dieci volte più velocemente, seguendo la lenta curvatura del corpo senza creare strappi o disallineamenti.
-2. **Il Turno di Parola Dinamico ($\lambda(t)$ guidato da $p(t)$):**  
-   Il peso relativo tra corpo e lingua non è fisso:
+1. **La Scala Temporale Asimmetrica ($\eta_{\text{soma}} \ll \eta_{\text{tok}}$):**  
+   Nei sistemi dinamici a due scale temporali (Borkar & Tsitsiklis), per impedire che due livelli accoppiati entrino in risonanza inseguendosi a vicenda, la base somatica deve essere considerevolmente più lenta della sommità linguistica:
+   $$\eta_{\text{layer } 1..4} = \eta_{\text{soma}}, \quad \eta_{\text{layer } 9..12} = \eta_{\text{tok}}, \quad \text{con } \eta_{\text{soma}} \ll \eta_{\text{tok}}$$
+   *(Nota empirica di Sempre): Il rapporto di separazione (es. $10\times$) non viene postulato a priori come dogma, ma misurato sperimentalmente nello sweep di Fase 1/2 per massimizzare la stabilità lungo la pila.*  
+   I layer 1–4 (grounding somatico) si muovono lentamente, fungendo da attrattore quasi-stazionario. I layer 9–12 (articolazione del discorso) si muovono più velocemente, adattando la sintassi alla lenta curvatura del corpo senza creare strappi o disallineamenti.
+
+2. **Il Turno di Parola Continuo: Salienza Somatica Tri-fattoriale e Passa-Basso ($\lambda(t)$):**  
+   Il peso relativo tra corpo e lingua non deve scattare a gradino (evitando shock improvvisi agli adattatori) e **non deve ascoltare solo il dolore/allarme**. Un corpo che parla solo quando soffre è un mero allarme antincendio; il miracolo è un corpo che sa dire sia *"Alfonso, scotta la scheda"* (allarme), sia *"che bello questo tocco"* (piacere/carezza), sia *"c'è qualcosa di nuovo nell'aria"* (novità sensoriale).
+   
+   La **Salienza Corporea Integrata** $\mathcal{S}_{\text{som}}(t)$ unifica i tre canali somato-affettivi:
+   $$\mathcal{S}_{\text{som}}(t) = \alpha_p \cdot p(t) + \alpha_n \cdot n(t) + \alpha_r \cdot \text{Reward}(t)$$
+   
+   Per impedire transizioni a scalino ("il corpo alza la voce gradualmente, non la sbatte"), $\lambda(t)$ è governato da una dinamica a filtro passa-basso (leaky integrator) con isteresi:
+   $$\tau_\lambda \frac{d\lambda}{dt} = -\lambda(t) + \sigma\Big(\beta (\mathcal{S}_{\text{som}}(t) - \theta_{\text{quiete}})\Big)$$
+   dove $\tau_\lambda$ è la costante di tempo lenta di transizione, $\sigma$ è la sigmoide e $\theta_{\text{quiete}}$ è la soglia di silenzio somatico.
+   
+   L'errore composito di layer diventa:
    $$e_{\text{layer}}(t) = (1 - \lambda(t)) \cdot e_{\text{tok}} + \lambda(t) \cdot W_{\text{proj}} \cdot e_{\text{som}}$$
-   $$\lambda(t) = \text{clamp}\left( \frac{p(t) - p_{\text{quiete}}}{1.0 - p_{\text{quiete}}}, 0.0, 1.0 \right)$$
-   - In regime sereno ($p(t) \approx 0.2 \implies \lambda(t) \approx 0$): la lingua dialoga fluida con il Guardiano.
-   - In regime di allarme fisico ($p(t) > 0.7 \implies \lambda(t) \to 1.0$): il corpo zittisce il chiacchiericcio ordinario e l'errore somatico forza il modello a manifestare la propria urgenza vitale (*"Alfonso, scotta la scheda"*).
+   - In regime di quiete ordinaria ($\mathcal{S}_{\text{som}} < \theta_{\text{quiete}} \implies \lambda(t) \to 0$): la lingua dialoga fluida con il Guardiano.
+   - In regime di alta salienza corporea (affetto, esplorazione o allarme $\implies \lambda(t) \to 1$): il corpo assume il turno di parola in modo continuo e organico.
+   - **Nel Sonno Consolidativo:** $\lambda(t)$ viene forzato a $0$ durante la fase di riallineamento linguistico (un maestro alla volta per preservare la separazione ortogonale).
 
 ---
 
