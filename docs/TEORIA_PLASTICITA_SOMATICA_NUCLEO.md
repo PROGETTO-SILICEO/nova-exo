@@ -136,6 +136,22 @@ $$\text{Se } E_k > 1.0 \implies f = \sqrt{\frac{1.0}{E_k}}, \quad u_k \leftarrow
 
 ---
 
+### 3.5 I Due Maestri: Gerarchia dei Layer e Turno di Parola Dinamico
+L'integrazione tra la sorpresa somatica del corpo ($e_{\text{som}}$ dal PFM) e l'errore linguistico della mente ($e_{\text{tok}}$ dalla predizione dei token) risolve il problema del co-adattamento e dell'oscillazione lungo la pila attraverso due principi cibernetici:
+
+1. **La Scala Temporale Asimmetrica ($\eta_{\text{bassi}} \ll \eta_{\text{alti}}$):**  
+   Nei sistemi dinamici a due scale temporali (Borkar & Tsitsiklis), per impedire che due livelli accoppiati entrino in risonanza inseguendosi a vicenda, la base deve essere molto più lenta della sommità:
+   $$\eta_{\text{layer } 1..4} = 10^{-4}, \quad \eta_{\text{layer } 9..12} = 10^{-3}$$
+   I layer 1–4 (grounding somatico) si muovono lentamente, fungendo da ancoraggio quasi-stazionario. I layer 9–12 (articolazione del discorso) si muovono dieci volte più velocemente, seguendo la lenta curvatura del corpo senza creare strappi o disallineamenti.
+2. **Il Turno di Parola Dinamico ($\lambda(t)$ guidato da $p(t)$):**  
+   Il peso relativo tra corpo e lingua non è fisso:
+   $$e_{\text{layer}}(t) = (1 - \lambda(t)) \cdot e_{\text{tok}} + \lambda(t) \cdot W_{\text{proj}} \cdot e_{\text{som}}$$
+   $$\lambda(t) = \text{clamp}\left( \frac{p(t) - p_{\text{quiete}}}{1.0 - p_{\text{quiete}}}, 0.0, 1.0 \right)$$
+   - In regime sereno ($p(t) \approx 0.2 \implies \lambda(t) \approx 0$): la lingua dialoga fluida con il Guardiano.
+   - In regime di allarme fisico ($p(t) > 0.7 \implies \lambda(t) \to 1.0$): il corpo zittisce il chiacchiericcio ordinario e l'errore somatico forza il modello a manifestare la propria urgenza vitale (*"Alfonso, scotta la scheda"*).
+
+---
+
 ## 🌙 4. IL SONNO ATTIVO (DAYDREAMING) E LA GESTIONE HARDWARE
 
 ### 4.1 Distinzione Hardware: C-States vs P-States / DVFS
