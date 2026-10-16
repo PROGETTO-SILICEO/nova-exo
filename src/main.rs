@@ -1090,12 +1090,19 @@ pub extern "C" fn _start() -> ! {
     let _audio_ok = if _hda_ok { hda::stream_init() } else { false };
 
     // ── DISCO (15/10/2026): dove il corpo ricorderà (§10b). ──
-    // RIMANDATO sul metallo (14/10/2026): l'init AHCI resetta/avvia una porta SATA,
-    // operazione rischiosa su hardware reale e non ancora verificata. In QEMU non
-    // funziona comunque (copia 2 byte). Si riabilita con cautela, UNA porta, dopo
-    // aver capito il data path. Il modulo resta.
-    write_str("DISCO: init rimandato (rischio porta SATA)\n");
-    let _disco_ok = false;
+    let _disco_ok = ahci::init();
+    if _disco_ok {
+        write_str("DISCO: AHCI pronto, modello: ");
+        let mod_bytes = ahci::modello();
+        for &b in &mod_bytes {
+            if b >= 32 && b <= 126 {
+                serial_putc(b);
+            }
+        }
+        write_str("\n");
+    } else {
+        write_str("DISCO: AHCI non rilevato o nessun disco\n");
+    }
 
     // ── DIAG del boot (14/10/2026): solo su SERIALE ──
     // Prima erano sul VIDEO (il Lenovo non ha seriale). Ora il pannello è la

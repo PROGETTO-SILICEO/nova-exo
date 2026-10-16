@@ -4,6 +4,7 @@
 /iso_root/
 *.img
 *.iso
+*.bin
 
 # ── Log seriali (rigenerabili, enormi) ────────────────────────────
 *.log

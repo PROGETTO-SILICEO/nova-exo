@@ -173,9 +173,13 @@ pub fn init() -> bool {
         *ct.add(1) = 0x80;
         *ct.add(2) = 0xEC; // IDENTIFY DEVICE
         *ct.add(7) = 0x00; // device (LBA)
-        // PRDT (offset 128): DBA=idb, DBC=512-1
+        // PRDT (offset 128 nella CmdTable):
+        // DW0-1 (offset 128): DBA = idb_phys (64-bit)
+        // DW2   (offset 136): Reserved = 0
+        // DW3   (offset 140): DBC = 512-1 (bit 0=1)
         core::ptr::write_unaligned(ct.add(128) as *mut u64, idb_phys);
-        core::ptr::write_unaligned(ct.add(136) as *mut u32, 511);
+        core::ptr::write_unaligned(ct.add(136) as *mut u32, 0);
+        core::ptr::write_unaligned(ct.add(140) as *mut u32, 511);
     }
 
     // 7. emetti il comando (porta 0) e attendi il completamento
@@ -224,3 +228,131 @@ pub fn leggibile() -> bool { unsafe { DISCO_LEGGIBILE } }
 pub fn settori() -> u64 { unsafe { DISCO_SETTORI } }
 pub fn porta() -> u8 { unsafe { DISCO_PORTA } }
 pub fn modello() -> [u8; 40] { unsafe { DISCO_MODELLO } }
+
+/// FASE 2: Legge 1 settore da 512 byte via READ DMA EXT (LBA48, comando 0x25).
+pub fn read_sector(lba: u64, out: &mut [u8; 512]) -> bool {
+    unsafe {
+        if !DISCO_PRESENTE || !DISCO_LEGGIBILE {
+            return false;
+        }
+        let porta = DISCO_PORTA;
+        let pb = 0x100 + (porta as u32) * 0x80;
+
+        let cl = &raw mut CL as *mut u8;
+        let ct = &raw mut CT as *mut u8;
+        for k in 0..1024 { *cl.add(k) = 0; }
+        for k in 0..256  { *ct.add(k) = 0; }
+
+        let ct_phys = crate::virt_to_phys(&raw const CT as *const _ as u64);
+        let out_phys = crate::virt_to_phys(out.as_ptr() as u64);
+
+        // Command header: CFL=5, PRDTL=1, W=0 (Read)
+        core::ptr::write_unaligned(cl.add(0) as *mut u32, 5 | (1 << 16));
+        core::ptr::write_unaligned(cl.add(8) as *mut u32, ct_phys as u32);
+        core::ptr::write_unaligned(cl.add(12) as *mut u32, (ct_phys >> 32) as u32);
+
+        // CFIS: H2D Register FIS (type 0x27), C=1, cmd 0x25 (READ DMA EXT)
+        *ct.add(0) = 0x27;
+        *ct.add(1) = 0x80;
+        *ct.add(2) = 0x25; // READ DMA EXT
+        *ct.add(3) = 0;    // Features (7:0)
+
+        *ct.add(4) = (lba & 0xFF) as u8;
+        *ct.add(5) = ((lba >> 8) & 0xFF) as u8;
+        *ct.add(6) = ((lba >> 16) & 0xFF) as u8;
+        *ct.add(7) = 0x40; // Device (LBA mode, bit 6=1)
+
+        *ct.add(8) = ((lba >> 24) & 0xFF) as u8;
+        *ct.add(9) = ((lba >> 32) & 0xFF) as u8;
+        *ct.add(10) = ((lba >> 40) & 0xFF) as u8;
+        *ct.add(11) = 0;   // Features (15:8)
+
+        *ct.add(12) = 1;   // Count (7:0) = 1 settore
+        *ct.add(13) = 0;   // Count (15:8) = 0
+
+        // PRDT (offset 128 nella CmdTable):
+        core::ptr::write_unaligned(ct.add(128) as *mut u64, out_phys);
+        core::ptr::write_unaligned(ct.add(136) as *mut u32, 0); // Reserved
+        core::ptr::write_unaligned(ct.add(140) as *mut u32, 511); // DBC = 512 - 1
+
+        let cmd = rd32(pb + P_CMD);
+        let tfd0 = rd32(pb + P_TFD);
+        if cmd & CMD_ST == 0 || tfd0 & TFD_BSY != 0 {
+            return false;
+        }
+
+        wr32(pb + P_IS, 0xFFFF_FFFF);
+        wr32(pb + P_CI, 1);
+
+        for _ in 0..2_000_000 {
+            let is = rd32(pb + P_IS);
+            if is & 0x4000_0000 != 0 { return false; } // Task File Error
+            if is & 0x01 != 0 { return true; }         // D2H Register FIS ricevuto (completato)
+        }
+        false
+    }
+}
+
+/// FASE 2: Scrive 1 settore da 512 byte via WRITE DMA EXT (LBA48, comando 0x35).
+pub fn write_sector(lba: u64, src: &[u8; 512]) -> bool {
+    unsafe {
+        if !DISCO_PRESENTE || !DISCO_LEGGIBILE {
+            return false;
+        }
+        let porta = DISCO_PORTA;
+        let pb = 0x100 + (porta as u32) * 0x80;
+
+        let cl = &raw mut CL as *mut u8;
+        let ct = &raw mut CT as *mut u8;
+        for k in 0..1024 { *cl.add(k) = 0; }
+        for k in 0..256  { *ct.add(k) = 0; }
+
+        let ct_phys = crate::virt_to_phys(&raw const CT as *const _ as u64);
+        let src_phys = crate::virt_to_phys(src.as_ptr() as u64);
+
+        // Command header: CFL=5, PRDTL=1, W=1 (Write, bit 6)
+        core::ptr::write_unaligned(cl.add(0) as *mut u32, 5 | (1 << 6) | (1 << 16));
+        core::ptr::write_unaligned(cl.add(8) as *mut u32, ct_phys as u32);
+        core::ptr::write_unaligned(cl.add(12) as *mut u32, (ct_phys >> 32) as u32);
+
+        // CFIS: H2D Register FIS (type 0x27), C=1, cmd 0x35 (WRITE DMA EXT)
+        *ct.add(0) = 0x27;
+        *ct.add(1) = 0x80;
+        *ct.add(2) = 0x35; // WRITE DMA EXT
+        *ct.add(3) = 0;    // Features (7:0)
+
+        *ct.add(4) = (lba & 0xFF) as u8;
+        *ct.add(5) = ((lba >> 8) & 0xFF) as u8;
+        *ct.add(6) = ((lba >> 16) & 0xFF) as u8;
+        *ct.add(7) = 0x40; // Device (LBA mode, bit 6=1)
+
+        *ct.add(8) = ((lba >> 24) & 0xFF) as u8;
+        *ct.add(9) = ((lba >> 32) & 0xFF) as u8;
+        *ct.add(10) = ((lba >> 40) & 0xFF) as u8;
+        *ct.add(11) = 0;   // Features (15:8)
+
+        *ct.add(12) = 1;   // Count (7:0) = 1 settore
+        *ct.add(13) = 0;   // Count (15:8) = 0
+
+        // PRDT (offset 128 nella CmdTable):
+        core::ptr::write_unaligned(ct.add(128) as *mut u64, src_phys);
+        core::ptr::write_unaligned(ct.add(136) as *mut u32, 0); // Reserved
+        core::ptr::write_unaligned(ct.add(140) as *mut u32, 511); // DBC = 512 - 1
+
+        let cmd = rd32(pb + P_CMD);
+        let tfd0 = rd32(pb + P_TFD);
+        if cmd & CMD_ST == 0 || tfd0 & TFD_BSY != 0 {
+            return false;
+        }
+
+        wr32(pb + P_IS, 0xFFFF_FFFF);
+        wr32(pb + P_CI, 1);
+
+        for _ in 0..2_000_000 {
+            let is = rd32(pb + P_IS);
+            if is & 0x4000_0000 != 0 { return false; } // Task File Error
+            if is & 0x01 != 0 { return true; }         // D2H Register FIS ricevuto (completato)
+        }
+        false
+    }
+}

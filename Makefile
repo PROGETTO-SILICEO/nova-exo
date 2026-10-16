@@ -95,6 +95,7 @@ iso: $(BUILD)/$(KERNEL) $(LIMINE)
 	mkdir -p $(ISO_DIR)/boot/limine
 	mkdir -p $(ISO_DIR)/EFI/BOOT
 	cp $(BUILD)/$(KERNEL) $(ISO_DIR)/boot/
+	if [ -f nucleo_41m.bin ]; then cp nucleo_41m.bin $(ISO_DIR)/boot/; fi
 	cp limine.conf $(ISO_DIR)/boot/limine/
 	cp limine.conf $(ISO_DIR)/EFI/BOOT/
 	cp $(LIMINE)/limine-bios.sys $(ISO_DIR)/boot/limine/
@@ -112,14 +113,19 @@ iso: $(BUILD)/$(KERNEL) $(LIMINE)
 
 usb: $(BUILD)/$(KERNEL) $(LIMINE)
 	@echo "=== Preparing USB ==="
-	@echo "WARNING: This will overwrite /dev/sdb! Edit the Makefile to change the device."
-	@echo "Usage: DEV=/dev/sdX make usb"
-	$(eval DEV ?= /dev/sdb)
+	@if [ -z "$(DEV)" ]; then \
+		echo "ERRORE: Devi specificare il device USB! Esempio: make usb DEV=/dev/sdd"; \
+		exit 1; \
+	fi
+	@if [ "$(DEV)" = "/dev/sda" ] || [ "$(DEV)" = "/dev/sdb" ] || [ "$(DEV)" = "/dev/sdc" ]; then \
+		echo "BLOCCO DI SICUREZZA: $(DEV) è un disco protetto di sistema o backup! Operazione rifiutata."; \
+		exit 1; \
+	fi
 	@echo "Using device: $(DEV)"
 	# Create partition table
-	sudo parted $(DEV) mklabel gpt
-	sudo parted $(DEV) mkpart primary fat32 1MiB 100%
-	sudo parted $(DEV) set 1 esp on
+	sudo parted -s $(DEV) mklabel gpt
+	sudo parted -s $(DEV) mkpart primary fat32 1MiB 100%
+	sudo parted -s $(DEV) set 1 esp on
 	# Format
 	sudo mkfs.fat -F32 $(DEV)1
 	# Mount and copy
@@ -127,13 +133,14 @@ usb: $(BUILD)/$(KERNEL) $(LIMINE)
 	sudo mount $(DEV)1 /mnt/usb
 	sudo mkdir -p /mnt/usb/boot/limine /mnt/usb/EFI/BOOT
 	sudo cp $(BUILD)/$(KERNEL) /mnt/usb/boot/
+	if [ -f nucleo_41m.bin ]; then sudo cp nucleo_41m.bin /mnt/usb/boot/; fi
 	sudo cp limine.conf /mnt/usb/boot/limine/
 	sudo cp limine.conf /mnt/usb/EFI/BOOT/
 	sudo cp $(LIMINE)/limine-bios.sys /mnt/usb/boot/limine/
 	sudo cp $(LIMINE)/BOOTX64.EFI /mnt/usb/EFI/BOOT/BOOTX64.EFI
 	sudo umount /mnt/usb
-	$(LIMINE)/limine bios-install $(DEV)
-	@echo "=== USB ready. Boot the Lenovo from USB ==="
+	sudo $(LIMINE)/limine bios-install $(DEV)
+	@echo "=== USB ready. Boot the hardware from USB ==="
 
 # ── QEMU test (UEFI) ────────────────────────────────────────────────────────
 
