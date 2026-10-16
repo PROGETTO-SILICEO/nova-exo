@@ -76,54 +76,63 @@ Tuttavia, il Transformer bare-metal esegue **in modo strettamente sequenziale la
 
 ---
 
-## ⚡ 3. LA REGOLA DI APPRENDIMENTO LOCALE A TRE FATTORI
+## ⚡ 3. LA REGOLA DI APPRENDIMENTO LOCALE A TRE FATTORI (VALIDATA IN SIMULAZIONE FASE 1)
 
-### 3.1 Isolamento del Decadimento Omeostatico (Risoluzione del Bug di Segno)
-*Critica matematica recepita:* Se il neuromodulatore $\mathcal{M}(t)$ può assumere valori negativi, la moltiplicazione $\Delta U \propto \eta \mathcal{M}(t) (y z^T - \gamma U)$ provocherebbe un'inversione di segno del termine $-\gamma U$:
-$$-\eta \cdot (-|\mathcal{M}(t)|) \cdot \gamma U = +\eta |\mathcal{M}(t)| \gamma U$$
-Questo trasformerebbe il decadimento in un amplificatore divergente esponenziale ad anello aperto.
+### 3.1 La Formulazione Matematica Corretta: $V$ Guidato dall'Errore (NLMS Locale)
+*Risultato empirico della Simulazione Fase 1 (`fase1_plasticita_sim.py`):*  
+L'aggiornamento di $V$ **non può essere puramente Hebbiano** ($x z^T$). Un aggiornamento hebbiano su $V$ rinforza l'auto-covarianza dell'input senza vedere l'errore, provocando una deriva distruttiva della base linguistica (canary 3.5x peggiore) e una perdita totale di adattamento alla variazione di contesto ($\text{loss}_{\text{fase 2}} = 2{,}731$).
 
-Per garantire la stabilità asintotica in qualsiasi regime, **il termine di omeostasi e decadimento deve essere rigorosamente disaccoppiato dal segno del segnale plastico**:
+Per minimizzare la loss locale $\mathcal{L} = \frac{1}{2} \|y - (W x + \frac{\alpha}{r} U V^T x)\|^2$, la derivata parziale esatta rispetto a $V$ proietta l'errore di output $e = y - \hat{y}$ nello spazio latente tramite $U^T$:
+$$\frac{\partial \mathcal{L}}{\partial V} = - \frac{\alpha}{r} \cdot x \cdot (U^T e)^T$$
 
-$$\Delta U_{i, k} = \eta \cdot \mathcal{M}(t) \cdot e_{i} \cdot z_k - \gamma_{\text{homeo}} \cdot U_{i, k}$$
-$$\Delta V_{j, k} = \eta \cdot \mathcal{M}(t) \cdot x_{j} \cdot z_k - \gamma_{\text{homeo}} \cdot V_{j, k}$$
+La regola di plasticità sinaptica locale a 3 fattori normalizzata (NLMS - Normalized Least Mean Squares) è:
+
+$$\Delta U_{i, k} = \eta \cdot M^+(t) \cdot \frac{\frac{\alpha}{r} \cdot e_i \cdot z_k}{\epsilon + \left(\frac{\alpha}{r}\right)^2 (z^T z)} - \gamma_{\text{homeo}} \cdot U_{i, k}$$
+
+$$\Delta V_{j, k} = \eta \cdot M^+(t) \cdot \frac{\frac{\alpha}{r} \cdot x_j \cdot (U^T e)_k}{\epsilon + \left(\frac{\alpha}{r}\right)^2 (x^T x) \cdot \|U\|_F^2} - \gamma_{\text{homeo}} \cdot V_{j, k}$$
 
 dove:
-- $\eta$ è il learning rate basale ($10^{-4}$).
-- $\gamma_{\text{homeo}} > 0$ è il tasso di decadimento omeostatico continuo (forza attrattrice verso lo zero).
-- $\mathcal{M}(t) \in (-1, +1)$ è il modulatore somatico.
-- $e_i$ è il segnale di predizione/adattamento locale.
+- $x \in \mathbb{R}^{d_{in}}$ è l'attivazione in ingresso al layer.
+- $z = V^T x \in \mathbb{R}^r$ è la rappresentazione proiettata nel collo di bottiglia a basso rango.
+- $e = y_{\text{target}} - \hat{y} \in \mathbb{R}^{d_{out}}$ è l'errore di predizione locale del layer.
+- $U^T e \in \mathbb{R}^r$ è la retroproiezione dell'errore nel sottospazio plastico (retropropagazione ristretta al singolo layer, zero overhead inter-layer).
+- $M^+(t) = \max(\mathcal{M}(t), 0)$ è il gate di gating positivo.
+- $\gamma_{\text{homeo}} = 10^{-4}$ è il decadimento continuo stabilizzante (disaccoppiato da $M$).
 
-### 3.2 Oja's Rule vs Weight Decay: Chiarimento Matematico
-La semplice sottrazione $-\gamma_{\text{homeo}} U$ corrisponde a una regolarizzazione L2 (weight decay), la quale equilibra l'aggiornamento a un valore proporzionale alla covarianza degli ingressi, ma **non vincola matematicamente la norma $\sum U^2 \le 1$** se l'ampiezza dell'input cresce.
+---
 
-La vera **Regola di Oja (Oja, 1982)** per l'analisi delle componenti principali (PCA) impiega un termine non-lineare normalizzante proporzionale all'attività post-sinaptica quadra:
-$$\Delta w = \eta y (x - y w) = \eta (y x - y^2 w)$$
+### 3.2 Il Gate Neuromodulatore $M^+(t)$ e l'Eliminazione di $\mathcal{E}_{pred}$
+*Scoperta critica della Simulazione:*  
+Includere l'errore di predizione nel gate $\mathcal{M}(t)$ con coefficiente negativo ($-\omega_{pe} \mathcal{E}_{pred}$) genera un **paradosso cibernetico bimodale**:
+- Quando l'ambiente cambia e il modello commette un errore grande ($e$ alto), $\mathcal{E}_{pred}$ schizza in alto.
+- Questo spinge $\mathcal{M}(t)$ in territorio negativo ($\mathcal{M} < 0$).
+- Il gate positivo si chiude ($M^+ = 0$) e l'extra-decadimento cancella l'adattatore.  
+Il modello si "congelava" o si auto-cancellava proprio nell'istante in cui avrebbe dovuto imparare di più!
 
-Nel contesto degli adattatori a basso rango con segnale modulato, la convergenza a norma strettamente limitata viene formalizzata tramite la **Normalizzazione Proiettiva di Oja per Componente di Rango**:
+**La Soluzione Validata:**  
+$\mathcal{E}_{pred}$ è stato **completamente rimosso dal gate $\mathcal{M}(t)$**. L'errore agisce già con la massima efficienza geometrica attraverso il vettore $e$.  
+Il neuromodulatore somatico $\mathcal{M}(t)$ governa unicamente la **ricettività corporea all'apprendimento** (novità, benessere/interazione, allarme):
 
-$$\Delta U_{i, k} = \eta \cdot \Big[ \mathcal{M}(t) \cdot e_i \cdot z_k - z_k^2 \cdot U_{i, k} \Big]$$
+$$\mathcal{M}(t) = \tanh \Big( \omega_n \cdot n(t) + \omega_r \cdot \text{Reward}(t) - \omega_p \cdot p(t) \Big) \in (-1, 1)$$
+$$M^+(t) = \max(\mathcal{M}(t), 0.0)$$
 
-In alternativa ingegneristica, il kernel implementa il **Norm-Clamping Diretto**:
-$$\text{Se } \|U_k\|_2 > 1.0 \implies U_k \leftarrow \frac{U_k}{\|U_k\|_2}$$
+con pesi bilanciati normalizzati: $\omega_n = \frac{1}{3}, \omega_r = \frac{1}{3}, \omega_p = \frac{1}{3}$.
 
-### 3.3 L'Obiettivo Funzionale di Apprendimento (Local Predictive Coding)
-Una correlazione puramente Hebbiana ($y \cdot x^T$) senza un obiettivo funzionale rischierebbe di rinforzare segnali spuri o rumore termico.  
-L'adattamento deve essere guidato dalla **minimizzazione dell'errore di predizione somatico-linguistico**:
-$$e_i = (x_{\text{target}, i} - \hat{x}_{i})$$
-Il fattore $e$ orienta la matrice affinché l'adattamento riduca la discrepanza tra lo stato atteso dall'organismo e lo stato effettivamente rilevato, mentre $\mathcal{M}(t)$ ne stabilisce la rilevanza biologica.
+---
 
-### 3.4 Boundedness e Calibrazione del Neuromodulatore $\mathcal{M}(t)$
-Tutti i sensori di ingresso sono rigorosamente normalizzati nel dominio compatto $[0, 1]$:
-- $n(t) \in [0, 1]$: Novità dell'input (entropia normalizzata).
-- $\text{Reward}(t) \in [0, 1]$: Segnale di stabilizzazione e concordanza interattiva.
-- $p(t) \in [0, 1]$: Segnale di stress somatico / termico / interrupt overload.
-- $\mathcal{E}_{pred}(t) \in [0, 1]$: Errore di predizione medio sui canali sensoriali.
+### 3.3 L'Origine di $x_{\text{target}}$ sul Metallo (Risoluzione del Buco dell'Oracolo)
+In simulazione, $y_{\text{target}}$ è calcolato da un oracolo sintetico. Sul kernel bare-metal del Lenovo, $x_{\text{target}}$ ha due sorgenti fisiche deterministiche:
+1. **Causal Next-Token Prediction durante l'Ascolto (Auto-supervisione):**  
+   Quando Alfonso invia un flusso testuale via rete (o il microfono acquisisce sequenze), ogni token $t_{k+1}$ successivo funge da target naturale per lo stato predetto da $t_k$. L'errore locale $e$ è la discrepanza sul logit del token effettivo ricevuto.
+2. **Auto-Encoding e Ricostruzione di Layer in SwiGLU:**  
+   Nei blocchi MLP espansivi ($512 \to 1536 \to 512$), il target è la proiezione canonica dello stato di hidden-layer non perturbato, preservando l'invarianza delle rappresentazioni linguistiche.
 
-La funzione di modulazione globale è:
-$$\mathcal{M}(t) = \tanh \Big( \omega_n \cdot n(t) + \omega_r \cdot \text{Reward}(t) - \omega_p \cdot p(t) - \omega_{pe} \cdot \mathcal{E}_{pred}(t) \Big) \in (-1, 1)$$
+---
 
-I coefficienti $\omega$ sono vincolati a $\sum |\omega_i| = 1.0$ per impedire la saturazione precoce della tangente iperbolica.
+### 3.4 Norm-Clamping per Singolo Rango
+Per impedire qualsiasi runaway dinamico, a ogni passo il kernel verifica l'energia congiunta di ciascun rango:
+$$E_k = \|u_k\|_2 \cdot \|v_k\|_2$$
+$$\text{Se } E_k > 1.0 \implies f = \sqrt{\frac{1.0}{E_k}}, \quad u_k \leftarrow u_k \cdot f, \quad v_k \leftarrow v_k \cdot f$$
 
 ---
 
@@ -139,16 +148,17 @@ Durante il **Sonno Attivo**, il kernel non si limita a fermare la CPU in `HLT`:
 2. **Fase di Ibernazione Vigile (C-State):** Al termine del consolidamento, la CPU entra in stato di halt profondo, risvegliata solo da interrupt APIC a cadenza lenta (1 Hz) o da pacchetti di rete ethernet (RTL8111).
 3. **Latenza di Risveglio:** La promessa di risveglio in "<1 ms" costituisce un **obiettivo di benchmark empirico** da misurare tramite contatore TSC (`rdtsc()`) sull'hardware Lenovo, e non un dato assunto a priori.
 
-### 4.2 La Potatura Sinaptica Corretta: Rank-Energy Pruning
-*Correzione algebrica:* In una matrice fattorizzata $A = U V^T$, il contributo alla connessione tra il neurone $j$ e il neurone $i$ è $A_{ij} = \sum_{k=1}^r U_{ik} V_{jk}$. Azzerare un singolo coefficiente $U_{ik}$ altera simultaneamente tutti i 512 valori della riga $i$.
+### 4.2 La Potatura Sinaptica nel Sonno: `Redraw` Asimmetrico (Anti Zero-Gradient Trap)
+*Risoluzione del Bug di Azzeramento Totale:*  
+Nel blueprint iniziale, i canali con energia bassa venivano azzerati su entrambi i fattori: $u_k \leftarrow 0, v_k \leftarrow 0$.  
+La simulazione ha rivelato che **questo condanna il rango alla morte permanente**: se $U=0$ e $V=0$, allora $z = V^T x = 0$ e $U^T e = 0$. Il gradiente di entrambi i fattori diventa identicamente zero per sempre! Nel test v2.0 originale, infatti, tutti gli 8 ranghi morivano al primo sonno.
 
-La potatura sinaptica nel sonno opera pertanto sull'**energia globale del rango $k$**:
-
-$$E_k = \|u_k\|_2 \cdot \|v_k\|_2 = \sqrt{\sum_{i=1}^{d_{out}} U_{ik}^2} \cdot \sqrt{\sum_{j=1}^{d_{in}} V_{jk}^2}$$
-
-Se l'energia congiunta del canale $k \in \{1, \dots, r\}$ è inferiore alla soglia di rilevanza statistica $\epsilon_{\text{rank}}$:
-$$u_k \leftarrow 0, \quad v_k \leftarrow 0$$
-Questo rimuove interi sottospazi di rumore, preservando l'ortogonalità e la stabilità delle dimensioni latenti rimaste.
+**La Soluzione `Redraw` (LoRA-Style Regeneration):**  
+Quando l'energia congiunta del canale $k$ scende sotto la soglia di rumore $\epsilon_{\text{rank}} = 0{,}02$:
+$$u_k \leftarrow 0.0$$
+$$v_k \sim \mathcal{N}\left(0, \frac{1}{d}\right)$$
+- Poiché $u_k = 0$, l'impatto sull'uscita resta nullo ($u_k v_k^T = 0$), azzerando il rumore accumulato.
+- Poiché $v_k \ne 0$, la proiezione latente $z_k = v_k^T x \ne 0$. Al risveglio, il rango può generare un gradiente $\Delta u_k \propto e \cdot z_k \ne 0$, **mantenendo la capacità di riapprendimento attiva per tutta la vita dell'organismo**.
 
 ---
 
