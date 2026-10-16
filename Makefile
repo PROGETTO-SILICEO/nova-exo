@@ -129,7 +129,7 @@ usb: $(BUILD)/$(KERNEL) $(LIMINE)
 	# Format
 	sudo mkfs.fat -F32 $(DEV)1
 	# Mount and copy
-	mkdir -p /mnt/usb
+	sudo mkdir -p /mnt/usb
 	sudo mount $(DEV)1 /mnt/usb
 	sudo mkdir -p /mnt/usb/boot/limine /mnt/usb/EFI/BOOT
 	sudo cp $(BUILD)/$(KERNEL) /mnt/usb/boot/
