@@ -34,6 +34,10 @@ MNT="$(findmnt -n -o TARGET "$PART")"
 echo "=== montata in $MNT ==="
 
 cp "$KERNEL" "$MNT/boot/nova-exo"
+if [ -f "$PROJ/nucleo_41m.bin" ]; then
+    echo "=== copia nucleo_41m.bin (~20 MB) ==="
+    cp "$PROJ/nucleo_41m.bin" "$MNT/boot/nucleo_41m.bin"
+fi
 cp "$PROJ/limine.conf" "$MNT/boot/limine/limine.conf"
 cp "$PROJ/limine.conf" "$MNT/EFI/BOOT/limine.conf"
 sync
