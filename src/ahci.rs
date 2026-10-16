@@ -356,3 +356,68 @@ pub fn write_sector(lba: u64, src: &[u8; 512]) -> bool {
         false
     }
 }
+
+/// FASE 2: Svuota la cache volatile del disco SATA via FLUSH CACHE EXT (comando ATA 0xEA).
+/// Garantisce che i settori scritti via WRITE DMA EXT siano fisicamente consolidati sui piatti/NAND.
+pub fn flush_cache_ext() -> bool {
+    unsafe {
+        if !DISCO_PRESENTE || !DISCO_LEGGIBILE {
+            return false;
+        }
+        let porta = DISCO_PORTA;
+        let pb = 0x100 + (porta as u32) * 0x80;
+
+        let cl = &raw mut CL as *mut u8;
+        let ct = &raw mut CT as *mut u8;
+        for k in 0..1024 { *cl.add(k) = 0; }
+        for k in 0..256  { *ct.add(k) = 0; }
+
+        let ct_phys = crate::virt_to_phys(&raw const CT as *const _ as u64);
+
+        // Command header: CFL=5, PRDTL=0, W=0 (Nessun trasferimento dati DMA)
+        core::ptr::write_unaligned(cl.add(0) as *mut u32, 5);
+        core::ptr::write_unaligned(cl.add(8) as *mut u32, ct_phys as u32);
+        core::ptr::write_unaligned(cl.add(12) as *mut u32, (ct_phys >> 32) as u32);
+
+        // CFIS: H2D Register FIS (type 0x27), C=1, cmd 0xEA (FLUSH CACHE EXT, 48-bit LBA)
+        *ct.add(0) = 0x27;
+        *ct.add(1) = 0x80;
+        *ct.add(2) = 0xEA; // ATA command 0xEA (FLUSH CACHE EXT)
+        *ct.add(7) = 0x40; // Device (LBA mode, bit 6=1)
+
+        let cmd = rd32(pb + P_CMD);
+        let tfd0 = rd32(pb + P_TFD);
+        if cmd & CMD_ST == 0 || tfd0 & TFD_BSY != 0 {
+            return false;
+        }
+
+        wr32(pb + P_IS, 0xFFFF_FFFF);
+        wr32(pb + P_CI, 1);
+
+        for _ in 0..2_000_000 {
+            let is = rd32(pb + P_IS);
+            if is & 0x4000_0000 != 0 { return false; } // Task File Error
+            if is & 0x01 != 0 { return true; }         // D2H Register FIS ricevuto (completato)
+        }
+        false
+    }
+}
+
+/// Header di Continuità Sinaptica su Disco SATA (esattamente 64 byte, allineamento 8 byte).
+/// Layout validato rigorosamente contro padding imprevisti.
+#[repr(C)]
+#[derive(Copy, Clone, Debug)]
+pub struct SynapseHeader {
+    pub magic: [u8; 4],         // Offset 0..4: b"SYNP"
+    pub version: u32,           // Offset 4..8: Versione del formato (1)
+    pub epoch: u64,             // Offset 8..16: Contatore incrementale monotono
+    pub timestamp_tsc: u64,     // Offset 16..24: TSC al momento del consolidamento
+    pub crc32_payload: u32,     // Offset 24..28: Checksum CRC32 del payload pesi
+    pub payload_bytes: u32,     // Offset 28..32: Dimensione effettiva payload in byte
+    pub reserved: [u8; 32],     // Offset 32..64: Spazio riservato per espansioni future
+}
+
+// Asserzione a tempo di compilazione: garantisce che la struct sia ESATTAMENTE di 64 byte
+const _: () = assert!(core::mem::size_of::<SynapseHeader>() == 64);
+const _: () = assert!(core::mem::align_of::<SynapseHeader>() == 8);
+
