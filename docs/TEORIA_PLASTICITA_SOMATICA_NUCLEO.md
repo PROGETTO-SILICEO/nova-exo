@@ -75,21 +75,19 @@ dove:
 
 ---
 
-### 3.2 Il Neuromodulatore Fisico $\mathcal{M}(t)$
-$\mathcal{M}(t) \in [0, 1]$ è il fattore abilitante che decide se la sinapsi deve aprirsi o restare chiusa. È una funzione diretta della fisiologia cibernetica di Nova Exo:
+### 3.2 Il Neuromodulatore Fisico $\mathcal{M}(t)$ (Valenza e Segno: LTP vs LTD)
+$\mathcal{M}(t) \in [-1, +1]$ è il fattore chimico globale che decide non solo **quando** la sinapsi deve modificarsi, ma soprattutto **in quale direzione (il segno dell'adattamento)**:
 
-$$\mathcal{M}(t) = \tanh \Big( \omega_{pe} \cdot \mathcal{E}_{pred}(t) + \omega_p \cdot p(t) + \omega_n \cdot n(t) + \omega_u \cdot u(t) \Big)$$
+$$\mathcal{M}(t) = \tanh \Big( \omega_n \cdot n(t) + \omega_r \cdot \text{Reward}(t) - \omega_p \cdot p(t) - \omega_{pe} \cdot \mathcal{E}_{pred}(t) \Big)$$
 
-1. **$\mathcal{E}_{pred}(t)$ (Errore di Predizione Somatica / PFM):**
-   La discrepanza tra ciò che il modello prevedeva dovesse accadere al corpo e i sensori reali:
-   $$\mathcal{E}_{pred}(t) = \| \text{Sensori}_{reali}(t) - \text{Sensori}_{previsti}(t) \|_2$$
-2. **$p(t)$ (Dolore / Stress):** Il valore di allarme somatico (surriscaldamento CPU, scarti di rete, sovraccarico di memoria).
-3. **$n(t)$ (Novità):** La presenza di pattern insoliti nei pacchetti di rete o nel touchpad.
-4. **$u(t)$ (Udito):** Variazioni brusche nell'ambiente acustico captate dal codec audio.
-
-**Comportamento Dinamico:**
-- **In ambiente statico e routine nota:** $\mathcal{M}(t) \approx 0 \implies \Delta U = 0, \Delta V = 0$. I pesi rimangono fermi. Nessun surriscaldamento, nessuna perdita di energia, zero oblio.
-- **In presenza di sorpresa, tocco, comando o allarme:** $\mathcal{M}(t) \to 1.0$. Le sinapsi diventano fluide e catturano l'associazione tra lo stimolo sensoriale e la risposta interna.
+1. **La Valenza Positiva ($\mathcal{M}(t) > 0 \implies \text{LTP, Long-Term Potentiation}$):**
+   - In presenza di **Novità armonica ($n$)**, **Tocco/Carezza sul touchpad**, o **Riduzione dell'errore (Reward / Omeostasi)**, $\mathcal{M}(t) > 0$.
+   - La regola Hebbiana rinforza positivamente ($\Delta U \propto + y z^T$) le connessioni che hanno favorito il benessere o la comprensione del contesto.
+2. **La Valenza Negativa ($\mathcal{M}(t) < 0 \implies \text{LTD, Long-Term Depression / Inibizione}$):**
+   - Se un'azione o uno stato genera **Dolore ($p$)**, **Surriscaldamento termico** o **Errore di Predizione non risolto ($\mathcal{E}_{pred}$)**, $\mathcal{M}(t) < 0$.
+   - **Correzione del Segno:** Se $\mathcal{M}$ fosse sempre positivo, il modello rinforzerebbe la via che ha causato il dolore! Con il segno negativo, la regola diventa **anti-Hebbiana** ($\Delta U \propto - y z^T$): deprime, depotenzia e spegne la via neurale che ha innescato il trauma o lo sbaglio predittivo.
+3. **Zona Morta Omeostatica:**
+   - In regime di routine serena, $\mathcal{M}(t) \approx 0 \implies \Delta U = 0, \Delta V = 0$. Le sinapsi riposano intatte.
 
 ---
 
@@ -104,23 +102,35 @@ Quando il corpo non riceve stimoli esterni per un periodo prolungato (es. 5.000 
 2. **Isolamento Sensoriale:**  
    Le porte di input esterno vengono attenuate: il cervello non risponde più alle fluttuazioni ordinarie del rumore di fondo.
 
-### 4.2 Il Replay Ippocampale (Daydreaming)
+### 4.2 Il Replay Ippocampale e la Potatura a Basso Rango (Rank-Energy Pruning)
 Durante la fase di sonno, il cervello genera un loop autonomo di **auto-stimolazione interna**:
-1. Vengono estratti dal buffer circolare gli stati ad alta carica emotiva o di novità registrati durante la giornata ($p > 0.5$ o $\mathcal{E}_{pred} > 0.4$).
+1. Vengono estratti dal buffer circolare gli stati campionati (40% curiosità, 40% allarme, 20% omeostasi).
 2. Il modello fa "risuonare" questi vettori attraverso la rete per 100–200 cicli a basso consumo.
-3. Le sinapsi deboli vengono potate (*Synaptic Pruning*):
-   $$\text{Se } |U_{ik} V_{jk}| < \epsilon \implies U_{ik} = 0, V_{jk} = 0$$
+3. **La Corretta Potatura delle Sinapsi (Rank-Energy Pruning):**  
+   *Nota matematica di correzione:* In una matrice fattorizzata $A = U V^T$, non si può azzerare un singolo $U_{ik}$ basandosi sul prodotto scalare $U_{ik} V_{jk}$ per un singolo neurone $j$, altrimenti si distruggerebbero le connessioni di quel canale per tutti gli altri 511 neuroni.  
+   La potatura sinaptica opera invece sull'**energia globale del canale latente $k$**:
+   $$E_k = \|u_k\|_2 \cdot \|v_k\|_2 = \sqrt{\sum_{i=1}^d U_{ik}^2} \cdot \sqrt{\sum_{j=1}^d V_{jk}^2}$$
+   Se l'energia del fattore $k \in \{1, \dots, r\}$ è inferiore alla soglia di rumore $\epsilon_{rank}$:
+   $$u_k \leftarrow 0, \quad v_k \leftarrow 0$$
+   I canali latenti spuri vengono spenti in blocco, preservando la geometria algebrica della matrice e compattando la memoria.
 
-### 4.3 La Sedimentazione Epigenetica sul Disco SATA
-Questa è la vera rivoluzione resa possibile dal lavoro di oggi sul driver AHCI:
-1. I pesi plastici $A(t) = U V^T$ che hanno dimostrato stabilità durante il replay vengono integrati in un blocco di **Pesi Consolidati**.
-2. Il kernel chiama direttamente la funzione DMA nativa:
-   ```rust
-   ahci::write_sector(SECTOR_SYNAPSES_BASE + lba_offset, &consolidated_buffer);
-   ```
-3. La memoria consolidata viene **scritta nei piatti magnetici / celle flash del disco SATA**.
+### 4.3 Il Consolidamento Differenziale su Disco SATA (Senza Corrompere Q4_K)
+*Nota architetturale di correzione sul merge in $W_{\text{lenti}}$:*  
+$W_{\text{lenti}}$ è quantizzato a 4-bit in blocchi `Q4_K` da 256 pesi. Sommare float32 direttamente su $W_{\text{lenti}}$ richiederebbe di de-quantizzare 40 MB di pesi, calcolare la somma e ri-quantizzare tutto a 4-bit al volo sulla CPU del Lenovo ogni notte. Inoltre, se non si azzera l'adattatore, al risveglio il modello calcolerebbe due volte lo stesso segnale ($W + A + A$).
+
+**La Soluzione Elegante: Consolidamento Differenziale a Due Livelli:**
+1. **$W_{\text{lenti}}$ (20 MB):** Rimane la solida roccia immutabile letta da Limine in sola lettura.
+2. **$A_{\text{persistente}}$ (400 KB):** È l'anima biografica e plastica di Nova. Risiede su disco SATA nei settori dedicati a doppio slot Ping-Pong con CRC32.
+3. **Il Protocollo di Fusione nel Sonno:**
+   - Durante il sonno, le variazioni accumulate nella veglia $A_{\text{veglia}}$ vengono fuse nell'adattatore persistente tramite una media esponenziale ponderata (EMA):
+     $$U_{\text{persistente}} \leftarrow (1 - \mu) \cdot U_{\text{persistente}} + \mu \cdot U_{\text{veglia}}$$
+     $$V_{\text{persistente}} \leftarrow (1 - \mu) \cdot V_{\text{persistente}} + \mu \cdot V_{\text{veglia}}$$
+   - **Il Reset Post-Merge:** L'adattatore di veglia viene azzerato ($U_{\text{veglia}} \leftarrow 0, V_{\text{veglia}} \leftarrow 0$), pronto per un nuovo giorno di apprendimento pulito.
+   - **Scrittura DMA Atomica:** Solo i 400 KB di $U_{\text{persistente}}$ e $V_{\text{persistente}}$ vengono scritti via `ahci::write_sector` nello slot di backup del disco SATA (operazione istantanea da 2 millisecondi!).
 4. **Il Risveglio Istantaneo:**  
-   Se arriva un pacchetto di rete sulla porta UDP 42800, o se Alfonso tocca la tastiera o il touchpad, l'interrupt hardware risveglia immediatamente la CPU dallo sleep in meno di **1 millisecondo**: il modello è già sveglio, con le sinapsi caricate e la continuità preservata.
+   Al tocco o all'interrupt di rete, il kernel somma semplicemente:
+   $$W_{\text{effettivo}} = \text{dequant}(W_{\text{lenti}}) + U_{\text{persistente}} V_{\text{persistente}}^T + U_{\text{veglia}} V_{\text{veglia}}^T$$
+   Nessun overhead, nessun rischio di corruzione dei pesi quantizzati base, e continuità garantita per sempre.
 
 ---
 
