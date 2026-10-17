@@ -242,6 +242,13 @@ pub struct NucleoBrain<'a> {
     input: [f32; CHEMIO_DIM],
     output: Option<[f32; CHEMIO_DIM]>,
     total_think_ticks: u64,
+    /// Il Maestro (Passo 2, 17/10/2026). Dormiente finché non è ARMATO:
+    /// senza adattatori allocati, il ciclo cognitivo è puro forward.
+    maestro: Option<Maestro<'a>>,
+    /// Errore somatico del ciclo corrente: e_som = input − prev_output (§3.5).
+    e_som: [f32; CHEMIO_DIM],
+    /// Errore somatico retroproiettato nello spazio latente (W_head^T · e_som).
+    e_hidden: [f32; DIM],
 }
 
 impl<'a> NucleoBrain<'a> {
@@ -254,6 +261,9 @@ impl<'a> NucleoBrain<'a> {
             input: [0.0; CHEMIO_DIM],
             output: None,
             total_think_ticks: 0,
+            maestro: None,
+            e_som: [0.0; CHEMIO_DIM],
+            e_hidden: [0.0; DIM],
         }
     }
 
@@ -261,13 +271,51 @@ impl<'a> NucleoBrain<'a> {
         self.total_think_ticks
     }
 
+    /// Armatura del Maestro (Passo 2): alloca gli adattatori, misura ‖W‖_F
+    /// delle proiezioni plastiche sui pesi (stub sintetico → 0.0, base vera
+    /// → norma reale), inizializza V (rompendo la simmetria U=V=0, §4.2).
+    /// Il buffer è .bss del chiamante (2,625 MiB).
+    ///
+    /// Ritorna false se il buffer è corto (il maestro resta dormiente).
+    pub fn arma_maestro(&mut self, adattatori: &'a mut [f32]) -> bool {
+        let Some(mut m) = Maestro::nuovi(adattatori) else {
+            return false;
+        };
+        // ‖W‖_F per le proiezioni ARMATE (Opzione A): Gate/Up restano 0.0.
+        // Sull'attuale `nucleo_41m.bin` SINTETICO (pesi a zero) le norme
+        // escono 0.0 → il cap ρ resta inoperante (guard in Adattatore::passo):
+        // con una base vera questo calcola le norme reali senza cambiare
+        // una riga di codice (§6.2).
+        for l in 0..N_LAYERS {
+            m.w_norm[l][Proiezione::Wo as usize] =
+                Maestro::norma_w(self.model.layers[l].wo);
+            m.w_norm[l][Proiezione::Down as usize] =
+                Maestro::norma_w(self.model.layers[l].w_down);
+        }
+        self.maestro = Some(m);
+        true
+    }
+
+    /// Il moltiplicatore lento λ(t) del maestro, per telemetria/banco.
+    pub fn maestro_lambda(&self) -> Option<f32> {
+        self.maestro.as_ref().map(|m| m.lam)
+    }
+
+    /// Errore somatico e retroproiezione del ciclo corrente (telemetria).
+    pub fn errore_somatico(&self) -> ([f32; CHEMIO_DIM], [f32; DIM]) {
+        (self.e_som, self.e_hidden)
+    }
+
     /// Esegue il forward di un singolo layer (budget ~2 ms su AMD A8).
     fn forward_layer(&mut self, l: usize) -> Result<(), &'static str> {
-        let layer = &self.model.layers[l];
-
         // 1. RMSNorm pre-attenzione
-        rms_norm(&self.scratch.x, layer.attn_norm, 1e-5, &mut self.scratch.x_norm)
-            .map_err(|_| "rms_norm attn error")?;
+        rms_norm(
+            &self.scratch.x,
+            self.model.layers[l].attn_norm,
+            1e-5,
+            &mut self.scratch.x_norm,
+        )
+        .map_err(|_| "rms_norm attn error")?;
 
         // Dummy q_norm_w e k_norm_w (ones se non usate dal layer)
         static DUMMY_NORM: [f32; HEAD_DIM] = [1.0; HEAD_DIM];
@@ -277,10 +325,10 @@ impl<'a> NucleoBrain<'a> {
             &self.scratch.x_norm,
             1, // seq = 1 per token inference
             DIM,
-            layer.wq,
-            layer.wk,
-            layer.wv,
-            layer.wo,
+            self.model.layers[l].wq,
+            self.model.layers[l].wk,
+            self.model.layers[l].wv,
+            self.model.layers[l].wo,
             &DUMMY_NORM,
             &DUMMY_NORM,
             0, // start_pos
@@ -303,15 +351,27 @@ impl<'a> NucleoBrain<'a> {
             self.scratch.x[i] += self.scratch.y[i];
         }
 
+        // 3.5 PLASTICITÀ — passo su W_o (Passo 2, Opzione A, 17/10/2026).
+        // L'input di Wo (out_buf) e il suo output (y) vivono ancora nello
+        // scratch in questo punto del forward (y verrà sovrascritto dalla
+        // FFN più sotto, quindi il passo deve stare QUI); il passo NON tocca
+        // il forward (aggiorna solo U,V degli adattatori).
+        self.passo_plastico(l, Proiezione::Wo);
+
         // 4. RMSNorm pre-FFN
-        rms_norm(&self.scratch.x, layer.ffn_norm, 1e-5, &mut self.scratch.x_norm)
-            .map_err(|_| "rms_norm ffn error")?;
+        rms_norm(
+            &self.scratch.x,
+            self.model.layers[l].ffn_norm,
+            1e-5,
+            &mut self.scratch.x_norm,
+        )
+        .map_err(|_| "rms_norm ffn error")?;
 
         // 5. SwiGLU FFN: y = ffn_swiglu(x_norm)
         ffn_swiglu(
-            layer.w_gate,
-            layer.w_up,
-            layer.w_down,
+            self.model.layers[l].w_gate,
+            self.model.layers[l].w_up,
+            self.model.layers[l].w_down,
             false, // wd_is_q6 = false (Q4_K)
             DIM,
             N_FF,
@@ -323,6 +383,11 @@ impl<'a> NucleoBrain<'a> {
         )
         .map_err(|_| "ffn swiglu error")?;
 
+        // 5.5 PLASTICITÀ — passo su W_down (Passo 2, Opzione A).
+        // L'input di Down (hidden, 1536) e il suo output (y) vivono ancora
+        // nello scratch: passo sul solo W_down, stesso errore e_hidden.
+        self.passo_plastico(l, Proiezione::Down);
+
         // 6. Connessione residuale FFN: x = x + y
         for i in 0..DIM {
             self.scratch.x[i] += self.scratch.y[i];
@@ -330,6 +395,64 @@ impl<'a> NucleoBrain<'a> {
 
         Ok(())
     }
+
+    /// Un passo di plasticità (Passo 2) su UNA proiezione del layer `l`.
+    ///
+    /// Opzione A (17/10/2026): solo W_o e W_down sono ARMATI — le loro uscite
+    /// vivono nel residual stream 512-dim, che è dove e_hidden (retroproiezione
+    /// dell'errore somatico) è semanticamente corretto. Gate/Up restano
+    /// dormienti: il loro errore verrà dall'auto-encoding SwiGLU (§3.3-b),
+    /// un maestro alla volta.
+    ///
+    /// Non tocca il forward: aggiorna solo U,V (e la telemetria e_ema).
+    /// Con λ(t)=0 il passo gira comunque: le decadenze γ (§3.1) e i clamp
+    /// (§3.4, §6.2) sono metabolismo, non apprendimento — restano attivi.
+    fn passo_plastico(&mut self, l: usize, p: Proiezione) {
+        let k = p as usize;
+        // L'input della proiezione: out_buf per Wo (l'attention fa
+        // y = out_buf·Wo^T su tutta la sequenza), hidden per Down.
+        // Gate/Up non vengono chiamati dall'Opzione A; se qualcuno li
+        // chiamasse, x_norm (output della pre-FFN norm) sarebbe il loro
+        // input — lo specifichiamo per quando il §3.3-b li armerà.
+        let (x, y): (&[f32], &[f32]) = match p {
+            Proiezione::Wo => (&self.scratch.out_buf[..], &self.scratch.y[..]),
+            Proiezione::Down => (&self.scratch.hidden[..], &self.scratch.y[..]),
+            Proiezione::Gate | Proiezione::Up => (&self.scratch.x_norm[..], &self.scratch.y[..]),
+        };
+        let Some(ma) = self.maestro.as_mut() else { return };
+        let eta = ma.eta(l);
+        let m_meta = ma.m_meta;
+        let w_norm = ma.w_norm[l][k];
+        let e_ema0 = ma.e_ema[l][k];
+        let start = l * ADATTATORI_LAYER_FLOATS;
+        let Some(slot) = ma.adattatori.get_mut(start..start + ADATTATORI_LAYER_FLOATS) else {
+            return;
+        };
+        let e = &self.e_hidden[..];
+        let mut zbuf = [0.0f32; plasticita::RANGO];
+        let mut utebuf = [0.0f32; plasticita::RANGO];
+        let Some(mut att) = AdattatoriLayer::nuovi(slot) else { return };
+        // e_ema (telemetria EMA dell'errore relativo, §3.2): ‖e‖/‖y‖.
+        let e_norm = norma2(e);
+        let y_norm = norma2(y);
+        let e_ema_new = {
+            let mut ad = att.adattatore(p, w_norm, e_ema0);
+            ad.passo(x, e, m_meta, eta, &plasticita::V21, &mut zbuf, &mut utebuf);
+            ad.aggiorna_errore(e_norm, y_norm);
+            ad.e_ema
+        };
+        ma.e_ema[l][k] = e_ema_new;
+    }
+}
+
+/// ‖x‖₂ su slice (uso plastico: e_norm, y_norm della telemetria).
+#[inline(always)]
+fn norma2(x: &[f32]) -> f32 {
+    let mut s = 0.0f32;
+    for &v in x {
+        s += v * v;
+    }
+    crate::math::sqrtf(s)
 }
 
 impl<'a> InferenceEngine for NucleoBrain<'a> {
@@ -338,6 +461,28 @@ impl<'a> InferenceEngine for NucleoBrain<'a> {
             return false;
         }
         self.input = *input;
+
+        // ── Errore somatico (§3.5, Passo 2) ────────────────────────────
+        // e_som = input − output_del_ciclo_precedente: il nucleo prova a
+        // PREDIRE il corpo (input = chemio interpretato di questo ciclo) e
+        // l'errore di predizione È il segnale somatico. Al primo boot non
+        // c'è un output precedente → e_som = 0 (nessun errore inventato:
+        // la lezione del commit 8454449 — armare a vuoto è danno).
+        // Calcolato SOLO se il maestro è armato: senza adattatori, è lavoro
+        // che non servirebbe.
+        if self.maestro.is_some() {
+            match self.output {
+                Some(prev) => {
+                    for i in 0..CHEMIO_DIM {
+                        self.e_som[i] = input[i] - prev[i];
+                    }
+                }
+                None => self.e_som = [0.0; CHEMIO_DIM],
+            }
+            // e_hidden = W_head^T · e_som (Feedback Alignment, retroproiezione
+            // già testata in bench: l'ho messa in plasticita.rs).
+            plasticita::retroproietta_errore_soma(self.model.head, &self.e_som, &mut self.e_hidden);
+        }
 
         // Proiezione sensoriale: 4 valori chemio -> vettore residuo x (512 dim)
         for j in 0..DIM {
@@ -421,32 +566,36 @@ impl<'a> InferenceEngine for NucleoBrain<'a> {
     fn name(&self) -> &'static str {
         "nucleo-41m"
     }
+
+    /// Il corpo parla al cervello (Passo 2, 17/10): M(t) grezzo + salienza
+    /// dell'errore somatico → λ(t+1). Un passo per ciclo cognitivo (chiamato
+    /// da main a ogni submit Idle). Con il maestro dormiente è no-op.
+    fn set_corpo(&mut self, m_meta: f32, s_som: f32) {
+        if let Some(ma) = self.maestro.as_mut() {
+            ma.set_corpo(m_meta, s_som);
+        }
+    }
 }
 
 // ══════════════════════════════════════════════════════════════════════════
-// PLASTICITÀ — Fase 1 (regola a tre fattori). 17/10/2026.
+// PLASTICITÀ — Fase 1 (regola) + Passo 2 (il Maestro). 17/10/2026.
 //
 //   La MATEMATICA vive in `plasticita.rs` (testata su host in
 //   bench/plasticita_host.rs, che include quel file REALE via #[path]).
 //   Qui c'è il COLLEGAMENTO con Il Nucleo: il layout degli adattatori a
-//   basso rango delle 4 proiezioni plastiche, e l'API per un passo di
-//   apprendimento.
+//   basso rango, il Maestro che calcola e_som e distribuisce e_hidden,
+//   e il passo di apprendimento innestato nel forward (Opzione A).
 //
-//   NOTA — cosa manca e perché NON è qui (onestà, non pigrizia):
-//   la regola serve `e = y_target − ŷ`, l'errore locale del layer. La sorgente
-//   di `e` (il "maestro") è ancora da scegliere secondo la teoria §3.3/§3.5:
-//     (a) errore di next-token (richiede un flusso testuale di ascolto);
-//     (b) auto-encoding in SwiGLU (§3.3);
-//     (c) errore somatico del PFM proiettato (§3.5).
-//   Finché il maestro non esiste, ALLOCARE e ARMARE gli adattatori servirebbe
-//   solo a modificarli con un errore fasullo — e una base appresa che viene
-//   corrotta da un rumore di servizio non è "apprendimento", è danno.
-//   Questo commit dà la legge + il suo alloggio; il maestro è la Fase 2.
+//   SORGENTE DELL'ERRORE — scelta del Passo 2 (dibattuto con Nova, 17/10):
+//     (c) errore somatico del PFM proiettato (§3.5): e_som = input −
+//     prev_output in submit(), retroproiettato via W_head^T su e_hidden.
+//     Le opzioni (a) next-token e (b) auto-encoding SwiGLU arrivano con i
+//     loro MAESTRI (ascolto testuale, §3.3-b) — un maestro alla volta,
+//     come la teoria §3.5 detta.
 // ══════════════════════════════════════════════════════════════════════════
 
 /// Le proiezioni plastiche di un layer (§2.3 della teoria).
-#[allow(dead_code)] // Fase 1: alloggio pronto, maestro (la sorgente di `e`) non ancora scelto
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Proiezione {
     /// W_gate dello SwiGLU, 1536×512
     Gate,
@@ -459,7 +608,6 @@ pub enum Proiezione {
 }
 
 /// (d_out, d_in) di ciascuna proiezione plastica.
-#[allow(dead_code)] // Fase 1: alloggio pronto, maestro non ancora scelto
 pub const DIM_PROIEZIONE: [(usize, usize); 4] = [
     (N_FF, DIM), // Gate
     (N_FF, DIM), // Up
@@ -469,21 +617,18 @@ pub const DIM_PROIEZIONE: [(usize, usize); 4] = [
 
 /// Floats di adattatori per layer = 57.344 (U+V delle 4 proiezioni, r=8):
 ///   3 × (1536+512)·8 + (512+512)·8 = 49.152 + 8.192 = 57.344
-#[allow(dead_code)] // Fase 1: alloggio pronto, maestro non ancora scelto
 pub const ADATTATORI_LAYER_FLOATS: usize =
     3 * (N_FF + DIM) * plasticita::RANGO + 2 * DIM * plasticita::RANGO;
 
 /// Byte per layer (f32): 229.376 B ≈ 224 KiB (§2.3).
-#[allow(dead_code)] // Fase 1: alloggio pronto, maestro non ancora scelto
+#[allow(dead_code)] // documentazione §2.3: esercitata dal banco, non dal kernel
 pub const ADATTATORI_LAYER_BYTES: usize = ADATTATORI_LAYER_FLOATS * core::mem::size_of::<f32>();
 
 /// Totale 12 layer: 2.752.512 B ≈ 2,625 MiB (§2.3).
-#[allow(dead_code)] // Fase 1: alloggio pronto, maestro non ancora scelto
 pub const ADATTATORI_TOTALI_BYTES: usize = ADATTATORI_LAYER_BYTES * N_LAYERS;
 
 /// Adattatori plastici di UN layer, costruiti sopra un buffer fornito
 /// dal chiamante (zero alloc: il buffer è in .bss o su disco, come NucleoModel).
-#[allow(dead_code)] // Fase 1: alloggio pronto, maestro (la sorgente di `e`) non ancora scelto
 pub struct AdattatoriLayer<'a> {
     /// U delle 4 proiezioni, nell'ordine [Gate, Up, Down, Wo]
     u: [&'a mut [f32]; 4],
@@ -491,7 +636,6 @@ pub struct AdattatoriLayer<'a> {
     v: [&'a mut [f32]; 4],
 }
 
-#[allow(dead_code)] // Fase 1: alloggio pronto, maestro (la sorgente di `e`) non ancora scelto
 impl<'a> AdattatoriLayer<'a> {
     /// Taglia il buffer nelle 8 matrici. Ritorna None se il buffer è corto.
     pub fn nuovi(buf: &'a mut [f32]) -> Option<Self> {
@@ -568,5 +712,121 @@ impl<'a> AdattatoriLayer<'a> {
             tot += ad.potatura(cfg, seed);
         }
         tot
+    }
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// IL MAESTRO — Passo 2, 17/10/2026.
+//
+//   La legge (Fase 1, plasticita.rs) sa COME si apprende; il Maestro decide
+//   COSA imparare: calcola e_som (l'errore somatico del PFM, §3.5),
+//   lo retroproietta in e_hidden (dim 512) e lo distribuisce ai layer con
+//   η(l) = η_base · λ(t) · (l+1)/12.
+//
+//   Opzione A (dibattuto con Nova, 17/10): ARMATE solo Wo e Down.
+//   - Wo e Down proiettano dentro/il residual stream 512-dim: l'errore
+//     e_hidden VIVE lì, è semanticamente corretto per loro.
+//   - Gate/Up vivono nello spazio interno FFN 1536-dim: il loro errore
+//     sarà l'auto-encoding del §3.3-b — UN MAESTRO ALLA VOLTA (teoria §3.5).
+//   - Risparmio CPU sull'A8 e nessun broadcast rank-512 in 1536 (correlazioni
+//     spurie: righe j, j+512, j+1024 identiche).
+//
+//   λ(t) parte a 0.0 (il corpo è muto): la prima percezione lo accende.
+//   Le costanti LAMBDA_* sono prime ipotesi da calibrare in Fase 2.
+// ══════════════════════════════════════════════════════════════════════════
+
+/// η_base per i passi di plasticità nel forward (bench CTRL: stabile a 1.0).
+pub const ETA_BASE_SOMA: f32 = 1.0;
+
+/// Seed per l'inizializzazione V degli adattatori (no_std, no getrandom).
+pub const SEED_ADATTATORI: u32 = 0x0AD_7_7A_57;
+
+/// Il Maestro: calcola l'errore somatico e lo distribuisce ai layer.
+///
+/// `adattatori` è il buffer .bss condiviso (N_LAYERS × ADATTATORI_LAYER_FLOATS),
+/// passato dal chiamante (main) via `arma_maestro` — zero alloc qui.
+pub struct Maestro<'a> {
+    /// Buffer .bss degli adattatori di tutti i layer (57.344 f32 per layer).
+    pub adattatori: &'a mut [f32],
+    /// ‖W‖_F per proiezione, ordine [Gate, Up, Down, Wo].
+    /// Gate/Up restano 0.0 (dormienti, non armati).
+    pub w_norm: [[f32; 4]; N_LAYERS],
+    /// EMA dell'errore relativo ‖e‖/‖y‖ per proiezione (telemetria §3.2).
+    pub e_ema: [[f32; 4]; N_LAYERS],
+    /// Neurotrasmettitore corrente λ(t) ∈ [0,1] (passo_lambda).
+    pub lam: f32,
+    /// η_base per tutti i layer (ETA_BASE_SOMA).
+    pub eta_base: f32,
+    /// M(t) grezzo dell'ultimo set_corpo (memorizzato per debug).
+    pub m_meta: f32,
+}
+
+impl<'a> Maestro<'a> {
+    /// Costruisce il Maestro sopra il buffer .bss. Ritorna None se il buffer
+    /// è corto (il chiamante ha sbagliato dimensione).
+    pub fn nuovi(adattatori: &'a mut [f32]) -> Option<Self> {
+        if adattatori.len() < N_LAYERS * ADATTATORI_LAYER_FLOATS {
+            return None;
+        }
+        let mut m = Self {
+            adattatori,
+            w_norm: [[0.0; 4]; N_LAYERS],
+            e_ema: [[0.0; 4]; N_LAYERS],
+            lam: 0.0,
+            eta_base: ETA_BASE_SOMA,
+            m_meta: 0.0,
+        };
+        m.inizializza_adattatori(SEED_ADATTATORI);
+        Some(m)
+    }
+
+    /// Inizializza gli adattatori: V = rand_pm1·√(3/d_in), U = 0
+    /// (stesso schema del §3.1 bench: dimensione-compatibile, varianza
+    /// di Glorot sul rango basso).
+    fn inizializza_adattatori(&mut self, seed: u32) {
+        let mut s = seed | 1;
+        for l in 0..N_LAYERS {
+            let start = l * ADATTATORI_LAYER_FLOATS;
+            let end = start + ADATTATORI_LAYER_FLOATS;
+            if let Some(mut att) = AdattatoriLayer::nuovi(&mut self.adattatori[start..end]) {
+                for p in [Proiezione::Gate, Proiezione::Up, Proiezione::Down, Proiezione::Wo] {
+                    let k = p as usize;
+                    let d_in = DIM_PROIEZIONE[k].1;
+                    plasticita::inizializza_v(&mut att.v[k], d_in, &mut s);
+                }
+            }
+        }
+    }
+
+    /// η del layer l: η_base · λ(t) · (l+1)/n_layers (§3.5).
+    /// I layer più profondi ricevono più errore — il residuo "guadagna"
+    /// sensibilità salendo (teoria §3.5: gradient-flow vanishing).
+    /// La formula vive in plasticita.rs (una sola fonte di verità).
+    pub fn eta(&self, l: usize) -> f32 {
+        plasticita::eta_layer(self.eta_base, self.lam, l, N_LAYERS)
+    }
+
+    /// Un passo del neurotrasmettitore: M(t) → λ(t+1).
+    /// Chiamato dal set_corpo (una volta per ciclo, in submit Idle).
+    pub fn set_corpo(&mut self, m_meta: f32, s_som: f32) {
+        self.m_meta = m_meta;
+        self.lam = plasticita::passo_lambda(self.lam, s_som);
+    }
+
+    /// ‖W‖_F di UNA matrice Q4_K (1 matrice = 1 slice di blocchi da 144 B).
+    ///
+    /// NOTA ONESTA (scoperta 17/10): `nucleo_41m.bin` è un binario SINTETICO
+    /// (solo ~42 KB non-zero, pesi tutti a zero: pack_nucleo_bin.py::
+    /// make_synthetic_bin). Con pesi nulli ‖W‖_F = 0 e ρ non è definito:
+    /// il guard in Adattatore::passo (w_norm > 1e-12) mette rho = 0.0 e
+    /// salta il cap — documentato, NON è un bug ma la condizione attesa
+    /// finché non arriva una base vera. Il clamp E_k (§3.4) resta la
+    /// barriera di sicurezza reale.
+    ///
+    /// I modelli vivono su disco (mmap), non in RAM: quando la base vera
+    /// arriva, il chiamante calcola le norme con questo e le scrive nei
+    /// campi pub `w_norm[l][k]`. Oggi restano 0.0 — coerente con lo stub.
+    pub fn norma_w(matrice: &[u8]) -> f32 {
+        crate::tensor::norma_q4_k(matrice).unwrap_or(0.0)
     }
 }

@@ -32,6 +32,7 @@
 mod math {
     pub fn sqrtf(x: f32) -> f32 { x.sqrt() }
     pub fn tanhf(x: f32) -> f32 { x.tanh() }
+    pub fn expf(x: f32) -> f32 { x.exp() }
 }
 
 #[path = "../src/plasticita.rs"]
@@ -1171,4 +1172,119 @@ fn sweep_e_tabella_finale_riproducono_i_trend() {
         "   vs rimescolato (loss2): {}/8   vs costante (loss2): {}/8",
         wins_shuffle, wins_const
     );
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// PASSAGGIO DEL CORPO (§3.5) — Passo 2, 17/10/2026.
+//
+// La leva lenta λ(t): salienza S_som, passa-basso, distribuzione η(l).
+// Il banco verifica la FORMA (monotonia, non-scatto, invarianza, range),
+// NON i valori di τ/β/θ (prime ipotesi da calibrare in Fase 2).
+// ══════════════════════════════════════════════════════════════════════════
+
+#[test]
+fn salienza_e_bilanciata_e_nei_limiti() {
+    // Somma pesata dei tre canali, clampata: S_som ∈ [0, 1].
+    let s_zero = plasticita::salienza(0.0, 0.0, 0.0, &PESI_VALIDATI);
+    assert_eq!(s_zero, 0.0);
+
+    // Tutti i canali a 1 → S = 1/3 + 1/3 + 1/3 = 1.
+    let s_uno = plasticita::salienza(1.0, 1.0, 1.0, &PESI_VALIDATI);
+    assert!((s_uno - 1.0).abs() < 1e-6, "S_som a fondo scala deve essere 1: {}", s_uno);
+
+    // Il corpo deve poter dire il BENE: reward alto alza la salienza anche
+    // con allarme e novità a zero (lezione 16/10).
+    let solo_bene = plasticita::salienza(0.0, 0.0, 1.0, &PESI_VALIDATI);
+    assert!(solo_bene > 0.3, "il reward da solo deve contare: {}", solo_bene);
+
+    // Fuori dominio: clampato, non amplificato.
+    let s_oltre = plasticita::salienza(5.0, 5.0, 5.0, &PESI_VALIDATI);
+    assert!((s_oltre - 1.0).abs() < 1e-6, "clamp a 1: {}", s_oltre);
+    let s_neg = plasticita::salienza(-3.0, -3.0, -3.0, &PESI_VALIDATI);
+    assert_eq!(s_neg, 0.0, "clamp a 0");
+}
+
+#[test]
+fn passo_lambda_non_scatta_e_resta_in_range() {
+    // Λ(0)=0: il corpo parte muto.
+    let mut lam = 0.0f32;
+    // Salienza massima sostenuta: λ sale verso σ(β(1-θ)) < 1.
+    let s_alta = 1.0f32;
+    let mut prev = lam;
+    for _ in 0..200 {
+        lam = plasticita::passo_lambda(lam, s_alta);
+        assert!(lam >= 0.0 && lam <= 1.0, "λ fuori [0,1]: {}", lam);
+        // monotonia non decrescente verso l'alto con salienza alta
+        assert!(lam >= prev - 1e-7, "λ non deve scendere con S alta: {} < {}", lam, prev);
+        prev = lam;
+    }
+    // Non scatta: al primo passo il balzo è piccolo (passa-basso).
+    let primo = plasticita::passo_lambda(0.0, 1.0);
+    assert!(primo < 0.2, "il primo passo di λ deve essere piccolo (non-scatto): {}", primo);
+
+    // Salienza nulla sostenuta: λ scende verso σ(-βθ) > 0 (mai 0).
+    let mut lam_basso = 1.0f32;
+    for _ in 0..500 {
+        lam_basso = plasticita::passo_lambda(lam_basso, 0.0);
+    }
+    assert!(lam_basso > 0.0 && lam_basso < 0.1, "λ con S=0 deve tendere basso, non a 0: {}", lam_basso);
+
+    // Sotto la soglia θ il target è < 0.5; sopra è > 0.5 (forma della sigmoide).
+    let sotto = plasticita::passo_lambda(0.0, 0.29);
+    let sopra = plasticita::passo_lambda(0.0, 0.31);
+    assert!(sopra > sotto, "la sigmoide deve crescere con S: {} vs {}", sopra, sotto);
+}
+
+#[test]
+fn eta_layer_cresce_col_profondita_e_con_lambda() {
+    // η(l) = η_base · λ · (l+1)/12.
+    let n = 12usize;
+    // A λ=1: primo layer 1/12, ultimo 12/12 (8.3% → 100%).
+    let e0 = plasticita::eta_layer(1.0, 1.0, 0, n);
+    let e11 = plasticita::eta_layer(1.0, 1.0, 11, n);
+    assert!((e0 - 1.0 / 12.0).abs() < 1e-6, "η(0) = 1/12: {}", e0);
+    assert!((e11 - 1.0).abs() < 1e-6, "η(11) = 1: {}", e11);
+    // Strettamente crescente nella profondità.
+    for l in 1..n {
+        assert!(plasticita::eta_layer(1.0, 1.0, l, n) > plasticita::eta_layer(1.0, 1.0, l - 1, n));
+    }
+    // λ=0 → tutto muto.
+    for l in 0..n {
+        assert_eq!(plasticita::eta_layer(1.0, 0.0, l, n), 0.0);
+    }
+    // Scala linearmente in λ e in η_base.
+    let half = plasticita::eta_layer(1.0, 0.5, 5, n);
+    let full = plasticita::eta_layer(1.0, 1.0, 5, n);
+    assert!((half - full / 2.0).abs() < 1e-6);
+    let doppio = plasticita::eta_layer(2.0, 1.0, 5, n);
+    assert!((doppio - 2.0 * full).abs() < 1e-6);
+}
+
+#[test]
+fn inizializza_v_e_deterministica_e_non_nulla() {
+    // V = rand_pm1 · √(3/d_in): rompe la simmetria U=V=0, deterministica
+    // (stesso seed → stesso V), limitata dalla varianza di Glorot.
+    let d_in = 512usize;
+    let mut v1 = vec![0.0f32; d_in * RANGO];
+    let mut v2 = vec![0.0f32; d_in * RANGO];
+    let mut s1: u32 = 0x0AD_7_7A_57;
+    let mut s2: u32 = 0x0AD_7_7A_57;
+    plasticita::inizializza_v(&mut v1, d_in, &mut s1);
+    plasticita::inizializza_v(&mut v2, d_in, &mut s2);
+    assert_eq!(v1, v2, "stesso seed → stessa inizializzazione (determinismo)");
+
+    // Non nulla: almeno una componente ≠ 0.
+    assert!(v1.iter().any(|x| *x != 0.0), "V inizializzata non deve essere nulla");
+
+    // Bound di Glorot: |V| ≤ √(3/d_in) (rand_pm1 ∈ [-1,1]).
+    let bound = (3.0f32 / d_in as f32).sqrt();
+    for x in &v1 {
+        assert!(x.abs() <= bound + 1e-6, "componente fuori dal bound di Glorot: {}", x);
+    }
+
+    // Seed diverso → inizializzazione diversa (rompe la simmetria davvero).
+    let mut s3: u32 = 0x1234_5678;
+    let mut v3 = vec![0.0f32; d_in * RANGO];
+    plasticita::inizializza_v(&mut v3, d_in, &mut s3);
+    assert_ne!(v1, v3, "seed diverso → inizializzazione diversa");
 }

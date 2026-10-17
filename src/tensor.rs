@@ -94,6 +94,31 @@ pub fn get_scale_min_k4(j: usize, scales: &[u8]) -> (u8, u8) {
     }
 }
 
+/// ‖W‖_F di una matrice quantizzata Q4_K (denominatore di ρ, §6.2 plasticità).
+///
+/// Serve alla plasticità somatica: il cap ρ = S·‖UVᵀ‖_F/‖W‖_F tiene gli
+/// adattatori una FRAZIONE della base congelata — e ‖W‖_F va misurato sui
+/// pesi REALI dequantizzati, non assunto. Calcolato una volta al boot
+/// (una passata sulle matrici del layer, ~0.1 s su AMD A8 per due matrici
+/// da 147 KiB), non a ogni passo.
+///
+/// Accumula in f64 e ritorna f32: il confronto col riferimento Python
+/// (gguf-py, bench nucleo_host) è stretto.
+pub fn norma_q4_k(w: &[u8]) -> TensorResult<f32> {
+    if w.is_empty() || w.len() % Q4_K_BLOCK_BYTES != 0 {
+        return Err(TensorError::DimMismatch);
+    }
+    let mut buf = [0.0f32; Q4_K_BLOCK];
+    let mut acc = 0.0f64;
+    for blk in w.chunks_exact(Q4_K_BLOCK_BYTES) {
+        dequant_q4_k(blk, &mut buf)?;
+        for &x in &buf {
+            acc += (x as f64) * (x as f64);
+        }
+    }
+    Ok(crate::math::sqrtf(acc as f32))
+}
+
 /// Dequantizza un blocco Q8_0: fp16 scale + 32 int8 → 32 f32.
 /// Formato GGUF Q8_0 (tipo 8):
 ///   [d: fp16][qs: 32 × int8]

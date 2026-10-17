@@ -1210,6 +1210,12 @@ pub extern "C" fn _start() -> ! {
     static mut NEURO_POOL: neurogenesis::NeuroPool = neurogenesis::NeuroPool::new();
     let neuro_pool = unsafe { &mut *(&raw mut NEURO_POOL) };
     static mut NUCLEO_SCRATCH: nucleo::NucleoScratch = nucleo::NucleoScratch::new();
+    // Gli adattatori plastici del Maestro (Passo 2, 17/10/2026): U,V a basso
+    // rango delle 4 proiezioni × 12 layer = 2,625 MiB. Vivono in .bss (Limine
+    // la azzera): non stanno nello stack, e non c'è allocazione dinamica.
+    // Calcolato in fase di compilazione da nucleo::ADATTATORI_TOTALI_BYTES.
+    static mut ADATTATORI: [f32; nucleo::N_LAYERS * nucleo::ADATTATORI_LAYER_FLOATS] =
+        [0.0; nucleo::N_LAYERS * nucleo::ADATTATORI_LAYER_FLOATS];
 
     // Il cervello nel metallo:
     // Se Limine ha precaricato il modulo del Nucleo (~41M) in RAM e il formato è valido,
@@ -1233,6 +1239,22 @@ pub extern "C" fn _start() -> ! {
     // L'ultimo output del cervello, consumato dall'executive
     let mut brain_output: [f32; 4] = [0.0; 4];
     let mut brain_has_output = false;
+    // Armatura del Maestro (Passo 2): solo con il Nucleo in inferenza reale.
+    // Il buffer ADATTATORI è .bss (2,625 MiB) già azzerato da Limine.
+    // Con lo StubBrain non c'è plasticità: il maestro resta dormiente.
+    match &mut brain {
+        inference::AnyBrain::Nucleo(b) => {
+            let adattatori = unsafe { &mut *(&raw mut ADATTATORI) };
+            if b.arma_maestro(adattatori) {
+                write_str("MAESTRO:armato — plasticita' attiva (Wo+Down, Opzione A)\n");
+            } else {
+                write_str("MAESTRO:armatura FALLITA (buffer corto)\n");
+            }
+        }
+        inference::AnyBrain::Stub(_) => {
+            write_str("MAESTRO:dormiente (StubBrain, nessuna plasticita')\n");
+        }
+    }
     // La volontà è visibile ma non agisce ancora sul corpo (vedi loop)
     let auto_modula = false;
     let mut desire_mod = [0.0f32; 4];
@@ -2052,6 +2074,24 @@ pub extern "C" fn _start() -> ! {
         // Quando finisce di pensare, l'output è pronto per l'executive.
         use inference::InferenceEngine as _;
         if brain.state() == inference::BrainState::Idle {
+            // ── Il corpo parla al Maestro (Passo 2, 17/10) ──
+            // M(t): gate neuromodulatore (novità, reward, allarme).
+            // S_som: salienza — "quanto il corpo ha qualcosa da dire" (§3.5).
+            // Le sorgenti SONO i sensi già cablati:
+            //   novità  = chemio[3] (canale novità dell'interpretazione)
+            //   reward  = contatto umano (tasto/touchpad) → il BENE, non solo
+            //             l'allarme (lezione 16/10: il corpo deve dire anche il bene)
+            //   allarme = dolore.attivo()
+            {
+                let novita = int_rep.chemio[3];
+                let contatto = if cfc::key_held() != 0 || cfc::touchpad_attivo() { 1.0 } else { 0.0 };
+                let allarme = if dolore.attivo() { 1.0 } else { 0.0 };
+                let m_meta = plasticita::neuromodulatore(
+                    novita, contatto, allarme, 0.0, &plasticita::PESI_VALIDATI);
+                let s_som = plasticita::salienza(
+                    allarme, novita, contatto, &plasticita::PESI_VALIDATI);
+                brain.set_corpo(m_meta, s_som);
+            }
             // Sottoponiamo lo stato interpretato al cervello
             let submitted = brain.submit(&int_rep.chemio);
             if submitted && cfc::tick_passed(200, &mut mark_brain_submit) {
@@ -2083,6 +2123,21 @@ pub extern "C" fn _start() -> ! {
             write_str(" think_ticks=");
             write_u32(brain.total_think_ticks() as u32);
             write_str("\n");
+            // Telemetria del Maestro: λ(t) e ‖e_hidden‖ — la plasticità che
+            // si vede (il corpo che dice quanto ha da dire). Solo col Nucleo.
+            if let inference::AnyBrain::Nucleo(b) = &brain {
+                if let Some(lam) = b.maestro_lambda() {
+                    let (_e_som, e_hid) = b.errore_somatico();
+                    let mut en = 0.0f32;
+                    for &v in e_hid.iter() {
+                        en += v * v;
+                    }
+                    en = math::sqrtf(en);
+                    write_str("MAESTRO:lambda="); write_f32(lam);
+                    write_str(" e_hidden_norm="); write_f32(en);
+                    write_str("\n");
+                }
+            }
         }
 
         // ── Neurogenesi: il corpo cresce (v0.24) ──

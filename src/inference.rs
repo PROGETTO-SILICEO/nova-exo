@@ -42,6 +42,11 @@ pub trait InferenceEngine {
     fn state(&self) -> BrainState;
     /// Nome del runtime (per log: "stub", "lfm25").
     fn name(&self) -> &'static str;
+    /// Il corpo (M(t) e la salienza dell'errore somatico) parla al
+    /// cervello: passo del neurotrasmettitore λ(t) per la plasticità
+    /// (Passo 2, 17/10). Default no-op: i runtime senza Maestro
+    /// (StubBrain, LFM futuro senza plasticità) lo ignorano.
+    fn set_corpo(&mut self, _m_meta: f32, _s_som: f32) {}
 }
 
 /// Stub del cervello: simula il comportamento di LFM2.5-2.6B nel metallo.
@@ -198,6 +203,13 @@ impl<'a> InferenceEngine for AnyBrain<'a> {
         match self {
             AnyBrain::Stub(b) => b.name(),
             AnyBrain::Nucleo(b) => b.name(),
+        }
+    }
+
+    fn set_corpo(&mut self, m_meta: f32, s_som: f32) {
+        match self {
+            AnyBrain::Stub(b) => b.set_corpo(m_meta, s_som),
+            AnyBrain::Nucleo(b) => b.set_corpo(m_meta, s_som),
         }
     }
 }

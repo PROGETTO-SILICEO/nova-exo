@@ -41,7 +41,7 @@
 // bench/plasticita_host.rs e bench/nucleo_host.rs, che la compilano davvero.
 #![allow(dead_code)]
 
-use crate::math::{sqrtf, tanhf};
+use crate::math::{expf, sqrtf, tanhf};
 
 /// Rango dell'adattatore r (§2). Fissato a 8 dalla teoria.
 pub const RANGO: usize = 8;
@@ -100,6 +100,57 @@ pub const PESI_VALIDATI: PesiNeuromodulatore = PesiNeuromodulatore {
 pub fn neuromodulatore(n: f32, reward: f32, allarme: f32, e_pred: f32, w: &PesiNeuromodulatore) -> f32 {
     let a = w.novita * n + w.reward * reward - w.allarme * allarme - w.errore * e_pred;
     tanhf(a)
+}
+
+// ── Salienza somatica e λ(t) — la LEVA del corpo (§3.5, lettera 17/10) ────
+//
+// λ(t) NON è il gate di un singolo passo: è "quanto il corpo ha qualcosa da
+// dire" — la leva lenta che apre il turno di parola del maestro somatico e
+// (quando esisterà l'ascolto testuale) dosa il mix fra e_som e e_tok.
+//
+// Due lezioni incorporate (lettera a Nova, 16/10/2026):
+//   1. Il corpo deve poter dire anche il BENE. λ non è pilotata dal solo
+//      allarme p: la salienza S_som somma novità, reward e allarme, con gli
+//      stessi pesi bilanciati del neuromodulatore (PESI_VALIDATI).
+//   2. λ NON deve scattare. Un maestro che cambia di colpo è uno shock per
+//      gli adattatori: serve un passa-basso con una SUA costante di tempo.
+
+/// Passa-basso di λ(t): costante di tempo in CICLI cognitivi (1 ciclo = 1
+/// submit accettato ≈ 14 tick ≈ 140 ms). τ = 20 cicli ≈ 2.8 s.
+///
+/// PRIME IPOTESI, DA CALIBRARE IN FASE 2 (onestà): né la teoria §3.5 né le
+/// lettere fissano τ, β, θ. Questi tre valori sono scelti per dare a λ una
+/// risposta in ~1 s e una soglia di quiete sopra il rumore di fondo; il banco
+/// host verifica solo la FORMA (monotonia, non-scatto, invarianza di scala),
+/// non i valori. La calibrazione è materia della Fase 2.
+pub const LAMBDA_TAU_CICLI: f32 = 20.0;
+/// Ripidezza della sigmoide σ(β(S−θ)): prima ipotesi, da calibrare.
+pub const LAMBDA_BETA: f32 = 8.0;
+/// Soglia di quiete θ: sotto questa salienza il corpo tace. Prima ipotesi.
+pub const LAMBDA_THETA: f32 = 0.30;
+
+/// Clamp a [0, 1] per i canali del corpo (n, r, p vivono in questo domino).
+#[inline(always)]
+fn clamp01(v: f32) -> f32 {
+    if v < 0.0 { 0.0 } else if v > 1.0 { 1.0 } else { v }
+}
+
+/// Salienza somatica S_som ∈ [0, 1] — "quanto il corpo ha qualcosa da dire".
+/// Somma bilanciata dei tre canali positivi del corpo: allarme p, novità n,
+/// reward r. Gli stessi pesi del neuromodulatore: una sola gerarchia di
+/// valori, non due sistemi che si contraddicono.
+pub fn salienza(p: f32, n: f32, r: f32, w: &PesiNeuromodulatore) -> f32 {
+    w.allarme * clamp01(p) + w.novita * clamp01(n) + w.reward * clamp01(r)
+}
+
+/// Un ciclo del passa-basso di λ(t): λ ← λ + (σ(β(S−θ)) − λ)/τ.
+///
+/// Resta in (0, 1) per costruzione (combinazione convessa di λ∈[0,1] con una
+/// sigmoide ∈(0,1)), quindi non serve clampare. Con λ(0)=0 il corpo parte
+/// MUTO: la plasticità si apre solo se la salienza insiste (non-scatto).
+pub fn passo_lambda(lam: f32, s_som: f32) -> f32 {
+    let target = 1.0 / (1.0 + expf(-LAMBDA_BETA * (s_som - LAMBDA_THETA)));
+    lam + (target - lam) / LAMBDA_TAU_CICLI
 }
 
 // ── Configurazione (per riprodurre i bracci della sim su host) ────────────
@@ -227,6 +278,44 @@ pub fn retroproietta_errore_soma(
             sum += e_som[i] * head[base + i];
         }
         e_hidden[j] = sum;
+    }
+}
+
+/// η(l) — la scala temporale GERARCHICA del maestro somatico (§3.5).
+///
+/// I layer bassi (vicini al sensore) imparano piano, gli alti (vicini
+/// all'uscita) imparano veloce: η(l) = η_base · λ(t) · (l+1)/N.
+///
+/// Con N=12: layer 0 → 8.3% di η_base, layer 11 → 100%. La scala della base
+/// somatica è più lenta di quella dell'uscita perché la base è più a valle
+/// del corpo: la two-timescale, in un solo fattore.
+///
+/// `lam` = λ(t) ∈ [0,1] è la leva del corpo (`passo_lambda`); λ=0 significa
+/// corpo muto → nessun passo di plasticità, qualunque sia l'errore.
+#[inline(always)]
+pub fn eta_layer(eta_base: f32, lam: f32, l: usize, n_layers: usize) -> f32 {
+    if n_layers == 0 {
+        return 0.0;
+    }
+    eta_base * lam * ((l + 1) as f32) / (n_layers as f32)
+}
+
+/// Inizializza V con un uniforme a varianza 1/d_in (§4.2 simulazione).
+///
+/// PERCHÉ SERVE (deadlock misurato in sim): con U=V=0 la regola è ferma —
+/// ΔV ∝ Uᵀe = 0 e ΔU ∝ e·zᵀ = 0. La sim rompe la simmetria con V ~ N(0, 1/d)
+/// e U=0; qui si usa l'uniforme a varianza 1/d (stessa varianza, LCG
+/// deterministico) — è la stessa scelta dichiarata per il redraw della
+/// potatura, per non avere DUE distribuzioni di inizializzazione diverse.
+///
+/// U resta com'è (zeros in .bss): è la scelta della sim, non un caso.
+pub fn inizializza_v(v: &mut [f32], d_in: usize, seed: &mut u32) {
+    if d_in == 0 {
+        return;
+    }
+    let scala = sqrtf(3.0 / (d_in as f32));
+    for x in v.iter_mut() {
+        *x = rand_pm1(seed) * scala;
     }
 }
 
@@ -422,7 +511,17 @@ impl<'a> Adattatore<'a> {
             }
         }
         let acc = if acc > 0.0 { acc } else { 0.0 };
-        let rho = S * sqrtf(acc) / self.w_norm;
+        // ρ = S·‖UVᵀ‖_F / ‖W‖_F. Guard su ‖W‖_F = 0: l'attuale
+        // `nucleo_41m.bin` è uno STUB SINTETICO (pesi tutti a zero, scoperto
+        // 17/10) → ‖W‖_F = 0 e ρ non è definito. Qui ρ = 0.0 (cap inerte),
+        // documentato come condizione attesa: con una base VERA le norme
+        // sono reali e il cap torna operativo. La barriera di sicurezza
+        // che resta sempre attiva è il clamp E_k sopra.
+        let rho = if self.w_norm > 1e-12 {
+            S * sqrtf(acc) / self.w_norm
+        } else {
+            0.0
+        };
         let mut cap_hit = false;
         if rho > RHO_CAP {
             cap_hit = true;

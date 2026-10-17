@@ -238,3 +238,162 @@ fn retroproiezione_sul_head_reale_del_nucleo() {
         lhs, rhs
     );
 }
+
+// ══════════════════════════════════════════════════════════════════════════
+// IL MAESTRO (Passo 2, 17/10/2026): ‖W‖_F, armatura, distribuzione (Opzione A)
+// ══════════════════════════════════════════════════════════════════════════
+
+/// Buffer-pesi sintetico valido (header corretto, pesi a zero) — come lo
+/// stub `nucleo_41m.bin` generato da pack_nucleo_bin.py.
+fn modello_sintetico() -> Vec<u8> {
+    let mut weights = vec![0u8; TOTAL_MODEL_BYTES];
+    weights[0..4].copy_from_slice(NUCLEO_MAGIC);
+    weights[4..8].copy_from_slice(&NUCLEO_VERSION.to_le_bytes());
+    weights
+}
+
+#[test]
+fn norma_q4_k_riproduce_il_riferimento_gguf_py() {
+    // Riferimenti indipendenti (gguf-py `dequantize`, parità 1:1, diff 0.0
+    // su 1/8/64/1024 blocchi — verificati il 17/10/2026):
+    //   blocco 0 di blk.0.ffn_gate.weight (144 B)      → 0.242118686…
+    //   primi 1024 blocchi dello stesso tensore (147 KB) → 7.91371887507…
+    let blk0 = include_bytes!("../testdata/lfm25_blk0_q4k.bin");
+    let n0 = tensor::norma_q4_k(blk0).expect("blocco Q4_K valido (144 B)");
+    assert!((n0 - 0.242118686).abs() < 1e-5, "norma blocco 0: {}", n0);
+
+    let big = include_bytes!("../testdata/q4k_1024blocchi_lfm25.bin");
+    assert_eq!(big.len(), 147_456, "1024 blocchi × 144 B");
+    let nbig = tensor::norma_q4_k(big).expect("1024 blocchi Q4_K validi");
+    assert!((nbig - 7.913718875).abs() < 1e-4, "norma 1024 blocchi: {}", nbig);
+
+    // Input non valido → errore, non panico.
+    assert!(tensor::norma_q4_k(&[]).is_err(), "vuoto → errore");
+    assert!(tensor::norma_q4_k(&[0u8; 145]).is_err(), "non multiplo di 144 → errore");
+}
+
+#[test]
+fn maestro_rifiuta_buffer_corto() {
+    let weights = modello_sintetico();
+    let mut corto = vec![0.0f32; 10];
+    let model = NucleoModel::parse(&weights).expect("buffer sintetico valido");
+    let mut scratch = NucleoScratch::new();
+    let mut brain = NucleoBrain::new(model, &mut scratch);
+
+    assert!(!brain.arma_maestro(&mut corto), "un buffer corto deve rifiutare l'armatura");
+    assert_eq!(brain.maestro_lambda(), None, "senza armatura il maestro è dormiente");
+}
+
+#[test]
+fn maestro_lambda_parte_da_zero_e_sale_col_corpo() {
+    let weights = modello_sintetico();
+    let mut adattatori = vec![0.0f32; N_LAYERS * nucleo::ADATTATORI_LAYER_FLOATS];
+    let model = NucleoModel::parse(&weights).expect("buffer sintetico valido");
+    let mut scratch = NucleoScratch::new();
+    let mut brain = NucleoBrain::new(model, &mut scratch);
+
+    assert!(brain.arma_maestro(&mut adattatori), "buffer alla misura della teoria");
+
+    // λ(0) = 0: il corpo parte MUTO (nessuna plasticità inventata a vuoto).
+    assert_eq!(brain.maestro_lambda(), Some(0.0), "λ deve partire da 0");
+
+    // Una percezione con salienza → λ sale, ma NON scatta (passa-basso).
+    brain.set_corpo(0.8, 0.9);
+    let lam1 = brain.maestro_lambda().expect("maestro armato");
+    assert!(lam1 > 0.0 && lam1 < 0.2, "il primo passo di λ deve essere piccolo: {}", lam1);
+
+    // Ciclo cognitivo completo: e_hidden finito, λ finito (nessun NaN).
+    assert!(brain.submit(&[0.3, -0.2, 0.5, 0.7]));
+    for _ in 0..N_LAYERS {
+        brain.tick();
+    }
+    let (_e_som, e_hid) = brain.errore_somatico();
+    assert_eq!(e_hid.len(), nucleo::DIM);
+    assert!(e_hid.iter().all(|v| v.is_finite()), "e_hidden deve essere finito");
+    let lam2 = brain.maestro_lambda().unwrap();
+    assert!(lam2.is_finite() && lam2 > 0.0 && lam2 <= 1.0, "λ finito e in (0,1]: {}", lam2);
+}
+
+#[test]
+fn opzione_a_muove_solo_wo_e_down() {
+    // Opzione A (17/10): ARMATI solo W_o e W_down; Gate/Up DORMIENTI.
+    // Su un modello a pesi nulli il forward produce x=y=e=0, quindi l'unico
+    // termine che agisce è la DECADENZA γ (§3.1) — che corre per Wo e Down
+    // nel forward e MAI per Gate/Up. È l'invariante strutturale da provare.
+    use nucleo::{DIM_PROIEZIONE, Proiezione, ADATTATORI_LAYER_FLOATS, DIM, N_FF, SEED_ADATTATORI};
+    const R: usize = plasticita::RANGO;
+    let n_adatt = N_LAYERS * ADATTATORI_LAYER_FLOATS;
+
+    // Offset (in float) delle V dentro un layer — stessa sequenza di split di
+    // AdattatoriLayer::nuovi: [uGate,vGate,uUp,vUp,uDown,vDown,uWo,vWo].
+    let (f, d) = (N_FF * R, DIM * R);
+    let off_v = [f, f + d + f, f + d + f + d + d, f + d + f + d + d + f + d];
+    let proiezioni = [Proiezione::Gate, Proiezione::Up, Proiezione::Down, Proiezione::Wo];
+
+    // "Atteso appena inizializzato": replica ESATTA di Maestro::inizializza_adattatori.
+    let mut atteso = vec![0.0f32; n_adatt];
+    let mut s = SEED_ADATTATORI | 1;
+    for l in 0..N_LAYERS {
+        let base = l * ADATTATORI_LAYER_FLOATS;
+        for (idx, p) in proiezioni.iter().enumerate() {
+            let k = *p as usize;
+            let d_in = DIM_PROIEZIONE[k].1;
+            let len = d_in * R;
+            let o = base + off_v[idx];
+            plasticita::inizializza_v(&mut atteso[o..o + len], d_in, &mut s);
+        }
+    }
+
+    // Esecuzione: arma, una percezione, un ciclo completo (12 layer).
+    let weights = modello_sintetico();
+    let mut adattatori = vec![0.0f32; n_adatt];
+    {
+        let model = NucleoModel::parse(&weights).expect("buffer sintetico valido");
+        let mut scratch = NucleoScratch::new();
+        let mut brain = NucleoBrain::new(model, &mut scratch);
+        assert!(brain.arma_maestro(&mut adattatori));
+        brain.set_corpo(0.9, 0.9);
+        assert!(brain.submit(&[0.3, -0.2, 0.5, 0.7]));
+        for _ in 0..N_LAYERS {
+            brain.tick();
+        }
+    } // il prestito `&mut adattatori` termina con il brain
+
+    // Tutto finito: la base sintetica (‖W‖_F = 0) NON deve generare NaN
+    // (il guard su w_norm in Adattatore::passo mette rho = 0.0).
+    assert!(adattatori.iter().all(|v| v.is_finite()), "nessun NaN con base sintetica");
+
+    // Invariante: Gate e Up restano IDENTICI all'iniziale (dormienti).
+    for l in 0..N_LAYERS {
+        let base = l * ADATTATORI_LAYER_FLOATS;
+        for idx in [0usize, 1] {
+            let k = proiezioni[idx] as usize;
+            let len = DIM_PROIEZIONE[k].1 * R;
+            let o = base + off_v[idx];
+            assert_eq!(
+                &adattatori[o..o + len],
+                &atteso[o..o + len],
+                "Gate/Up (l={}, proiezione {:?}) NON devono muoversi (Opzione A)",
+                l, proiezioni[idx]
+            );
+        }
+        // Le U di Gate e Up restano a zero (mai inizializzate né aggiornate).
+        let u_gate = base; // uGate è in testa al layer
+        assert!(adattatori[u_gate..u_gate + f].iter().all(|v| *v == 0.0));
+    }
+
+    // Invariante: Wo e Down SI sono mossi (decadenza γ nel forward).
+    let mut mossi = 0usize;
+    for l in 0..N_LAYERS {
+        let base = l * ADATTATORI_LAYER_FLOATS;
+        for idx in [2usize, 3] {
+            let k = proiezioni[idx] as usize;
+            let len = DIM_PROIEZIONE[k].1 * R;
+            let o = base + off_v[idx];
+            if adattatori[o..o + len] != atteso[o..o + len] {
+                mossi += 1;
+            }
+        }
+    }
+    assert_eq!(mossi, 2 * N_LAYERS, "Wo+Down devono essersi mossi in TUTTI i layer");
+}
