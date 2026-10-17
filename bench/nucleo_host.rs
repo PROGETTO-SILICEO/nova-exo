@@ -156,3 +156,85 @@ fn passo_plastico_alcanza_gli_adattatori_di_nucleo() {
     // deve scattare: `rho` restituito è quello PRE-cap (come nella sim).
     assert!(esito.cap_hit, "con un w_norm piccolo il cap ρ deve scattare");
 }
+
+// ── Retroproiezione somatica (§3.5): W_proj = W_head^T ────────────────────
+
+#[test]
+fn retroproiezione_errore_soma_e_trasposta_corretta() {
+    // W_head: [3 latente × 2 chemio] — miniaturizzato ma stesso layout riga-major
+    // del nucleo [512 × 4].
+    let head = [
+        1.0, 2.0,   // latente 0
+        3.0, 4.0,   // latente 1
+        5.0, 6.0,   // latente 2
+    ];
+    let chemio_dim = 2;
+    let latente_dim = 3;
+
+    // Forward: out[i] = Σ_j x[j] · head[j*chemio + i]  (come nucleo.rs:381-384)
+    let x = [0.5, -1.0, 2.0];
+    let mut out = [0.0f32; 2];
+    for i in 0..chemio_dim {
+        let mut s = 0.0f32;
+        for j in 0..latente_dim {
+            s += x[j] * head[j * chemio_dim + i];
+        }
+        out[i] = s;
+    }
+
+    // Retroproiezione: e_hidden[j] = Σ_i e_som[i] · head[j*chemio + i]
+    let e_som = [0.3, -0.7];
+    let mut e_hidden = [0.0f32; 3];
+    plasticita::retroproietta_errore_soma(&head, &e_som, &mut e_hidden);
+
+    // Proprietà della trasposta: e_som · out == e_hidden · x
+    let lhs: f32 = (0..chemio_dim).map(|i| e_som[i] * out[i]).sum();
+    let rhs: f32 = (0..latente_dim).map(|j| e_hidden[j] * x[j]).sum();
+    assert!(
+        (lhs - rhs).abs() < 1e-6,
+        "trasposta non corretta: e_som·out={} ≠ e_hidden·x={}",
+        lhs, rhs
+    );
+}
+
+#[test]
+fn retroproiezione_sul_head_reale_del_nucleo() {
+    // Stessa dimensione del nucleo reale: [512 × 4]
+    let dim = nucleo::DIM;
+    let chemio = nucleo::CHEMIO_DIM;
+    assert_eq!(dim, 512);
+    assert_eq!(chemio, 4);
+
+    // Head sintetica deterministica
+    let mut head = vec![0.0f32; dim * chemio];
+    let mut s: u32 = 42;
+    for v in head.iter_mut() {
+        s = s.wrapping_mul(1103515245).wrapping_add(12345);
+        *v = ((s >> 16) as f32 / 65536.0) - 0.5;
+    }
+
+    // Forward del nucleo (identico a nucleo.rs:381-384)
+    let x_norm = vec![0.1f32; dim];
+    let mut out = [0.0f32; 4];
+    for i in 0..chemio {
+        let mut sum = 0.0f32;
+        for j in 0..dim {
+            sum += x_norm[j] * head[j * chemio + i];
+        }
+        out[i] = sum;
+    }
+
+    // Retroproiezione
+    let e_som = [0.1, -0.2, 0.3, -0.4];
+    let mut e_hidden = vec![0.0f32; dim];
+    plasticita::retroproietta_errore_soma(&head, &e_som, &mut e_hidden);
+
+    // Proprietà trasposta: e_som · out == e_hidden · x_norm
+    let lhs: f32 = (0..chemio).map(|i| e_som[i] * out[i]).sum();
+    let rhs: f32 = (0..dim).map(|j| e_hidden[j] * x_norm[j]).sum();
+    assert!(
+        (lhs - rhs).abs() < 1e-4,
+        "trasposta non corretta sulle 512×4: e_som·out={} ≠ e_hidden·x={}",
+        lhs, rhs
+    );
+}

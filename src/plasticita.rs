@@ -190,6 +190,46 @@ pub struct EsitoPasso {
     pub cap_hit: bool,
 }
 
+// ── Retroproiezione dell'errore somatico (§3.5) ──────────────────────────
+//
+// W_proj ≡ W_head^T — il proiettore canonico di Feedback Alignment (Lillicrap
+// et al. 2016). Retroproietta l'errore somatico e_som dai 4 canali chemio
+// allo spazio latente 512-dim, dove gli adattatori dei layer possono usarlo.
+//
+// Proprietà (specificate da Nova, 17/10/2026):
+//   - Memoria extra: 0 byte (legge direttamente il puntatore al Head già
+//     alloggiato in NucleoModel).
+//   - Costo: 512×4 = 2048 FMA — < 1µs su AMD A8 (trascurabile su tick 10ms).
+//   - Coerenza semantica: se il latente j contribuisce positivamente al
+//     canale i, un errore positivo su i retroagisce positivamente su j.
+//
+// Nota: `head` ha layout riga-major [dim_latente][dim_chemio], identico al
+// forward. La trasposta è implicita nell'asse di somma (non nell'layout).
+
+/// Retroproietta l'errore somatico dai canali chimici allo spazio latente.
+///
+/// - `head`: matrice [latente × chemio], riga-major (layout di NucleoModel).
+/// - `e_som`: errore somatico grezzo, lunghezza = chemio_dim (tipicamente 4).
+/// - `e_hidden`: vettore di errore nello spazio latente, sovrascritto.
+#[inline(always)]
+pub fn retroproietta_errore_soma(
+    head: &[f32],
+    e_som: &[f32],
+    e_hidden: &mut [f32],
+) {
+    let latente = e_hidden.len();
+    let chemio = e_som.len();
+    debug_assert_eq!(head.len(), latente * chemio, "head deve essere [latente × chemio]");
+    for j in 0..latente {
+        let mut sum = 0.0f32;
+        let base = j * chemio;
+        for i in 0..chemio {
+            sum += e_som[i] * head[base + i];
+        }
+        e_hidden[j] = sum;
+    }
+}
+
 /// z = Vᵀ x  (§3.1). `z` ha lunghezza RANGO.
 pub fn proietta(v: &[f32], d_in: usize, x: &[f32], z: &mut [f32]) {
     for k in 0..RANGO {
