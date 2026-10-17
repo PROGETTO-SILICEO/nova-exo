@@ -33,6 +33,7 @@ mod omeostasi;
 mod paging;
 mod pain;
 mod pci;
+mod plasticita;
 mod predictor;
 mod ps2;
 mod riflesso;

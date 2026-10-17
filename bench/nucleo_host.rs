@@ -13,7 +13,11 @@ mod math {
     pub fn expf(x: f32) -> f32 { x.exp() }
     pub fn powf(x: f32, y: f32) -> f32 { x.powf(y) }
     pub fn sincosf(x: f32) -> (f32, f32) { (x.sin(), x.cos()) }
+    pub fn tanhf(x: f32) -> f32 { x.tanh() }
 }
+
+#[path = "../src/plasticita.rs"]
+mod plasticita;
 
 #[path = "../src/tensor.rs"]
 mod tensor;
@@ -99,4 +103,56 @@ fn parse_and_tick_nucleo_brain() {
     brain.tick(); // ticks_left = 0 -> torna Idle
     assert_eq!(brain.state(), BrainState::Idle);
     assert_eq!(brain.total_think_ticks(), 12);
+}
+
+// ── Plasticità (Fase 1): collegamento con Il Nucleo ──────────────────────
+
+#[test]
+fn adattatori_layer_hanno_il_layout_della_teoria() {
+    // §2.3: 57.344 float = 229.376 B per layer; 12 layer = 2.752.512 B ≈ 2,625 MiB
+    assert_eq!(nucleo::ADATTATORI_LAYER_FLOATS, 57_344);
+    assert_eq!(nucleo::ADATTATORI_LAYER_BYTES, 229_376);
+    assert_eq!(nucleo::ADATTATORI_TOTALI_BYTES, 2_752_512);
+    // (d_out, d_in) delle proiezioni plastiche
+    assert_eq!(nucleo::DIM_PROIEZIONE[nucleo::Proiezione::Wo as usize], (512, 512));
+    assert_eq!(nucleo::DIM_PROIEZIONE[nucleo::Proiezione::Down as usize], (512, 1536));
+    assert_eq!(nucleo::DIM_PROIEZIONE[nucleo::Proiezione::Gate as usize], (1536, 512));
+}
+
+#[test]
+fn buffer_corto_non_fa_adattatori() {
+    let mut corto = vec![0.0f32; nucleo::ADATTATORI_LAYER_FLOATS - 1];
+    assert!(nucleo::AdattatoriLayer::nuovi(&mut corto).is_none(), "un buffer corto deve essere rifiutato");
+}
+
+#[test]
+fn passo_plastico_alcanza_gli_adattatori_di_nucleo() {
+    // init deterministica del buffer (U e V non nulli: la struttura li deve toccare)
+    let mut buf = vec![0.0f32; nucleo::ADATTATORI_LAYER_FLOATS];
+    let mut s: u32 = 7;
+    for i in 0..buf.len() {
+        s = s.wrapping_mul(1103515245).wrapping_add(12345);
+        buf[i] = ((s >> 16) as f32 / 65536.0 - 0.5) / (512.0f32).sqrt();
+    }
+    let prima: f32 = buf.iter().map(|v| v * v).sum();
+    let mut z = [0.0f32; plasticita::RANGO];
+    let mut ute = [0.0f32; plasticita::RANGO];
+    let x = vec![0.5f32; 512];
+    let e = vec![0.2f32; 512];
+
+    let esito = {
+        let mut ad = nucleo::AdattatoriLayer::nuovi(&mut buf).expect("buffer alla misura della teoria");
+        // l'uscita plastica della proiezione Wo deve essere non nulla
+        let mut y = [0.0f32; 512];
+        ad.predici(nucleo::Proiezione::Wo, &x, &mut z, &mut y);
+        assert!(y.iter().any(|v| *v != 0.0), "con V inizializzata la predizione plastica Wo non è nulla");
+        // un passo della regola deve raggiungere davvero le matrici
+        ad.passo(nucleo::Proiezione::Wo, &x, &e, 1.0, 0.3, &plasticita::V21, 1.0, 0.0, &mut z, &mut ute)
+    };
+    let dopo: f32 = buf.iter().map(|v| v * v).sum();
+    assert!(dopo != prima, "il passo di plasticità deve aver modificato gli adattatori di W_o");
+    assert!(esito.rho.is_finite(), "ρ finito");
+    // con w_norm = 1.0 (sottovalutato rispetto al vero ‖W_o‖ ≈ 22,6) il cap ρ
+    // deve scattare: `rho` restituito è quello PRE-cap (come nella sim).
+    assert!(esito.cap_hit, "con un w_norm piccolo il cap ρ deve scattare");
 }

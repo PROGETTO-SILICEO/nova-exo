@@ -25,3 +25,8 @@ pub fn powf(x: f32, y: f32) -> f32 {
 pub fn sincosf(x: f32) -> (f32, f32) {
     libm::sincosf(x)
 }
+
+/// Tangente iperbolica (no_std). Usata dal neuromodulatore (plasticita.rs).
+pub fn tanhf(x: f32) -> f32 {
+    libm::tanhf(x)
+}

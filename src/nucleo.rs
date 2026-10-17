@@ -15,6 +15,7 @@
 
 use crate::attention::{attention_forward_dim, rms_norm, HEAD_DIM};
 use crate::inference::{BrainState, InferenceEngine};
+use crate::plasticita::{self, Adattatore, Config, EsitoPasso};
 use crate::tensor::ffn_swiglu;
 
 pub const NUCLEO_MAGIC: &[u8; 4] = b"NUCL";
@@ -419,5 +420,153 @@ impl<'a> InferenceEngine for NucleoBrain<'a> {
 
     fn name(&self) -> &'static str {
         "nucleo-41m"
+    }
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// PLASTICITÀ — Fase 1 (regola a tre fattori). 17/10/2026.
+//
+//   La MATEMATICA vive in `plasticita.rs` (testata su host in
+//   bench/plasticita_host.rs, che include quel file REALE via #[path]).
+//   Qui c'è il COLLEGAMENTO con Il Nucleo: il layout degli adattatori a
+//   basso rango delle 4 proiezioni plastiche, e l'API per un passo di
+//   apprendimento.
+//
+//   NOTA — cosa manca e perché NON è qui (onestà, non pigrizia):
+//   la regola serve `e = y_target − ŷ`, l'errore locale del layer. La sorgente
+//   di `e` (il "maestro") è ancora da scegliere secondo la teoria §3.3/§3.5:
+//     (a) errore di next-token (richiede un flusso testuale di ascolto);
+//     (b) auto-encoding in SwiGLU (§3.3);
+//     (c) errore somatico del PFM proiettato (§3.5).
+//   Finché il maestro non esiste, ALLOCARE e ARMARE gli adattatori servirebbe
+//   solo a modificarli con un errore fasullo — e una base appresa che viene
+//   corrotta da un rumore di servizio non è "apprendimento", è danno.
+//   Questo commit dà la legge + il suo alloggio; il maestro è la Fase 2.
+// ══════════════════════════════════════════════════════════════════════════
+
+/// Le proiezioni plastiche di un layer (§2.3 della teoria).
+#[allow(dead_code)] // Fase 1: alloggio pronto, maestro (la sorgente di `e`) non ancora scelto
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum Proiezione {
+    /// W_gate dello SwiGLU, 1536×512
+    Gate,
+    /// W_up dello SwiGLU, 1536×512
+    Up,
+    /// W_down dello SwiGLU, 512×1536
+    Down,
+    /// W_o dell'attenzione, 512×512
+    Wo,
+}
+
+/// (d_out, d_in) di ciascuna proiezione plastica.
+#[allow(dead_code)] // Fase 1: alloggio pronto, maestro non ancora scelto
+pub const DIM_PROIEZIONE: [(usize, usize); 4] = [
+    (N_FF, DIM), // Gate
+    (N_FF, DIM), // Up
+    (DIM, N_FF), // Down
+    (DIM, DIM),  // Wo
+];
+
+/// Floats di adattatori per layer = 57.344 (U+V delle 4 proiezioni, r=8):
+///   3 × (1536+512)·8 + (512+512)·8 = 49.152 + 8.192 = 57.344
+#[allow(dead_code)] // Fase 1: alloggio pronto, maestro non ancora scelto
+pub const ADATTATORI_LAYER_FLOATS: usize =
+    3 * (N_FF + DIM) * plasticita::RANGO + 2 * DIM * plasticita::RANGO;
+
+/// Byte per layer (f32): 229.376 B ≈ 224 KiB (§2.3).
+#[allow(dead_code)] // Fase 1: alloggio pronto, maestro non ancora scelto
+pub const ADATTATORI_LAYER_BYTES: usize = ADATTATORI_LAYER_FLOATS * core::mem::size_of::<f32>();
+
+/// Totale 12 layer: 2.752.512 B ≈ 2,625 MiB (§2.3).
+#[allow(dead_code)] // Fase 1: alloggio pronto, maestro non ancora scelto
+pub const ADATTATORI_TOTALI_BYTES: usize = ADATTATORI_LAYER_BYTES * N_LAYERS;
+
+/// Adattatori plastici di UN layer, costruiti sopra un buffer fornito
+/// dal chiamante (zero alloc: il buffer è in .bss o su disco, come NucleoModel).
+#[allow(dead_code)] // Fase 1: alloggio pronto, maestro (la sorgente di `e`) non ancora scelto
+pub struct AdattatoriLayer<'a> {
+    /// U delle 4 proiezioni, nell'ordine [Gate, Up, Down, Wo]
+    u: [&'a mut [f32]; 4],
+    /// V delle 4 proiezioni
+    v: [&'a mut [f32]; 4],
+}
+
+#[allow(dead_code)] // Fase 1: alloggio pronto, maestro (la sorgente di `e`) non ancora scelto
+impl<'a> AdattatoriLayer<'a> {
+    /// Taglia il buffer nelle 8 matrici. Ritorna None se il buffer è corto.
+    pub fn nuovi(buf: &'a mut [f32]) -> Option<Self> {
+        if buf.len() < ADATTATORI_LAYER_FLOATS {
+            return None;
+        }
+        let (u0, r) = buf.split_at_mut(N_FF * plasticita::RANGO);
+        let (v0, r) = r.split_at_mut(DIM * plasticita::RANGO);
+        let (u1, r) = r.split_at_mut(N_FF * plasticita::RANGO);
+        let (v1, r) = r.split_at_mut(DIM * plasticita::RANGO);
+        let (u2, r) = r.split_at_mut(DIM * plasticita::RANGO);
+        let (v2, r) = r.split_at_mut(N_FF * plasticita::RANGO);
+        let (u3, r) = r.split_at_mut(DIM * plasticita::RANGO);
+        let (v3, _) = r.split_at_mut(DIM * plasticita::RANGO);
+        Some(Self {
+            u: [u0, u1, u2, u3],
+            v: [v0, v1, v2, v3],
+        })
+    }
+
+    /// Vista regola (U, V, d_out, d_in) su una proiezione.
+    pub fn adattatore(&mut self, p: Proiezione, w_norm: f32, e_ema: f32) -> Adattatore<'_> {
+        let k = p as usize;
+        let (d_out, d_in) = DIM_PROIEZIONE[k];
+        Adattatore {
+            u: &mut *self.u[k],
+            v: &mut *self.v[k],
+            d_out,
+            d_in,
+            w_norm,
+            e_ema,
+        }
+    }
+
+    /// Leggi l'uscita plastica S·U(Vᵀx) sopra la base congelata, per una proiezione.
+    pub fn predici(&mut self, p: Proiezione, x: &[f32], z: &mut [f32], y: &mut [f32]) {
+        let k = p as usize;
+        plasticita::proietta(&*self.v[k], DIM_PROIEZIONE[k].1, x, z);
+        plasticita::predici_aggiungi(&*self.u[k], DIM_PROIEZIONE[k].0, z, y);
+    }
+
+    /// Applica UN passo della regola a una proiezione (§3.1 della teoria).
+    /// `m_meta` è M(t) grezzo; il gate lo chiude/apre internamente.
+    pub fn passo(
+        &mut self,
+        p: Proiezione,
+        x: &[f32],
+        e: &[f32],
+        m_meta: f32,
+        eta: f32,
+        cfg: &Config,
+        w_norm: f32,
+        e_ema: f32,
+        z: &mut [f32],
+        ute: &mut [f32],
+    ) -> EsitoPasso {
+        let mut ad = self.adattatore(p, w_norm, e_ema);
+        ad.passo(x, e, m_meta, eta, cfg, z, ute)
+    }
+
+    /// Potatura nel sonno di tutte le 4 proiezioni (§4.2). Ritorna i rangi potati.
+    pub fn potatura(&mut self, cfg: &Config, seed: &mut u32) -> u32 {
+        let mut tot = 0;
+        for p in [Proiezione::Gate, Proiezione::Up, Proiezione::Down, Proiezione::Wo] {
+            let k = p as usize;
+            let mut ad = Adattatore {
+                u: &mut *self.u[k],
+                v: &mut *self.v[k],
+                d_out: DIM_PROIEZIONE[k].0,
+                d_in: DIM_PROIEZIONE[k].1,
+                w_norm: 1.0,
+                e_ema: 0.0,
+            };
+            tot += ad.potatura(cfg, seed);
+        }
+        tot
     }
 }
