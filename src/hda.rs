@@ -587,3 +587,6 @@ pub fn via() -> u8 { unsafe { VIA_NODO } }
 pub fn probe() -> [u8; 4] { unsafe { PROBE } }
 pub fn vendor_device() -> (u16, u16) { unsafe { (VENDOR, DEVICE) } }
 pub fn gcap() -> u16 { unsafe { GCAP } }
+/// Maschera dei codec presenti (bit N = codec N su STATESTS). Per la GUI:
+/// sul Lenovo ci sono DUE codec (HDMI + Realtek) e va visto quale risponde.
+pub fn codec_mask() -> u16 { unsafe { CODEC_MASK } }

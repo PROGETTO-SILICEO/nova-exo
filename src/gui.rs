@@ -258,6 +258,27 @@ pub unsafe fn print_f32(val: f32, color: u32) {
     print_u32(frac_part, color);
 }
 
+/// Stampa un valore in esadecimale minuscolo con `digits` cifre fisse (padding
+/// di zeri): `print_hex_digits(0x0233, 4)` → "0233". Per la diagnostica.
+pub unsafe fn print_hex_digits(v: u64, digits: usize, color: u32) {
+    let mut buf = [0u8; 16];
+    let n = crate::hexutil::write_hex_digits(v, digits, &mut buf);
+    for &c in &buf[..n] {
+        draw_char(CURSOR_X, CURSOR_Y, c, color);
+        CURSOR_X += 9;
+    }
+}
+
+/// Stampa un valore in esadecimale minuscolo SENZA zeri iniziali (`0x1b` → "1b").
+pub unsafe fn print_hex_min(v: u64, color: u32) {
+    let mut buf = [0u8; 16];
+    let n = crate::hexutil::write_hex_min(v, &mut buf);
+    for &c in &buf[..n] {
+        draw_char(CURSOR_X, CURSOR_Y, c, color);
+        CURSOR_X += 9;
+    }
+}
+
 /// Imposta il cursore
 pub unsafe fn set_cursor(x: usize, y: usize) {
     CURSOR_X = x;
@@ -352,8 +373,9 @@ pub unsafe fn render_vitals(
     if !FB_READY { return; }
 
     // Pulizia mirata: solo l'area usata. Il pannello e' cresciuto (5 cellule +
-    // i nuovi organi + le righe di stato) -> 0..204. NON un clear pieno.
-    for y in 0..204 {
+    // i nuovi organi + le righe di stato + la diagnostica probe) -> 0..224.
+    // NON un clear pieno.
+    for y in 0..224 {
         let row_off = y * FB_PITCH;
         for x in 0..420 {
             let off = row_off + x * 4;
@@ -412,8 +434,69 @@ pub unsafe fn render_vitals(
     print_str("TATTO ESTESO ", COL_DIM);
     print_str(if gesto { "GESTO" } else { "-" }, if gesto { COL_WHITE } else { COL_DIM });
 
+    // ── DIAGNOSTICA VISIBILE (il Lenovo non ha seriale) ──
+    // A che stadio si ferma la probe HDA, e quale via prende la temperatura.
+    // Sola LETTURA degli stati già calcolati: nessuna logica di scoperta qui.
+    set_cursor(10, y + 12);
+    print_str("HDA p=", COL_DIM);
+    {
+        let probe = crate::hda::probe();
+        if probe[0] == 0 {
+            print_str("--", COL_RED);
+        } else {
+            let mut buf = [0u8; 12];
+            let n = crate::hexutil::write_probe_digits(probe, &mut buf);
+            for &c in &buf[..n] {
+                draw_char(CURSOR_X, CURSOR_Y, c, COL_WHITE);
+                CURSOR_X += 9;
+            }
+        }
+    }
+    print_str(" c=", COL_DIM);
+    print_hex_min(crate::hda::codec_mask() as u64, COL_WHITE);
+    print_str(" id=", COL_DIM);
+    {
+        let (vend, devi) = crate::hda::vendor_device();
+        print_hex_digits(vend as u64, 4, COL_WHITE);
+        print_str(":", COL_DIM);
+        print_hex_digits(devi as u64, 4, COL_WHITE);
+    }
+    print_str(" v=", COL_DIM);
+    {
+        let via = crate::hda::via();
+        if via == 0xFF {
+            print_str("--", COL_RED);
+        } else {
+            print_hex_min(via as u64, COL_WHITE);
+        }
+    }
+
+    set_cursor(10, y + 22);
+    print_str("TEMP via=", COL_DIM);
+    {
+        let dg = crate::intero::diagnostica();
+        print_str(crate::intero::nome_via(dg.via),
+                  if dg.temp.is_some() { COL_GREEN } else { COL_DIM });
+        if dg.via == crate::intero::VIA_AMD {
+            print_str(" raw=0x", COL_DIM);
+            print_hex_digits(dg.raw as u64, 8, COL_WHITE);
+        }
+        match dg.temp {
+            Some(t) => {
+                print_str(" -> ", COL_DIM);
+                print_u32(t as u32, COL_GREEN);
+                print_str("C", COL_GREEN);
+            }
+            None => {
+                if dg.via != crate::intero::VIA_NESSUNA {
+                    print_str(" (nessuna)", COL_RED);
+                }
+            }
+        }
+    }
+
     // Volontà
-    y += 18;
+    y += 36;
     set_cursor(10, y);
     print_str("VOGLIO:", COL_PURPLE);
     set_cursor(70, y);

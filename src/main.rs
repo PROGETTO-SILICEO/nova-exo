@@ -2347,8 +2347,8 @@ pub extern "C" fn _start() -> ! {
                         fam_gui,
                         inference::describe_state(brain.state()),
                     );
-                    // Riga di rete VIVA (sotto il pannello, 0..204).
-                    gui::set_cursor(10, 178);
+                    // Riga di rete VIVA (sotto il pannello, 0..224).
+                    gui::set_cursor(10, 196);
                     gui::print_str("NET tx=", gui::COL_DIM);
                     gui::print_u32(rtl::TX_OK as u32, gui::COL_GREEN);
                     gui::print_str(" xerr=", gui::COL_DIM);
@@ -2357,14 +2357,14 @@ pub extern "C" fn _start() -> ! {
                     gui::print_u32(rx::PKTS as u32, gui::COL_CYAN);
                     // Riga OMEOSTASI (organo autonomo) + il riflesso: visibili
                     // anche senza seriale (il Lenovo non ha seriale).
-                    gui::set_cursor(10, 194);
+                    gui::set_cursor(10, 212);
                     gui::print_str("OMEO mem=", gui::COL_DIM);
                     gui::print_u32((mem_omeo * 100.0) as u32, gui::COL_DIM);
                     gui::print_str("% ventola=", gui::COL_DIM);
                     let vent = attuatori.acceso("ventola");
                     gui::print_str(if vent { "ON" } else { "OFF" },
                                    if vent { gui::COL_WHITE } else { gui::COL_DIM });
-                    gui::set_cursor(230, 194);
+                    gui::set_cursor(230, 212);
                     if soprassalto.in_refrattario() {
                         gui::print_str("SOPRASSALTO", gui::COL_WHITE);
                     } else {

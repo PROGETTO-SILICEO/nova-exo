@@ -18,7 +18,7 @@ mod pci {
     pub fn pci_config_read(_b: u8, _s: u8, _f: u8, _o: u8) -> u32 { 0 }
 }
 
-use intero::{family_from_eax, tctl_da_raw, temperatura_da};
+use intero::{family_from_eax, nome_via, tctl_da_raw, temperatura_da, VIA_AMD, VIA_INTEL, VIA_NESSUNA};
 
 // ── Intel (MSR) ────────────────────────────────────────────────────────────
 
@@ -102,4 +102,14 @@ fn famiglia_intel_e_amd() {
     // AMD Zen: family 17h = base 0xF + ext 2.
     let zen = (0xFu32 << 8) | (2u32 << 20);
     assert_eq!(family_from_eax(zen), 0x11);
+}
+
+#[test]
+fn nome_via_per_la_gui() {
+    // La GUI mostra quale via è stata presa: il nome deve essere stabile.
+    assert_eq!(nome_via(VIA_INTEL), "intel");
+    assert_eq!(nome_via(VIA_AMD), "amd");
+    assert_eq!(nome_via(VIA_NESSUNA), "nessuno");
+    // Un valore sconosciuto non deve mentire su una via: "nessuno".
+    assert_eq!(nome_via(99), "nessuno");
 }

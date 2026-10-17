@@ -16,7 +16,7 @@
 #[path = "../src/hexutil.rs"]
 mod hexutil;
 
-use hexutil::{parse_hex64, write_hex64_to};
+use hexutil::{parse_hex64, write_hex64_to, write_hex_digits, write_hex_min, write_probe_digits};
 
 /// Rende `v` come le 16 cifre che il kernel stampa su seriale.
 fn hex16(v: u64) -> String {
@@ -110,4 +110,56 @@ fn stampa_arrotonda_e_verifica() {
     for v in [0xDEADBEEFu64, 0x1_0000_0000u64, 0xF0F0_F0F0u64] {
         assert_eq!(parse_hex64(hex16(v).as_bytes()), Some(v));
     }
+}
+
+// ── Diagnostica GUI (hex per il pannello) ──────────────────────────────────
+
+/// Rende i byte scritti da una funzione di formattazione come stringa.
+fn s(buf: &[u8], n: usize) -> String {
+    String::from_utf8_lossy(&buf[..n]).into_owned()
+}
+
+#[test]
+fn hex_digits_a_larghezza_fissa_minuscolo() {
+    let mut b = [0u8; 16];
+    let n = write_hex_digits(0x0233, 4, &mut b);
+    assert_eq!(s(&b, n), "0233");
+    let n = write_hex_digits(0x10EC, 4, &mut b);
+    assert_eq!(s(&b, n), "10ec");
+    let n = write_hex_digits(0x2A000000, 8, &mut b);
+    assert_eq!(s(&b, n), "2a000000");
+    let n = write_hex_digits(0, 2, &mut b);
+    assert_eq!(s(&b, n), "00");
+    // Le cifre richieste sono limitate a 16 (64 bit).
+    let n = write_hex_digits(u64::MAX, 20, &mut b);
+    assert_eq!(s(&b, n), "ffffffffffffffff");
+}
+
+#[test]
+fn hex_min_senza_zeri_iniziali() {
+    let mut b = [0u8; 16];
+    let n = write_hex_min(0x08, &mut b);
+    assert_eq!(s(&b, n), "8");
+    let n = write_hex_min(0x23, &mut b);
+    assert_eq!(s(&b, n), "23");
+    let n = write_hex_min(0x1b, &mut b);
+    assert_eq!(s(&b, n), "1b");
+    let n = write_hex_min(0, &mut b);
+    assert_eq!(s(&b, n), "0");
+    let n = write_hex_min(0xFFFF, &mut b);
+    assert_eq!(s(&b, n), "ffff");
+}
+
+#[test]
+fn probe_digits_concatenate_in_decimale() {
+    let mut b = [0u8; 12];
+    // found=1, reset=1, codec=1, addr=0 → "1110" (come l'esempio GUI).
+    let n = write_probe_digits([1, 1, 1, 0], &mut b);
+    assert_eq!(s(&b, n), "1110");
+    let n = write_probe_digits([1, 0, 0, 3], &mut b);
+    assert_eq!(s(&b, n), "1003");
+    let n = write_probe_digits([1, 1, 1, 15], &mut b);
+    assert_eq!(s(&b, n), "11115");
+    let n = write_probe_digits([0, 0, 0, 255], &mut b);
+    assert_eq!(s(&b, n), "000255");
 }

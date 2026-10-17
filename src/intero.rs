@@ -136,22 +136,59 @@ fn smn_read(addr: u32) -> u32 {
 }
 
 /// Temperatura su AMD (famiglia 15h/16h) via SMN. Altre famiglie: non
-/// implementate → None (onesto, non si indovina).
-fn temperatura_amd() -> Option<f32> {
+/// implementate → None (onesto, non si indovina). Ritorna anche il valore
+/// grezzo letto, così la GUI può mostrarlo (il Lenovo non ha seriale).
+fn temperatura_amd() -> (u32, Option<f32>) {
     match cpu_family() {
-        0x15 | 0x16 => tctl_da_raw(smn_read(AMD_SMN_THM_TCON_CUR_TMP)),
-        _ => None,
+        0x15 | 0x16 => {
+            let raw = smn_read(AMD_SMN_THM_TCON_CUR_TMP);
+            (raw, tctl_da_raw(raw))
+        }
+        _ => (0, None),
+    }
+}
+
+// ── Diagnostica per la GUI ─────────────────────────────────────────────────
+// Il Lenovo non ha seriale: se la probe mente, va VISTO a schermo. Qui si
+// registra quale via ha preso l'ultima `temperatura()` e — per AMD — il valore
+// grezzo SMN letto (0 se la lettura non è stata fatta o è muta).
+pub const VIA_NESSUNA: u8 = 0;
+pub const VIA_INTEL: u8 = 1;
+pub const VIA_AMD: u8 = 2;
+
+#[derive(Clone, Copy)]
+pub struct Diagnostica {
+    pub via: u8,           // VIA_*
+    pub raw: u32,          // AMD: ultimo valore grezzo SMN letto
+    pub temp: Option<f32>, // ultima temperatura decodificata (None = nessuna)
+}
+
+static mut DIAG: Diagnostica = Diagnostica { via: VIA_NESSUNA, raw: 0, temp: None };
+
+/// Diagnostica dell'ultima `temperatura()` (aggiornata ad ogni chiamata).
+pub fn diagnostica() -> Diagnostica { unsafe { DIAG } }
+
+/// Nome della via per la GUI: `intel` / `amd` / `nessuno`.
+pub fn nome_via(via: u8) -> &'static str {
+    match via {
+        VIA_INTEL => "intel",
+        VIA_AMD => "amd",
+        _ => "nessuno",
     }
 }
 
 /// La temperatura del corpo, se c'è un sensore. None = non c'è (onesto).
 /// ⚠️ Legge gli MSR SOLO su Intel (altrove non esistono → #GP); su AMD usa SMN.
+/// Ad ogni chiamata aggiorna la `diagnostica()` visibile in GUI.
 pub fn temperatura() -> Option<f32> {
-    if vendor_intel() {
-        return temperatura_da(rdmsr(MSR_THERM_TARGET), rdmsr(MSR_THERM_STATUS));
-    }
-    if vendor_amd() {
-        return temperatura_amd();
-    }
-    None
+    let (via, raw, temp) = if vendor_intel() {
+        (VIA_INTEL, 0u32, temperatura_da(rdmsr(MSR_THERM_TARGET), rdmsr(MSR_THERM_STATUS)))
+    } else if vendor_amd() {
+        let (raw, t) = temperatura_amd();
+        (VIA_AMD, raw, t)
+    } else {
+        (VIA_NESSUNA, 0u32, None)
+    };
+    unsafe { DIAG = Diagnostica { via, raw, temp }; }
+    temp
 }

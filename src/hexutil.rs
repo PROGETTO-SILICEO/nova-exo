@@ -83,3 +83,67 @@ pub fn write_hex64_to(v: u64, out: &mut [u8; 16]) -> usize {
     }
     16
 }
+
+/// Scrive le `digits` cifre esadecimali MINUSCOLE (senza prefisso) dei bit
+/// bassi di `v` in `out`. Serve alla GUI, che usa lo stile `10ec:0233`.
+/// `digits` viene limitato a 16 (64 bit) e a `out.len()`.
+pub fn write_hex_digits(v: u64, digits: usize, out: &mut [u8]) -> usize {
+    const CIFRE: &[u8; 16] = b"0123456789abcdef";
+    let digits = digits.min(16);
+    let n = digits.min(out.len());
+    for i in 0..n {
+        let shift = 4 * (digits - 1 - i);
+        out[i] = CIFRE[((v >> shift) & 0xF) as usize];
+    }
+    n
+}
+
+/// Scrive `v` in esadecimale minuscolo SENZA zeri iniziali (`0` → "0").
+/// È la forma compatta dei nodi del codec (`a=8`, `v=23`, `pin=1b`).
+pub fn write_hex_min(v: u64, out: &mut [u8; 16]) -> usize {
+    const CIFRE: &[u8; 16] = b"0123456789abcdef";
+    let mut iniziato = false;
+    let mut n = 0;
+    for i in (0..16).rev() {
+        let d = ((v >> (4 * i)) & 0xF) as usize;
+        if d != 0 {
+            iniziato = true;
+        }
+        if iniziato {
+            out[n] = CIFRE[d];
+            n += 1;
+        }
+    }
+    if n == 0 {
+        out[0] = b'0';
+        n = 1;
+    }
+    n
+}
+
+/// Scrive `b` in decimale (1..3 cifre) e ritorna quante ne ha scritte.
+fn write_dec_byte(b: u8, out: &mut [u8]) -> usize {
+    let mut n = 0;
+    if b >= 100 {
+        out[n] = b'0' + b / 100;
+        n += 1;
+    }
+    if b >= 10 {
+        out[n] = b'0' + (b / 10) % 10;
+        n += 1;
+    }
+    out[n] = b'0' + b % 10;
+    n += 1;
+    n
+}
+
+/// Le 4 cifre di PROBE (found/reset_ok/codec_ok/codec_addr) concatenate in
+/// decimale — la forma compatta pensata per la GUI (`p=1110`). Ritorna i byte
+/// scritti (max 12: quattro valori da 3 cifre).
+pub fn write_probe_digits(probe: [u8; 4], out: &mut [u8; 12]) -> usize {
+    let mut n = 0;
+    for &b in &probe {
+        n += write_dec_byte(b, &mut out[n..]);
+    }
+    n
+}
