@@ -27,3 +27,4 @@ venv/
 
 # ── Dataset / esperimenti grossi ─────────────────────────────────
 /experiments/
+.superpowers/
