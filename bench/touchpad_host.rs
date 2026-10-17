@@ -9,7 +9,7 @@
 #[path = "../src/ps2.rs"]
 mod ps2;
 
-use ps2::{decodifica, Assemblatore};
+use ps2::{decodifica, destinazione, Assemblatore, Porta};
 
 fn p(flags: u8, x: u8, y: u8) -> ps2::Pacchetto { decodifica([0x08 | flags, x, y]) }
 
@@ -72,4 +72,35 @@ fn l_assemblatore_concatena_piu_pacchetti() {
         if a.byte(b).is_some() { visti += 1; }
     }
     assert_eq!(visti, 3);
+}
+
+// ── Smistamento 8042 (status → porta) ─────────────────────────────────────
+// Il difetto del 14/10: i byte del mouse finivano nella tastiera → CONTATTO
+// saturo e "fuga" col touch. La decisione è pura, quindi si verifica qui.
+
+#[test]
+fn senza_byte_non_si_legge() {
+    // OBF (bit0) = 0: niente da leggere, qualunque sia l'AUX.
+    assert_eq!(destinazione(0x00), None);
+    assert_eq!(destinazione(0x20), None);
+}
+
+#[test]
+fn i_byte_della_tastiera_vanno_alla_tastiera() {
+    // OBF=1, AUX=0 → scancode.
+    assert_eq!(destinazione(0x01), Some(Porta::Tastiera));
+    // Anche con altri bit sporchi (es. bit1 = input buffer), resta tastiera.
+    assert_eq!(destinazione(0x05), Some(Porta::Tastiera));
+}
+
+#[test]
+fn i_byte_del_mouse_vanno_al_mouse() {
+    // OBF=1, AUX (bit5) = 1 → pacchetto del touchpad.
+    assert_eq!(destinazione(0x21), Some(Porta::Mouse));
+    assert_eq!(destinazione(0x25), Some(Porta::Mouse));
+}
+
+#[test]
+fn aux_senza_obf_non_e_un_byte() {
+    assert_eq!(destinazione(0x20), None);
 }

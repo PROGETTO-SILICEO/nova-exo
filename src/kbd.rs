@@ -10,6 +10,7 @@
 // collega all'interrupt (vettore 33, IOAPIC entry 1).
 
 use core::arch::asm;
+use crate::ps2::{self, Porta};
 
 const DATA: u16 = 0x60;
 const STATUS: u16 = 0x64;
@@ -61,10 +62,16 @@ pub fn read() -> Option<u8> {
 /// Legge un byte dal controller 8042 e dice **di chi è**: `true` = mouse (AUX),
 /// `false` = tastiera. Tastiera e touchpad condividono la porta 0x60: chi legge
 /// DEVE smistare, altrimenti i pacchetti del mouse diventano scancode.
+///
+/// La decisione (status → porta) è PURA e vive in `ps2::destinazione`, così è
+/// testata su host; qui c'è solo l'IO. Si legge lo STATUS **prima** del byte:
+/// il bit AUX appartiene a QUEL byte, non a quello successivo.
 pub fn read_source() -> Option<(bool, u8)> {
-    let st = inb(STATUS);
-    if st & OBF == 0 { return None; }
-    Some((st & 0x20 != 0, inb(DATA)))
+    match ps2::destinazione(inb(STATUS)) {
+        Some(Porta::Mouse)    => Some((true, inb(DATA))),
+        Some(Porta::Tastiera) => Some((false, inb(DATA))),
+        None => None,
+    }
 }
 
 /// Distingue una PRESSIONE da un RILASCIO.
