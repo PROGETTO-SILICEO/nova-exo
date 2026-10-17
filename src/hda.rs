@@ -5,8 +5,10 @@
 // sul metallo prima di passare al successivo.
 //
 // STADIO 1 (questo file, 13/10/2026) — far TROVARE l'udito al corpo:
-//   1. trova il controller HDA su PCI (classe 04:03, non per vendor:device:
-//      sul Lenovo reale l'HDA non è quello di QEMU);
+//   1. trova il controller HDA su PCI (classe 04:03). Sul Lenovo AMD ce ne sono
+//      DUE: l'audio HDMI della GPU (codec 0x1002, solo uscite) e il Realtek del
+//      chipset (dove sta il microfono). Si enumerano TUTTI e si sceglie quello
+//      col codec Realtek (0x10EC); vedi `init()` (fix 17/10/2026);
 //   2. mappa il BAR0 MMIO;
 //   3. resetta il controller (GCTL.CRST 0→1);
 //   4. enumera il codec (STATESTS) e ne legge l'IDENTITÀ (vendor:device, rev);
@@ -218,42 +220,42 @@ fn walk(node: u8, depth: u8) {
     }
 }
 
-/// STADIO 1 — trova, resetta, enumera. Ritorna true se il codec risponde.
-pub fn init() -> bool {
-    // 1. Trova il controller (classe 04:03; fallback QEMU 8086:2668)
-    let dev = crate::pci::find_class(0x04, 0x03)
-        .or_else(|| crate::pci::pci_find_device(0x8086, 0x2668));
-    let (b, s, f) = match dev {
-        Some(t) => t,
-        None => { wstr("HDA: assente\n"); return false; }
-    };
-    unsafe { PROBE[0] = 1; }
+/// Quanti controller HDA (classe 04:03) si accettano al massimo. Sul metallo
+/// ce ne sono due; un tetto piccolo evita ogni allocazione dinamica (no_std).
+const MAX_CONTROLLER: usize = 8;
+
+/// Porta su UN controller HDA: mappa il BAR0, resetta, enumera il codec e ne
+/// legge l'identità. Aggiorna le globali (MMIO, GCAP, CODEC, CODEC_MASK, PROBE,
+/// VENDOR/DEVICE/REVISION/PRESENT) così che l'ultimo chiamato "vinca". Ritorna
+/// il **vendor del codec** se un codec risponde, `None` se non c'è nessun codec.
+/// I log di dettaglio vanno su seriale (il Lenovo non ha seriale: la GUI mostra
+/// la sintesi via `vendor_device()`/`probe()`).
+fn bring_up(b: u8, s: u8, f: u8) -> Option<u16> {
     crate::pci::enable_bus_master(b, s, f);
     let (_, _, base) = crate::pci::read_bars(b, s, f);
 
-    wstr("HDA: pci="); wh16(b as u16); crate::serial_putc(b':');
+    wstr("HDA: cand pci="); wh16(b as u16); crate::serial_putc(b':');
     wh16(s as u16); crate::serial_putc(b'.'); wh16(f as u16);
     wstr(" bar0=0x"); wh32(base as u32);
-    crate::serial_putc(b'\n');
 
     if !crate::paging::map_mmio_page(base) {
-        wstr("HDA: mmio non mappabile (fuori 3GB..4GB?)\n");
-        return false;
+        wstr(" (mmio non mappabile)\n");
+        return None;
     }
     unsafe { MMIO = crate::paging::mmio_virt_addr(base); }
 
-    // 2. Capacità globali
+    // Capacità globali
     let gcap = rd16(HDA_GCAP);
     let vmin = rd8(HDA_VMIN);
     let vmaj = rd8(HDA_VMAJ);
     unsafe { GCAP = gcap; }
-    wstr("HDA: gcap=0x"); wh16(gcap);
+    wstr(" gcap=0x"); wh16(gcap);
     wstr(" ver="); wh16(vmaj as u16); crate::serial_putc(b'.'); wh16(vmin as u16);
     wstr(" outs="); wh16(((gcap >> 12) & 0xF));
     wstr(" ins="); wh16(((gcap >> 8) & 0xF));
     crate::serial_putc(b'\n');
 
-    // 3. Reset: CRST 0 → attesa → CRST 1
+    // Reset: CRST 0 → attesa → CRST 1
     wr32(HDA_GCTL, 0);
     delay(200_000);
     wr32(HDA_GCTL, GCTL_CRST);
@@ -261,15 +263,16 @@ pub fn init() -> bool {
     let gctl = rd32(HDA_GCTL);
     unsafe { PROBE[1] = if gctl & GCTL_CRST != 0 { 1 } else { 0 }; }
 
-    // 4. Attendi che il codec venga enumerato
+    // Attendi che il codec venga enumerato
     let mut st = 0u16;
     for _ in 0..200_000 {
         st = rd16(HDA_STATESTS);
         if st != 0 { break; }
     }
     if st == 0 {
-        wstr("HDA: nessun codec su STATESTS\n");
-        return false;
+        unsafe { CODEC_MASK = 0; PRESENT = false; }
+        wstr("HDA: cand nessun codec su STATESTS\n");
+        return None;
     }
     let mut codec = 0u8;
     for i in 0..16u8 {
@@ -278,13 +281,8 @@ pub fn init() -> bool {
     wr16(HDA_STATESTS, st); // pulizia
     unsafe { CODEC = codec; CODEC_MASK = st; PROBE[2] = 1; PROBE[3] = codec; }
 
-    // 4b. CORB/RIRB e primo comando
+    // CORB/RIRB e identità del codec
     corb_init();
-    wstr("HDA: corb_sts=0x"); let csts = rd8(HDA_CORBSTS); wh16(csts as u16);
-    wstr(" corb_ctl=0x"); let cctl = rd8(HDA_CORBCTL); wh16(cctl as u16);
-    crate::serial_putc(b'\n');
-
-    // 5. Identità del codec
     let vid = codec_cmd(codec, 0, VERB_GET_PARAM, PAR_VENDOR_ID);
     let rev = codec_cmd(codec, 0, VERB_GET_PARAM, PAR_REVISION);
     unsafe {
@@ -293,13 +291,72 @@ pub fn init() -> bool {
         REVISION = rev;
         PRESENT = vid != 0xFFFF_FFFF;
     }
-    wstr("HDA: codec="); wh16(codec as u16);
+    wstr("HDA: cand codec="); wh16(codec as u16);
     let (vend, devi) = unsafe { (VENDOR, DEVICE) };
     wstr(" id="); wh16(vend); crate::serial_putc(b':'); wh16(devi);
     wstr(" rev=0x"); wh32(rev);
     crate::serial_putc(b'\n');
 
-    // 6. Albero dei widget (diagnostica → stadio 2)
+    if unsafe { PRESENT } { Some(unsafe { VENDOR }) } else { None }
+}
+
+/// STADIO 1 — trova, resetta, enumera. Ritorna true se il codec risponde.
+///
+/// ⚠️ SCOPERTA DEL CONTROLLER (17/10/2026, metallo + foto): `find_class` prendeva
+/// solo il PRIMO controller di classe 04:03. Sul Lenovo AMD il primo è l'audio
+/// **HDMI della GPU** (codec 0x1002:aa01), che è solo uscite → `adc=-- pin=--`.
+/// Il Realtek col microfono sta su un ALTRO controller. Qui si enumerano TUTTI,
+/// si sonda il vendor del codec di ognuno e si sceglie quello **Realtek (0x10EC)**
+/// (`hda_path::scegli_controller`, logica pura). Ripiego: il primo con un codec.
+pub fn init() -> bool {
+    // 1. Enumera TUTTI i controller di classe 04:03 (fallback QEMU 8086:2668).
+    let mut bf = [(0u8, 0u8, 0u8); MAX_CONTROLLER];
+    let mut n = crate::pci::find_class_all(0x04, 0x03, &mut bf);
+    if n == 0 {
+        if let Some(t) = crate::pci::pci_find_device(0x8086, 0x2668) {
+            bf[0] = t;
+            n = 1;
+        }
+    }
+    if n == 0 {
+        wstr("HDA: assente\n");
+        return false;
+    }
+    unsafe { PROBE[0] = 1; }
+    wstr("HDA: controller trovati="); wh16(n as u16); crate::serial_putc(b'\n');
+
+    // 2. Sonda ogni controller: reset + codec + vendor del codec.
+    let mut cands = [hda_path::CandidatoController::default(); MAX_CONTROLLER];
+    for i in 0..n {
+        let (b, s, f) = bf[i];
+        if let Some(vendor) = bring_up(b, s, f) {
+            cands[i] = hda_path::CandidatoController { presente: true, vendor };
+        }
+    }
+
+    // 3. Scegli (Realtek per primo; ripiego: primo con un codec).
+    let chosen = match hda_path::scegli_controller(&cands[..n]) {
+        Some(i) => i,
+        None => {
+            wstr("HDA: nessun codec su nessun controller\n");
+            return false;
+        }
+    };
+
+    // 4. Ri-avvia il controller SCELTO: le globali puntavano all'ultimo sondato,
+    //    che non è necessariamente quello scelto (es. Realtek trovato e poi si
+    //    continua… o ripiego sul primo). Un secondo passaggio le rende esatte.
+    let (b, s, f) = bf[chosen];
+    if bring_up(b, s, f).is_none() {
+        wstr("HDA: controller scelto non risponde\n");
+        return false;
+    }
+    wstr("HDA: SCELTO controller idx="); wh16(chosen as u16);
+    wstr(" pci="); wh16(b as u16); crate::serial_putc(b':');
+    wh16(s as u16); crate::serial_putc(b'.'); wh16(f as u16);
+    crate::serial_putc(b'\n');
+
+    // 5. Albero dei widget di QUEL controller (diagnostica → stadio 2)
     if unsafe { PRESENT } {
         wstr("HDA: widget tree\n");
         walk(0, 0);

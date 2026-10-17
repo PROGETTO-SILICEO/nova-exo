@@ -104,6 +104,34 @@ pub fn find_class(class: u8, subclass: u8) -> Option<(u8, u8, u8)> {
     None
 }
 
+/// Come `find_class`, ma restituisce **TUTTI** i device di una classe, non solo
+/// il primo. Serve all'udito: sul Lenovo AMD ci sono DUE controller di classe
+/// 04:03 (l'HDMI della GPU e il Realtek del chipset) e va scelto quello col
+/// microfono, non il primo (17/10/2026). Scrive al più `out.len()` tuple
+/// (bus, slot, func) e ritorna quante ne ha trovate. Nessuna allocazione:
+/// il chiamante passa un array fisso.
+pub fn find_class_all(class: u8, subclass: u8, out: &mut [(u8, u8, u8)]) -> usize {
+    let mut n = 0;
+    for bus in 0..8u8 {
+        for slot in 0..32u8 {
+            for func in 0..8u8 {
+                let vendor = pci_config_read(bus, slot, func, 0);
+                if (vendor & 0xFFFF) == 0xFFFF {
+                    continue;
+                }
+                let cl = pci_config_read(bus, slot, func, 8);
+                if ((cl >> 24) & 0xFF) as u8 == class && ((cl >> 16) & 0xFF) as u8 == subclass {
+                    if n < out.len() {
+                        out[n] = (bus, slot, func);
+                        n += 1;
+                    }
+                }
+            }
+        }
+    }
+    n
+}
+
 pub fn pci_config_read(bus: u8, slot: u8, func: u8, offset: u8) -> u32 {
     let addr = (1u32 << 31)
         | ((bus as u32) << 16)

@@ -11,14 +11,19 @@
 mod intero;
 
 // Shim del modulo PCI: intero.rs legge la temperatura AMD via config space
-// (00:00.0, index/data 0xB8/0xBC). Nel banco host non c'è hardware: lo shim
-// serve solo a COMPILARE; i test coprono la decodifica PURA.
+// (00:00.0 index/data 0xB8/0xBC, oppure il NB F3 a offset 0xA4). Nel banco host
+// non c'è hardware: lo shim serve solo a COMPILARE; i test coprono la
+// decodifica PURA (e model_from_eax).
 mod pci {
     pub fn pci_config_write(_b: u8, _s: u8, _f: u8, _o: u8, _v: u32) {}
     pub fn pci_config_read(_b: u8, _s: u8, _f: u8, _o: u8) -> u32 { 0 }
+    pub fn pci_find_device(_v: u16, _d: u16) -> Option<(u8, u8, u8)> { None }
 }
 
-use intero::{family_from_eax, nome_via, tctl_da_raw, temperatura_da, VIA_AMD, VIA_INTEL, VIA_NESSUNA};
+use intero::{
+    family_from_eax, model_from_eax, nome_rotta, nome_via, tctl_da_raw, temperatura_da, VIA_AMD,
+    VIA_INTEL, VIA_NESSUNA, ROTTA_NESSUNA, ROTTA_PCI_F3_A4, ROTTA_SMN_F15H_M60, ROTTA_SMN_ZEN,
+};
 
 // ── Intel (MSR) ────────────────────────────────────────────────────────────
 
@@ -112,4 +117,28 @@ fn nome_via_per_la_gui() {
     assert_eq!(nome_via(VIA_NESSUNA), "nessuno");
     // Un valore sconosciuto non deve mentire su una via: "nessuno".
     assert_eq!(nome_via(99), "nessuno");
+}
+
+#[test]
+fn modello_cpu_da_cpuid() {
+    // Model = (ext_model << 4) | base_model (bit 19:16, bit 7:4).
+    // A8-7410 reale: CPUID Fn1 EAX = 0x00730F01 → famiglia 16h, modello 0x30.
+    let a8_7410 = 0x0073_0F01u32;
+    assert_eq!(family_from_eax(a8_7410), 0x16);
+    assert_eq!(model_from_eax(a8_7410), 0x30);
+    // Intel: base model 5, ext 0 → restano 5.
+    assert_eq!(model_from_eax((6u32 << 8) | (5u32 << 4) | 1), 5);
+    // Un modello con esteso: ext 3, base 0 → 0x30.
+    assert_eq!(model_from_eax((0xFu32 << 8) | (3u32 << 16)), 0x30);
+}
+
+#[test]
+fn nome_rotta_per_la_gui() {
+    // La GUI mostra QUALE registro è stato letto (pci vs smn): nomi stabili.
+    assert_eq!(nome_rotta(ROTTA_PCI_F3_A4), "pci");
+    assert_eq!(nome_rotta(ROTTA_SMN_F15H_M60), "smn");
+    assert_eq!(nome_rotta(ROTTA_SMN_ZEN), "smn");
+    assert_eq!(nome_rotta(ROTTA_NESSUNA), "");
+    // Un valore sconosciuto non deve mentire: stringa vuota.
+    assert_eq!(nome_rotta(99), "");
 }

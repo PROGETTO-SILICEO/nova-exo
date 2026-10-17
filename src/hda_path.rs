@@ -25,6 +25,38 @@ pub const JACK_MIC_IN: u8 = 0xA;
 // Pin cap: bit5 = capace di ingresso.
 pub const PINCAP_INPUT: u32 = 0x20;
 
+// Vendor dei codec audio. Il Realtek (0x10EC) è quello analogico col microfono;
+// l'AMD (0x1002) è l'audio HDMI della GPU, che è SOLO uscite — nessun ADC,
+// nessun pin di ingresso (per questo la probe dava `adc=-- pin=--`).
+pub const VENDOR_REALTEK: u16 = 0x10EC;
+
+/// Esito della probe di UN controller HDA (classe 04:03): c'è un codec? di che
+/// vendor? Serve a SCEGLIERE il controller giusto senza indovinare.
+#[derive(Clone, Copy, Default, PartialEq, Debug)]
+pub struct CandidatoController {
+    pub presente: bool,
+    pub vendor: u16,
+}
+
+/// Sceglie l'indice del controller HDA da usare (fra `cands`, nell'ordine PCI).
+/// Preferisce il controller il cui codec è un **Realtek (0x10EC)** — è quello
+/// con la catena ADC→pin del microfono. Se nessuno è Realtek, ripiega sul
+/// **primo controller che ha comunque un codec** (comportamento storico). `None`
+/// = nessun controller con un codec.
+pub fn scegli_controller(cands: &[CandidatoController]) -> Option<usize> {
+    for (i, c) in cands.iter().enumerate() {
+        if c.presente && c.vendor == VENDOR_REALTEK {
+            return Some(i);
+        }
+    }
+    for (i, c) in cands.iter().enumerate() {
+        if c.presente {
+            return Some(i);
+        }
+    }
+    None
+}
+
 /// Una sorgente candidata nella connection list di un widget.
 #[derive(Clone, Copy, Default, PartialEq, Debug)]
 pub struct Sorgente {

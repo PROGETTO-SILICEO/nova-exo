@@ -9,11 +9,14 @@
 //  · INTEL — MSR IA32_TEMPERATURE_TARGET (0x1A2) dà TjMax; IA32_THERM_STATUS
 //    (0x19C) dà la lettura (gradi SOTTO TjMax, bit 22:16) e un bit di validità
 //    (bit 31).
-//  · AMD (famiglia 15h/16h, es. l'A8-7410 del Lenovo) — la **Tctl** si legge via
-//    **SMN** (System Management Network), indiretto dal **root complex PCI
-//    00:00.0**: si scrive l'indirizzo SMN nell'**index register** (0xB8) e si
-//    legge il valore dal **data register** (0xBC). Registro THM_TCON_CUR_TMP =
-//    0x00059800; decodifica `temp = (raw >> 21) * 0.125`. (KB-20261014-07.)
+//  · AMD (famiglia 15h/16h, es. l'A8-7410 del Lenovo) — la **Tctl** NON si legge
+//    sempre allo stesso modo: dipende dalla famiglia (fonte: Linux k10temp.c).
+//    L'A8-7410 è F16h (M30h): il registro "Reported Temperature Control" è
+//    **D18F3x[A4]** in PCI config space sul northbridge **function 3**, non via
+//    SMN. Solo Zen (F17h+, SMN 0x00059800) e F15h M60h/M70h (SMN 0xD8200CA4)
+//    usano l'SMN (indiretto dal root complex 00:00.0: index 0xB8, data 0xBC).
+//    Decodifica comune: `temp = (raw >> 21) * 0.125`. Occhio: 0x00059800 su un
+//    F16h legge 0 (era il `raw=0` visto a schermo sul metallo).
 //
 // ⚠️ Onestà (Alfonso, 15/10): *"magari non funziona in QEMU e funziona sul
 // metallo"*. In QEMU né gli MSR né l'SMN sono emulati → "nessun sensore".
@@ -32,7 +35,32 @@ const MSR_THERM_STATUS: u32 = 0x19C; // IA32_THERM_STATUS — SOLO Intel
 // ── AMD: accesso SMN via root complex PCI 00:00.0 (index/data) ─────────────
 const AMD_SMN_INDEX: u8 = 0xB8; // si scrive qui l'indirizzo SMN da leggere
 const AMD_SMN_DATA: u8 = 0xBC;  // si legge qui il valore
-const AMD_SMN_THM_TCON_CUR_TMP: u32 = 0x0005_9800; // Tctl (famiglia 15h/16h)
+
+// ⚠️ SCOPERTA (17/10/2026): gli indirizzi NON sono gli stessi per tutte le
+// famiglie. Il vecchio codice usava 0x00059800 su ogni AMD: ma 0x00059800 è il
+// "Reported Temperature Control" del **Zen (F17h+)** — su un F16h restituisce 0
+// (è il `raw=0x00000000` visto a schermo). Fonte: Linux `drivers/hwmon/k10temp.c`.
+//  · F17h+ (Zen):            SMN 0x00059800
+//  · F15h M60h/M70h:         SMN 0xD8200CA4 (D0F0xBC_xD820_0CA4)
+//  · F10h..F16h (l'A8-7410): PCI config 0xA4 del northbridge **function 3**
+//                            (D18F3x[A4]) — NON SMN.
+const AMD_SMN_ZEN_TEMP: u32 = 0x0005_9800; // Zen (F17h+)
+const AMD_SMN_F15H_M60_TEMP: u32 = 0xd820_0ca4; // F15h M60h/M70h
+
+// Percorso F10h..F16h: il northbridge function 3 (D18F3) porta il registro
+// "Reported Temperature Control" a offset 0xA4. Gli ID device vengono da Linux
+// `include/linux/pci_ids.h` / `k10temp_id_table` (verificati, non inventati).
+const AMD_VENDOR: u16 = 0x1022;
+const NB_F3_16H_M30H: u16 = 0x1583; // F16h M30h-3Fh — l'A8-7410
+const NB_F3_16H: u16 = 0x1533;      // F16h M00-0Fh
+const NB_F3_15H_M30H: u16 = 0x141d; // F15h M30h-3Fh
+const PCI_REPORTED_TEMP: u8 = 0xA4; // D18F3x[A4]
+
+// Rotte di lettura (per la diagnostica in GUI: quale registro si è letto).
+pub const ROTTA_NESSUNA: u8 = 0;
+pub const ROTTA_PCI_F3_A4: u8 = 1;      // F10h..F16h — PCI config 0xA4 del NB F3
+pub const ROTTA_SMN_F15H_M60: u8 = 2;   // F15h M60h/M70h — SMN 0xD8200CA4
+pub const ROTTA_SMN_ZEN: u8 = 3;        // F17h+ (Zen) — SMN 0x00059800
 
 /// CPUID. Ritorna (eax, ebx, ecx, edx). `ebx` è riservato a LLVM: si salva,
 /// si esegue cpuid, si copia ebx, si ripristina.
@@ -79,9 +107,24 @@ pub fn family_from_eax(eax: u32) -> u32 {
     }
 }
 
+/// Decodifica PURA del modello CPU da CPUID leaf 1 (EAX).
+/// Model = (ext_model << 4) | base_model (bit 19:16 esteso, bit 7:4 base).
+/// (A8-7410 → EAX 0x00730F01 → famiglia 16h, modello 0x30.)
+pub fn model_from_eax(eax: u32) -> u32 {
+    let base = (eax >> 4) & 0xF;
+    let ext = (eax >> 16) & 0xF;
+    (ext << 4) | base
+}
+
 /// La famiglia della CPU su cui gira Exo.
 fn cpu_family() -> u32 {
     family_from_eax(cpuid(1).0)
+}
+
+/// Il modello della CPU su cui gira Exo (serve a distinguere le sottofamiglie
+/// AMD: F15h M60h/M70h usano SMN, le altre F15h/F16h usano il PCI del NB F3).
+fn cpu_model() -> u32 {
+    model_from_eax(cpuid(1).0)
 }
 
 /// Decodifica PURA: TjMax + status → gradi Celsius (o None se non c'è sensore).
@@ -135,23 +178,48 @@ fn smn_read(addr: u32) -> u32 {
     pci::pci_config_read(0, 0, 0, AMD_SMN_DATA)
 }
 
-/// Temperatura su AMD (famiglia 15h/16h) via SMN. Altre famiglie: non
-/// implementate → None (onesto, non si indovina). Ritorna anche il valore
-/// grezzo letto, così la GUI può mostrarlo (il Lenovo non ha seriale).
-fn temperatura_amd() -> (u32, Option<f32>) {
-    match cpu_family() {
-        0x15 | 0x16 => {
-            let raw = smn_read(AMD_SMN_THM_TCON_CUR_TMP);
-            (raw, tctl_da_raw(raw))
+/// Legge il "Reported Temperature Control" (D18F3x[A4]) del northbridge
+/// **function 3** via PCI config space — la via corretta per F10h..F16h
+/// (l'A8-7410). Prova gli ID device noti (più specifico prima); ritorna
+/// `(valore_grezzo, id_device_trovato)` — `(0, 0)` se nessuno è presente.
+fn temp_pci_nb_f3() -> (u32, u16) {
+    for did in [NB_F3_16H_M30H, NB_F3_16H, NB_F3_15H_M30H] {
+        if let Some((b, s, f)) = pci::pci_find_device(AMD_VENDOR, did) {
+            return (pci::pci_config_read(b, s, f, PCI_REPORTED_TEMP), did);
         }
-        _ => (0, None),
+    }
+    (0, 0)
+}
+
+/// Temperatura su AMD, per famiglia (vedi costanti). Ritorna
+/// `(rotta, grezzo, candidato, temp, nb_id)`. Il `candidato` è la lettura del
+/// vecchio indirizzo SMN (Zen): serve solo alla diagnostica in GUI — NON sceglie.
+fn temperatura_amd() -> (u8, u32, u32, Option<f32>, u16) {
+    let fam = cpu_family();
+    let model = cpu_model();
+    if fam == 0x15 && ((model & 0xF0) == 0x60 || (model & 0xF0) == 0x70) {
+        // F15h M60h/M70h: SMN D0F0xBC_xD8200CA4.
+        let raw = smn_read(AMD_SMN_F15H_M60_TEMP);
+        (ROTTA_SMN_F15H_M60, raw, 0, tctl_da_raw(raw), 0)
+    } else if fam >= 0x17 {
+        // Zen (F17h+): SMN 0x00059800.
+        let raw = smn_read(AMD_SMN_ZEN_TEMP);
+        (ROTTA_SMN_ZEN, raw, 0, tctl_da_raw(raw), 0)
+    } else {
+        // F10h..F16h: PCI config 0xA4 del northbridge function 3 (NON SMN).
+        let (raw, nb) = temp_pci_nb_f3();
+        // Candidato diagnostico: il vecchio indirizzo SMN (Zen). Sul metallo
+        // leggerà 0 — così in GUI si VEDE che SMN non c'entra.
+        let cand = smn_read(AMD_SMN_ZEN_TEMP);
+        (ROTTA_PCI_F3_A4, raw, cand, tctl_da_raw(raw), nb)
     }
 }
 
 // ── Diagnostica per la GUI ─────────────────────────────────────────────────
 // Il Lenovo non ha seriale: se la probe mente, va VISTO a schermo. Qui si
-// registra quale via ha preso l'ultima `temperatura()` e — per AMD — il valore
-// grezzo SMN letto (0 se la lettura non è stata fatta o è muta).
+// registra quale via/rotta ha preso l'ultima `temperatura()`, il valore grezzo
+// letto e — per AMD — un secondo candidato (l'SMN vecchio) e l'id del
+// northbridge trovato. Nessuna di queste è una temperatura: sono prove.
 pub const VIA_NESSUNA: u8 = 0;
 pub const VIA_INTEL: u8 = 1;
 pub const VIA_AMD: u8 = 2;
@@ -159,11 +227,15 @@ pub const VIA_AMD: u8 = 2;
 #[derive(Clone, Copy)]
 pub struct Diagnostica {
     pub via: u8,           // VIA_*
-    pub raw: u32,          // AMD: ultimo valore grezzo SMN letto
+    pub rotta: u8,         // ROTTA_* (quale registro si è letto)
+    pub raw: u32,          // valore grezzo della rotta scelta
+    pub cand: u32,         // AMD: valore grezzo del candidato (SMN vecchio)
+    pub nb: u16,           // AMD PCI: id device del northbridge F3 (0 = nessuno)
     pub temp: Option<f32>, // ultima temperatura decodificata (None = nessuna)
 }
 
-static mut DIAG: Diagnostica = Diagnostica { via: VIA_NESSUNA, raw: 0, temp: None };
+static mut DIAG: Diagnostica =
+    Diagnostica { via: VIA_NESSUNA, rotta: ROTTA_NESSUNA, raw: 0, cand: 0, nb: 0, temp: None };
 
 /// Diagnostica dell'ultima `temperatura()` (aggiornata ad ogni chiamata).
 pub fn diagnostica() -> Diagnostica { unsafe { DIAG } }
@@ -177,18 +249,28 @@ pub fn nome_via(via: u8) -> &'static str {
     }
 }
 
+/// Nome della rotta (registro) per la GUI: `pci` / `smn` / `""`.
+pub fn nome_rotta(rotta: u8) -> &'static str {
+    match rotta {
+        ROTTA_PCI_F3_A4 => "pci",
+        ROTTA_SMN_F15H_M60 | ROTTA_SMN_ZEN => "smn",
+        _ => "",
+    }
+}
+
 /// La temperatura del corpo, se c'è un sensore. None = non c'è (onesto).
-/// ⚠️ Legge gli MSR SOLO su Intel (altrove non esistono → #GP); su AMD usa SMN.
-/// Ad ogni chiamata aggiorna la `diagnostica()` visibile in GUI.
+/// ⚠️ Legge gli MSR SOLO su Intel (altrove non esistono → #GP); su AMD usa la
+/// rotta della famiglia (SMN o PCI del NB). Aggiorna la `diagnostica()` in GUI.
 pub fn temperatura() -> Option<f32> {
-    let (via, raw, temp) = if vendor_intel() {
-        (VIA_INTEL, 0u32, temperatura_da(rdmsr(MSR_THERM_TARGET), rdmsr(MSR_THERM_STATUS)))
+    let d = if vendor_intel() {
+        let t = temperatura_da(rdmsr(MSR_THERM_TARGET), rdmsr(MSR_THERM_STATUS));
+        Diagnostica { via: VIA_INTEL, rotta: ROTTA_NESSUNA, raw: 0, cand: 0, nb: 0, temp: t }
     } else if vendor_amd() {
-        let (raw, t) = temperatura_amd();
-        (VIA_AMD, raw, t)
+        let (rotta, raw, cand, t, nb) = temperatura_amd();
+        Diagnostica { via: VIA_AMD, rotta, raw, cand, nb, temp: t }
     } else {
-        (VIA_NESSUNA, 0u32, None)
+        Diagnostica { via: VIA_NESSUNA, rotta: ROTTA_NESSUNA, raw: 0, cand: 0, nb: 0, temp: None }
     };
-    unsafe { DIAG = Diagnostica { via, raw, temp }; }
-    temp
+    unsafe { DIAG = d; }
+    d.temp
 }

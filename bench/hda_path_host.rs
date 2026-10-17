@@ -11,8 +11,8 @@
 mod hda_path;
 
 use hda_path::{
-    conn_node, e_instradatore, scegli_instradatore, scegli_pin, Sorgente,
-    WID_AUD_IN, WID_MIXER, WID_PIN, WID_SELECTOR,
+    conn_node, e_instradatore, scegli_controller, scegli_instradatore, scegli_pin,
+    CandidatoController, Sorgente, VENDOR_REALTEK, WID_AUD_IN, WID_MIXER, WID_PIN, WID_SELECTOR,
 };
 
 fn pin(id: u8, input_cap: bool, mic: bool) -> Sorgente {
@@ -106,4 +106,43 @@ fn catena_qemu_diretta() {
     let i = scegli_pin(&adc_list).expect("pin d'ingresso presente");
     assert_eq!(adc_list[i as usize].id, 5);
     let _ = adc(4); // il tipo ADC resta distinto dai pin (documentazione).
+}
+
+// ── Scelta del CONTROLLER HDA (classe 04:03) ───────────────────────────────
+// Sul Lenovo AMD ci sono due controller: HDMI della GPU (vendor 0x1002, solo
+// uscite) e Realtek (0x10EC, col microfono). La scelta è PURA e va verificata:
+// prendere il primo era il difetto che dava `adc=-- pin=--`.
+
+fn ctrl(vendor: u16) -> CandidatoController {
+    CandidatoController { presente: true, vendor }
+}
+
+#[test]
+fn sceglie_il_realtek_non_il_primo() {
+    // Il primo controller è l'HDMI AMD (0x1002): NON si sceglie.
+    let cands = [ctrl(0x1002), ctrl(VENDOR_REALTEK)];
+    assert_eq!(scegli_controller(&cands), Some(1), "deve scegliere il Realtek (0x10EC)");
+}
+
+#[test]
+fn ripiega_sul_primo_con_un_codec() {
+    // Nessun Realtek: si torna al comportamento storico (primo con un codec).
+    let cands = [ctrl(0x1002), ctrl(0x1002)];
+    assert_eq!(scegli_controller(&cands), Some(0));
+    // Un controller senza codec non conta come candidato.
+    let cands = [
+        CandidatoController { presente: false, vendor: 0 },
+        ctrl(0x8086),
+    ];
+    assert_eq!(scegli_controller(&cands), Some(1));
+}
+
+#[test]
+fn nessun_controller_con_codec_e_none() {
+    let cands = [
+        CandidatoController { presente: false, vendor: 0 },
+        CandidatoController { presente: false, vendor: VENDOR_REALTEK },
+    ];
+    assert_eq!(scegli_controller(&cands), None);
+    assert_eq!(scegli_controller(&[]), None);
 }

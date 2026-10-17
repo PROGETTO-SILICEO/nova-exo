@@ -478,7 +478,11 @@ pub unsafe fn render_vitals(
         print_str(crate::intero::nome_via(dg.via),
                   if dg.temp.is_some() { COL_GREEN } else { COL_DIM });
         if dg.via == crate::intero::VIA_AMD {
-            print_str(" raw=0x", COL_DIM);
+            // Quale registro si è letto (`pci` = NB F3 0xA4, `smn` = SMN) e il
+            // valore grezzo: senza seriale è l'unica prova visibile.
+            print_str(" ", COL_DIM);
+            print_str(crate::intero::nome_rotta(dg.rotta), COL_DIM);
+            print_str("=0x", COL_DIM);
             print_hex_digits(dg.raw as u64, 8, COL_WHITE);
         }
         match dg.temp {
@@ -495,8 +499,26 @@ pub unsafe fn render_vitals(
         }
     }
 
+    // Diagnostica del sensore AMD (riga compatta): l'id del northbridge F3
+    // trovato e il candidato SMN vecchio. Serve a VEDERE se la rotta pci è
+    // quella giusta (nb=1583) e che l'SMN non c'entra (smn=0).
+    {
+        let dg = crate::intero::diagnostica();
+        if dg.via == crate::intero::VIA_AMD {
+            set_cursor(10, y + 32);
+            print_str("DBG nb=", COL_DIM);
+            if dg.nb == 0 {
+                print_str("--", COL_RED);
+            } else {
+                print_hex_digits(dg.nb as u64, 4, COL_WHITE);
+            }
+            print_str(" smn=0x", COL_DIM);
+            print_hex_digits(dg.cand as u64, 8, COL_DIM);
+        }
+    }
+
     // Volontà
-    y += 36;
+    y += 42;
     set_cursor(10, y);
     print_str("VOGLIO:", COL_PURPLE);
     set_cursor(70, y);
