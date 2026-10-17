@@ -27,6 +27,7 @@
 // microfono fisico. Non si inietta audio finto: mai.
 
 use core::ptr::{read_volatile, write_volatile};
+use crate::hda_path::{self, Sorgente};
 
 // ── Controller registers (offset da BAR0) ────────────────────────────────
 const HDA_GCAP:     u32 = 0x00; // u16: capacità globali (n° stream in/out, 64-bit)
@@ -64,13 +65,8 @@ const VERB_GET_CONFIG_DEFAULT: u16 = 0xF1C; // tipo di jack di un pin ([23:20]=d
 const VERB_SET_POWER_STATE:    u16 = 0x705; // D0 = acceso
 const VERB_SET_CONN_SELECT:    u16 = 0x701; // sceglie la sorgente di ingresso
 
-// Tipi di widget (HDA): 1 = Audio Input (ADC), 4 = Pin Complex
-const WID_AUD_IN: u8 = 1;
-const WID_PIN: u8 = 4;
-// Tipo di jack (config default): 0xA = Mic In
-const JACK_MIC_IN: u8 = 0xA;
-// Pin cap: bit5 = ingresso
-const PINCAP_INPUT: u32 = 0x20;
+// I tipi di widget e i bit di capacità vivono in `hda_path` (logica pura):
+// WID_AUD_IN / WID_MIXER / WID_SELECTOR / WID_PIN / JACK_MIC_IN / PINCAP_INPUT.
 
 // CORB 256 entry × 4 B = 1 KB · RIRB 256 entry × 8 B = 2 KB (allineati)
 const RING_ENTRIES: usize = 256;
@@ -100,6 +96,9 @@ static mut CODEC_MASK: u16 = 0;
 /// senza seriale (il Lenovo non ha seriale) e si capisce se sono quelli giusti.
 static mut ADC_NODO: u8 = 0xFF;
 static mut PIN_NODO: u8 = 0xFF;
+/// Il nodo che INSTRA (MIXER/SELECTOR) tra ADC e pin — 0xFF se l'ADC punta
+/// dritto al pin (QEMU). È la prova che il percorso passa dal mixer (ALC233).
+static mut VIA_NODO: u8 = 0xFF;
 /// [0]=found [1]=reset_ok [2]=codec_ok [3]=codec_addr
 static mut PROBE: [u8; 4] = [0, 0, 0, 0xFF];
 
@@ -351,22 +350,57 @@ static mut AUDIO: AudioBuf = AudioBuf([0; BUF_BYTES / 2]);
 static mut BDL: BdlBuf = BdlBuf([0; 16 * CHUNKS]);
 static mut AUDIO_ON: bool = false;
 
-/// Allestisce lo stream di cattura: BDL, buffer ciclico, formato, poi il
-/// codec (ADC nodo 4 + pin nodo 5) e infine RUN. Da chiamare dopo `init()`.
-/// SCOPERTA DEI NODI (14/10/2026): trova da sé l'ADC (Audio Input) e il pin del
-/// microfono percorrendo l'albero dei widget. PRIMA erano fissi ai nodi di QEMU
-/// (4 e 5): sul codec VERO (Realtek) sono altri → l'udito leggeva 0. Ora il
-/// driver **chiede al codec chi è**, invece di indovinare. (Lezione del 14/10:
-/// QEMU mi rendeva cieca all'hardware vero.)
-fn scopri_nodi(c: u8) -> (u8, u8) {
-    let mut adc: u8 = 0xFF;
-    let mut pin: u8 = 0xFF;
-    let mut pin_mic: u8 = 0xFF;
+/// Legge la CONNECT_LIST di `node`: per ogni sorgente ne scopre il tipo (e, se
+/// è un pin, la capacità d'ingresso e se è il jack mic). Riempie `out` fino a
+/// `out.len()`. Ritorna quante sorgenti ha letto. Tutto CHIESTO al codec: nessun
+/// nodo hardcoded. (La decisione su cosa scegliere è PURA, in `hda_path`.)
+fn leggi_sorgenti(c: u8, node: u8, out: &mut [Sorgente]) -> usize {
+    let clen = (codec_cmd(c, node, VERB_GET_PARAM, PAR_CONNLIST_LEN) & 0x7F) as usize;
+    let n = clen.min(out.len());
+    let mut word = 0u32;
+    for i in 0..n {
+        if i % 4 == 0 {
+            // Il codec impacchetta fino a 4 nodi per risposta; l'indice di
+            // partenza è l'indice logico (come `snd_hda_get_connections`).
+            word = codec_cmd(c, node, VERB_GET_CONN_LIST, i as u16);
+        }
+        let id = hda_path::conn_node(word, (i % 4) as u8);
+        if id == 0xFF || id == 0 {
+            out[i] = Sorgente::default();
+            continue;
+        }
+        let cap = codec_cmd(c, id, VERB_GET_PARAM, PAR_WIDGET_CAP);
+        let tipo = ((cap >> 20) & 0xF) as u8;
+        let mut input_cap = false;
+        let mut mic = false;
+        if tipo == hda_path::WID_PIN {
+            input_cap = codec_cmd(c, id, VERB_GET_PARAM, PAR_PIN_CAP) & hda_path::PINCAP_INPUT != 0;
+            let cfg = codec_cmd(c, id, VERB_GET_CONFIG_DEFAULT, 0);
+            mic = ((cfg >> 20) & 0xF) as u8 == hda_path::JACK_MIC_IN;
+        }
+        out[i] = Sorgente { id, tipo, input_cap, mic };
+    }
+    n
+}
 
+/// SCOPERTA DELLA CATENA DI CATTURA (14/10/2026, difetto udito).
+///
+/// Non basta "un ADC + un pin": sul Realtek ALC233 il percorso è
+/// **ADC(0x08) → MIXER(0x23) → pin(0x1b/0x19)** e il codice, collegando l'ADC
+/// dritto al pin, non trovava nulla (`adc=-- pin=--`). Qui si CHIEDE al codec:
+///   · dalla CONNECT_LIST dell'ADC si sceglie l'INSTRADATORE (mixer/selector) e
+///     si imposta la `CONNECT_SELECT` dell'ADC su di esso;
+///   · dalla CONNECT_LIST dell'instradatore si sceglie il PIN d'ingresso
+///     (preferendo il jack mic) e si imposta la sua `CONNECT_SELECT`;
+///   · se l'ADC punta già a un pin (QEMU), quel caso è gestito senza instradatore.
+/// Ritorna (ADC, instradatore|0xFF, pin). Le scelte sono logica PURA (hda_path).
+fn scopri_catena(c: u8) -> (u8, u8, u8) {
+    // 1. Il primo ADC (Audio Input) fra i function group.
+    let mut adc: u8 = 0xFF;
     let nc0 = codec_cmd(c, 0, VERB_GET_PARAM, PAR_NODE_COUNT);
     let fs = ((nc0 >> 16) & 0xFF) as u8;
     let fcount = (nc0 & 0xFF) as u8;
-    for fi in 0..fcount.min(4) {
+    'func: for fi in 0..fcount.min(4) {
         let func = fs.wrapping_add(fi);
         let nc1 = codec_cmd(c, func, VERB_GET_PARAM, PAR_NODE_COUNT);
         let ws = ((nc1 >> 16) & 0xFF) as u8;
@@ -375,22 +409,40 @@ fn scopri_nodi(c: u8) -> (u8, u8) {
             let node = ws.wrapping_add(wi);
             let cap = codec_cmd(c, node, VERB_GET_PARAM, PAR_WIDGET_CAP);
             if cap == 0xFFFF_FFFF { continue; }
-            let wtype = ((cap >> 20) & 0xF) as u8;
-            if wtype == WID_AUD_IN && adc == 0xFF {
+            if ((cap >> 20) & 0xF) as u8 == hda_path::WID_AUD_IN {
                 adc = node;
-            } else if wtype == WID_PIN {
-                let pincap = codec_cmd(c, node, VERB_GET_PARAM, PAR_PIN_CAP);
-                if pincap & PINCAP_INPUT != 0 {
-                    if pin == 0xFF { pin = node; }
-                    let cfg = codec_cmd(c, node, VERB_GET_CONFIG_DEFAULT, 0);
-                    let dev = ((cfg >> 20) & 0xF) as u8;
-                    if dev == JACK_MIC_IN && pin_mic == 0xFF { pin_mic = node; }
-                }
+                break 'func;
             }
         }
     }
-    if pin_mic != 0xFF { pin = pin_mic; }
-    (adc, pin)
+    if adc == 0xFF { return (0xFF, 0xFF, 0xFF); }
+
+    // 2. La sorgente dell'ADC: l'instradatore (mixer/selector) o un pin diretto.
+    let mut s1 = [Sorgente::default(); 8];
+    let n1 = leggi_sorgenti(c, adc, &mut s1);
+    if let Some(i1) = hda_path::scegli_instradatore(&s1[..n1]) {
+        let via = s1[i1 as usize].id;
+        codec_cmd(c, adc, VERB_SET_CONN_SELECT, i1 as u16);
+        codec_cmd(c, adc, VERB_SET_POWER_STATE, 0x0000);
+
+        // 3. La sorgente dell'instradatore: il pin d'ingresso.
+        let mut s2 = [Sorgente::default(); 8];
+        let n2 = leggi_sorgenti(c, via, &mut s2);
+        if let Some(i2) = hda_path::scegli_pin(&s2[..n2]) {
+            codec_cmd(c, via, VERB_SET_CONN_SELECT, i2 as u16);
+            codec_cmd(c, via, VERB_SET_POWER_STATE, 0x0000);
+            // Sblocca l'ingresso scelto del mixer (amp d'ingresso, L+R, gain max).
+            codec_cmd(c, via, VERB_SET_AMP_GAIN_MUTE, 0x7000 | ((i2 as u16) << 8) | 0x7F);
+            return (adc, via, s2[i2 as usize].id);
+        }
+        return (adc, via, 0xFF);
+    }
+    if let Some(i1) = hda_path::scegli_pin(&s1[..n1]) {
+        codec_cmd(c, adc, VERB_SET_CONN_SELECT, i1 as u16);
+        codec_cmd(c, adc, VERB_SET_POWER_STATE, 0x0000);
+        return (adc, 0xFF, s1[i1 as usize].id);
+    }
+    (adc, 0xFF, 0xFF)
 }
 
 pub fn stream_init() -> bool {
@@ -427,45 +479,41 @@ pub fn stream_init() -> bool {
     wr32(SD0 + SD_CTL, 0x00);
     delay(50_000);
 
-    // ── SCOPERTA: ADC e pin del microfono (non più fissi ai nodi di QEMU) ──
-    // ── SCEGLI IL CODEC COL MICROFONO ──
+    // ── SCEGLI IL CODEC COL MICROFONO + scoperte la CATENA di cattura ──
     // Il Lenovo ha DUE codec (HDMI + Realtek): il primo (HDMI) NON ha ingressi.
-    // Si prova ogni codec presente e si prende quello che HA un ADC.
+    // Si prova ogni codec presente e si prende quello che HA una catena ADC→pin
+    // (con instradatore o diretta). La CONNECT_SELECT dell'ADC e dell'eventuale
+    // MIXER viene impostata DENTRO `scopri_catena` (difetto udito 14/10).
     let mut adc = 0xFFu8;
+    let mut via = 0xFFu8;
     let mut pin = 0xFFu8;
     let mut codec = codec;
     let mask = unsafe { CODEC_MASK };
     for i in 0..16u8 {
         if mask & (1 << i) == 0 { continue; }
-        let (a, p) = scopri_nodi(i);
+        let (a, v, p) = scopri_catena(i);
         wstr("HDA: prova codec="); wh16(i as u16);
-        wstr(" adc="); wh16(a as u16); wstr(" pin="); wh16(p as u16);
+        wstr(" adc="); wh16(a as u16);
+        wstr(" via="); wh16(v as u16);
+        wstr(" pin="); wh16(p as u16);
         crate::serial_putc(b'\n');
         if a != 0xFF && p != 0xFF {
-            codec = i; adc = a; pin = p;
+            codec = i; adc = a; via = v; pin = p;
             break;
         }
     }
-    unsafe { CODEC = codec; ADC_NODO = adc; PIN_NODO = pin; }
+    unsafe { CODEC = codec; ADC_NODO = adc; VIA_NODO = via; PIN_NODO = pin; }
     if adc == 0xFF || pin == 0xFF {
         wstr("HDA: nessun codec con ADC/pin — udito assente\n");
         return false;
     }
     wstr("HDA: SCELTO codec="); wh16(codec as u16);
-    wstr(" adc="); wh16(adc as u16); wstr(" pin="); wh16(pin as u16);
+    wstr(" adc="); wh16(adc as u16);
+    wstr(" via="); wh16(via as u16);
+    wstr(" pin="); wh16(pin as u16);
     crate::serial_putc(b'\n');
     codec_cmd(codec, adc, VERB_SET_POWER_STATE, 0x0000); // D0 (acceso)
     codec_cmd(codec, pin, VERB_SET_POWER_STATE, 0x0000);
-    // l'ADC sceglie il pin come sorgente d'ingresso (indice nella sua lista)
-    let clen = (codec_cmd(codec, adc, VERB_GET_PARAM, PAR_CONNLIST_LEN) & 0x7F) as u32;
-    if clen > 0 {
-        let list = codec_cmd(codec, adc, VERB_GET_CONN_LIST, 0);
-        let mut idx: u16 = 0;
-        for b in 0..clen.min(4) {
-            if ((list >> (8 * b)) & 0xFF) as u8 == pin { idx = b as u16; }
-        }
-        codec_cmd(codec, adc, VERB_SET_CONN_SELECT, idx);
-    }
     // formato, stream-id, amp d'ingresso (sull'ADC), pin in ingresso
     codec_cmd(codec, adc, VERB_SET_STREAM_FORMAT, FMT_16BIT_2CH_48K);
     codec_cmd(codec, adc, VERB_SET_CONV_STREAMID, ((STREAM_TAG as u16) << 4) | 0);
@@ -514,12 +562,17 @@ pub fn picco() -> f32 {
 
 pub fn stream_on() -> bool { unsafe { AUDIO_ON } }
 
-/// Riga diagnostica periodica (LPIB + energia) per il monitor.
+/// Riga diagnostica periodica (LPIB + energia + catena) per il monitor.
 pub fn report() {
     if !present() { return; } // senza udito non si tocca l'MMIO
     wstr("HDA:t lpib="); wh32(lpib());
     let e = energy();
     wstr(" energia="); wh32((e * 10000.0) as u32);
+    // La catena scoperta: sul Lenovo deve leggersi adc=8 via=23 pin=1b/19.
+    let (a, p) = nodi();
+    wstr(" adc="); wh16(a as u16);
+    wstr(" via="); wh16(via() as u16);
+    wstr(" pin="); wh16(p as u16);
     crate::serial_putc(b'\n');
 }
 
@@ -527,6 +580,9 @@ pub fn report() {
 pub fn present() -> bool { unsafe { PRESENT } }
 /// (ADC, pin) scoperti per il microfono: 0xFF = non trovati. Per la GUI.
 pub fn nodi() -> (u8, u8) { unsafe { (ADC_NODO, PIN_NODO) } }
+/// L'instradatore (MIXER/SELECTOR) tra ADC e pin: 0xFF = l'ADC punta dritto al
+/// pin (QEMU). Sul Lenovo (ALC233) è 0x23: la prova che il percorso passa dal mixer.
+pub fn via() -> u8 { unsafe { VIA_NODO } }
 /// [found, reset_ok, codec_ok, codec_addr]
 pub fn probe() -> [u8; 4] { unsafe { PROBE } }
 pub fn vendor_device() -> (u16, u16) { unsafe { (VENDOR, DEVICE) } }

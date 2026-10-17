@@ -18,6 +18,7 @@ mod executive;
 mod gguf;
 mod gui;
 mod hda;
+mod hda_path;
 mod hexutil;
 mod idt;
 mod inference;
