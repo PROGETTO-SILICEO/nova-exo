@@ -7,6 +7,30 @@
 // Convenzione PS/2: +x = destra, +y = BASSO. I segni stanno nei bit 4 e 5 del
 // primo byte; il bit 3 del primo byte è sempre 1 (serve a ritrovare la fase).
 
+/// Da quale porta viene un byte del controller 8042. Tastiera e touchpad
+/// condividono la porta dati 0x60: la provenienza si legge nel bit 5 (AUX)
+/// dello status register (0x64).
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub enum Porta {
+    Tastiera,
+    Mouse,
+}
+
+/// DECISIONE PURA: dato lo status dell'8042, da chi viene il prossimo byte?
+/// bit0 = OBF (c'è un byte da leggere); bit5 = AUX (il byte è del mouse).
+/// `None` = nessun byte pronto. Senza questa decisione i pacchetti del mouse
+/// verrebbero letti come scancode → il "CONTATTO" satura e il corpo va in fuga.
+pub fn destinazione(status: u8) -> Option<Porta> {
+    if status & 0x01 == 0 {
+        return None; // output buffer vuoto: non si legge nulla
+    }
+    if status & 0x20 != 0 {
+        Some(Porta::Mouse)
+    } else {
+        Some(Porta::Tastiera)
+    }
+}
+
 /// Un pacchetto del mouse PS/2 (3 byte).
 #[derive(Clone, Copy, Default, PartialEq, Debug)]
 pub struct Pacchetto {
