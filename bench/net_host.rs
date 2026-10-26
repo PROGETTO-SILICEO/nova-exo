@@ -56,6 +56,7 @@ fn frame() -> (usize, [u8; 1518]) {
     let cells = [cell(0.0), cell(-0.5), cell(1.25), cell(0.0)];
     let n = build_state_frame(
         &mut buf, SRC_MAC, 12345, "riposo", &cells, &CHEMIO, 2, 0.5, 3, 7, DIAG, SIG, 5,
+        &StatoSensi::vuoto(),
     );
     (n, buf)
 }
@@ -200,12 +201,36 @@ fn payload_porta_i_quattro_tessuti_interi() {
         "inizio cella malformato: {}", p
     );
     assert!(p.contains(",14.0000,15.0000]"), "cella troncata (manca 14/15): {}", p);
-    // Array nel payload (13): "c" = 1 esterno + 4 celle, poi w, l, r,
-    // kb, ps2, acpi, ec, kbd. (Aggiornato 13/10/2026: il payload è cresciuto
-    // con le sonde kb/ps2/acpi/ec/kbd del 12/10 — l'attesa era rimasta a 8.)
-    assert_eq!(p.matches('[').count(), 13, "numero di array inatteso: {}", p);
-    assert_eq!(p.matches(']').count(), 13, "parentesi non bilanciate: {}", p);
+    // Array nel payload (14): "c" = 1 esterno + 4 celle, poi w, l, r,
+    // kb, ps2, acpi, ec, kbd, e dal 18/10/2026 "sen" (stato dei sensi).
+    // (13/10/2026: il payload era cresciuto con le sonde kb/ps2/acpi/ec/kbd.)
+    assert_eq!(p.matches('[').count(), 14, "numero di array inatteso: {}", p);
+    assert_eq!(p.matches(']').count(), 14, "parentesi non bilanciate: {}", p);
     assert!(p.contains("-0.5000"), "manca un valore negativo atteso: {}", p);
+}
+
+#[test]
+fn payload_porta_lo_stato_dei_sensi() {
+    // 18/10/2026: il blocco `sen` è il canale di lettura a distanza dei sensi.
+    // Il banco verifica la FORMA (21 valori, chiuso correttamente); i valori
+    // reali li prova il metallo. Con `StatoSensi::vuoto()` la temperatura è
+    // -1.0000 (nessun sensore) e i nodi sono 255 (0xFF = non trovati).
+    let (n, b) = frame();
+    let p = payload(&b, n);
+    let sen = p
+        .split("\"sen\":[")
+        .nth(1)
+        .expect("blocco sen mancante");
+    let corpo = sen.split(']').next().unwrap();
+    assert_eq!(
+        corpo.split(',').count(),
+        21,
+        "sen deve portare 21 valori: {}",
+        corpo
+    );
+    // Sentinelle note del costruttore vuoto.
+    assert!(corpo.contains("-1.0000"), "temp mancante (-1.0000): {}", corpo);
+    assert!(corpo.contains(",255,255,"), "adc/pin sentinella (255): {}", corpo);
 }
 
 #[test]
@@ -242,6 +267,7 @@ fn buffer_troppo_piccolo_non_scrive() {
     let cells = [cell(0.0); 4];
     let n = build_state_frame(
         &mut small, SRC_MAC, 1, "vita", &cells, &CHEMIO, 0, 0.0, 0, 0, DIAG, SIG, 5,
+        &StatoSensi::vuoto(),
     );
     assert_eq!(n, 0, "con buffer insufficiente deve tornare 0, non scrivere");
 }
@@ -254,7 +280,7 @@ fn concept_diversi_sono_riportati() {
     for nome in ["errore", "vita", "riposo", "novita"].iter() {
         let mut buf = [0u8; 1518];
         let cells = [cell(0.0); 4];
-        let n = build_state_frame(&mut buf, SRC_MAC, 1, nome, &cells, &CHEMIO, 0, 0.0, 0, 0, DIAG, SIG, 5);
+        let n = build_state_frame(&mut buf, SRC_MAC, 1, nome, &cells, &CHEMIO, 0, 0.0, 0, 0, DIAG, SIG, 5, &StatoSensi::vuoto());
         let p = payload(&buf, n);
         assert!(p.contains(nome), "concept '{}' non riportato: {}", nome, p);
     }

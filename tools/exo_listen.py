@@ -45,7 +45,7 @@ CONCEPTS = ("errore", "vita", "riposo", "novita")
 # due (u,p,n aggiunti l'08/10, listener non aggiornato) ha ucciso la telemetria
 # per 2,5 giorni in silenzio -> `tools/test_contratto_telemetria.py` confronta
 # questo set con le chiavi emesse da src/net.rs e fallisce se divergono.
-KEYS_AMMESSE = frozenset({"t", "k", "c", "w", "l", "r", "v", "u", "p", "n", "sig", "kb", "ps2", "acpi", "ec", "kbd"})
+KEYS_AMMESSE = frozenset({"t", "k", "c", "w", "l", "r", "v", "u", "p", "n", "sig", "kb", "ps2", "acpi", "ec", "kbd", "sen"})
 
 DEFAULT_OUT = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
@@ -196,6 +196,20 @@ def parse_payload(raw: bytes) -> dict:
         if not isinstance(kbd, list) or len(kbd) != 4:
             raise Scarto("kbd: attesi [ack, ab, id0, id1]")
         out["kbd"] = [int(_num(v, 0, 255, "kbd[]")) for v in kbd]
+    # Stato dei sensi e del sé (18/10/2026): l'array di LETTURA A DISTANZA.
+    # OPZIONALE (i kernel fino a oggi non lo mandano). Ordine fissato con
+    # src/net.rs::StatoSensi:
+    #   n, riflessi, guasti, tatto, chemio, metabol, integrat, udito, mic,
+    #   adc, pin, gesto, hda_vend, hda_dev, temp_c, via, mem_omeo, ventola
+    sen = d.get("sen")
+    if sen is not None:
+        # Transizione 18/10/2026: il kernel in metallo manda 18 valori (senza
+        # `guasti_mask`), il sorgente ne emette 19. Accettiamo entrambi finché
+        # il metallo non viene riflashato; il test del contratto verifica le
+        # CHIAVI, non la lunghezza, quindi non nasconde un drift.
+        if not isinstance(sen, list) or len(sen) not in (18, 19, 21):
+            raise Scarto("sen: attesi 18, 19 o 21 valori (stato dei sensi)")
+        out["sen"] = [_num(v, -1e6, 2**32, f"sen[{i}]") for i, v in enumerate(sen)]
     return out
 
 

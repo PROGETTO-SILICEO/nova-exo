@@ -161,6 +161,57 @@ fn push_str(buf: &mut [u8], pos: &mut usize, s: &str) {
     }
 }
 
+/// Stato dei sensi e del sé, per il canale di LETTURA A DISTANZA (18/10/2026).
+///
+/// PERCHÉ esiste: il Lenovo non ha seriale e l'unico canale che esce dal metallo
+/// è questo pacchetto UDP. Finora i sensi (udito, tatto, temperatura, mic)
+/// esistevano SOLO nei pixel della GUI: si leggevano da una FOTO. Con `sen`
+/// Sempre li legge a macchina, senza dipendere dall'occhio.
+///
+/// Sola LETTURA di valori già calcolati altrove: qui non si sonda nulla.
+/// Additivo: i lettori vecchi ignorano la chiave `sen`; il canary del contratto
+/// (`tools/test_contratto_telemetria.py`) impone l'allineamento in TUTTI i posti.
+#[derive(Clone, Copy)]
+pub struct StatoSensi {
+    pub n: u32,        // canali registrati
+    pub riflessi: u32, // canali con via riflessa (il midollo che non aspetta)
+    pub guasti: u32,   // canali in stato Guasto (un guasto non deve essere muto)
+    // Quali canali sono guasti: bit i = canale di indice i (ordine di
+    // registrazione in main.rs). Sapere QUALE organo è cieco, non solo quanti.
+    pub guasti_mask: u32,
+    pub tatto: f32,    // prima cellula del tessuto (la barra, non la media)
+    pub chemio: f32,
+    pub metabol: f32,
+    pub integrat: f32,
+    pub udito: f32,
+    pub mic: f32,      // energia dell'udito (0..1)
+    pub adc: u8,       // nodo ADC del codec scoperto (0xFF = non trovato)
+    pub pin: u8,       // nodo pin del codec scoperto (0xFF = non trovato)
+    pub gesto: bool,   // tatto esteso in corso (touchpad)
+    pub hda_vend: u16, // codec audio: vendor (0x10EC = Realtek)
+    pub hda_dev: u16,  // codec audio: device (0x0233 = ALC233)
+    pub temp_c: f32,   // temperatura del sé (-1.0 = nessun sensore)
+    pub via: u8,       // via della temperatura (0 nessuno, 1 intel, 2 amd)
+    pub mem_omeo: f32, // memoria del corpo (0..1)
+    pub ventola: bool, // attuatore omeostatico acceso
+    pub stream_on: bool, // udito: lo stream di cattura e' RUN?
+    pub lpib: u32,    // udito: posizione DMA (avanza = i campioni arrivano)
+}
+
+impl StatoSensi {
+    /// Stato neutro: serve ai banchi (net_host) e come base sicura.
+    pub const fn vuoto() -> Self {
+        Self {
+            n: 0, riflessi: 0, guasti: 0, guasti_mask: 0,
+            tatto: 0.0, chemio: 0.0, metabol: 0.0, integrat: 0.0, udito: 0.0, mic: 0.0,
+            adc: 0xFF, pin: 0xFF, gesto: false,
+            hda_vend: 0, hda_dev: 0, temp_c: -1.0, via: 0,
+            mem_omeo: 0.0, ventola: false,
+            stream_on: false, lpib: 0,
+        }
+    }
+}
+
 /// Costruisce il payload JSON della telemetria:
 /// `{"t":<tick>,"k":"<concept>","c":[[8],[8],[8],[8]],"w":[id,int],"l":[imparato,esplorato]}`
 ///
@@ -178,6 +229,7 @@ pub fn build_payload(
     diag: [u32; 8],
     sig: [u8; 4],
     epoch: u32,
+    sen: &StatoSensi,
 ) -> usize {
     let mut pos = 0usize;
     push_str(buf, &mut pos, "{\"t\":");
@@ -287,6 +339,56 @@ pub fn build_payload(
     push(buf, &mut pos, b',');
     write_u32_buf(buf, &mut pos, kid[3] as u32);
     push(buf, &mut pos, b']');
+    // ── Stato dei sensi e del sé (18/10/2026): il canale di lettura a distanza.
+    // Array compatto `sen` di 21 valori, nell'ordine della struct `StatoSensi`:
+    //   [n, riflessi, guasti, guasti_mask, tatto, chemio, metabol, integrat,
+    //    udito, mic, adc, pin, gesto, hda_vend, hda_dev, temp_c, via,
+    //    mem_omeo, ventola, stream_on, lpib]
+    // Array (non oggetto) di proposito: una sola chiave nuova da allineare nel
+    // contratto, e `test_contratto_telemetria.py` non deve inseguire sottochiavi.
+    push_str(buf, &mut pos, ",\"sen\":[");
+    write_u32_buf(buf, &mut pos, sen.n);
+    push(buf, &mut pos, b',');
+    write_u32_buf(buf, &mut pos, sen.riflessi);
+    push(buf, &mut pos, b',');
+    write_u32_buf(buf, &mut pos, sen.guasti);
+    push(buf, &mut pos, b',');
+    write_u32_buf(buf, &mut pos, sen.guasti_mask);
+    push(buf, &mut pos, b',');
+    write_f32_buf(buf, &mut pos, sen.tatto);
+    push(buf, &mut pos, b',');
+    write_f32_buf(buf, &mut pos, sen.chemio);
+    push(buf, &mut pos, b',');
+    write_f32_buf(buf, &mut pos, sen.metabol);
+    push(buf, &mut pos, b',');
+    write_f32_buf(buf, &mut pos, sen.integrat);
+    push(buf, &mut pos, b',');
+    write_f32_buf(buf, &mut pos, sen.udito);
+    push(buf, &mut pos, b',');
+    write_f32_buf(buf, &mut pos, sen.mic);
+    push(buf, &mut pos, b',');
+    write_u32_buf(buf, &mut pos, sen.adc as u32);
+    push(buf, &mut pos, b',');
+    write_u32_buf(buf, &mut pos, sen.pin as u32);
+    push(buf, &mut pos, b',');
+    write_u32_buf(buf, &mut pos, if sen.gesto { 1 } else { 0 });
+    push(buf, &mut pos, b',');
+    write_u32_buf(buf, &mut pos, sen.hda_vend as u32);
+    push(buf, &mut pos, b',');
+    write_u32_buf(buf, &mut pos, sen.hda_dev as u32);
+    push(buf, &mut pos, b',');
+    write_f32_buf(buf, &mut pos, sen.temp_c);
+    push(buf, &mut pos, b',');
+    write_u32_buf(buf, &mut pos, sen.via as u32);
+    push(buf, &mut pos, b',');
+    write_f32_buf(buf, &mut pos, sen.mem_omeo);
+    push(buf, &mut pos, b',');
+    write_u32_buf(buf, &mut pos, if sen.ventola { 1 } else { 0 });
+    push(buf, &mut pos, b',');
+    write_u32_buf(buf, &mut pos, if sen.stream_on { 1 } else { 0 });
+    push(buf, &mut pos, b',');
+    write_u32_buf(buf, &mut pos, sen.lpib);
+    push(buf, &mut pos, b']');
     push(buf, &mut pos, b'}');
     pos
 }
@@ -309,6 +411,7 @@ pub fn build_state_frame(
     diag: [u32; 8],
     sig: [u8; 4],
     epoch: u32,
+    sen: &StatoSensi,
 ) -> usize {
     let hdr_len = 14 + 20 + 8;
     if dst.len() < hdr_len + 2 {
@@ -318,7 +421,7 @@ pub fn build_state_frame(
     // payload costruito direttamente nella sua posizione finale
     let payload_len = build_payload(
         &mut dst[hdr_len..], tick, concept, cells, chemio, desire_id, desire_int,
-        cambi, esplorazioni, diag, sig, epoch,
+        cambi, esplorazioni, diag, sig, epoch, sen,
     );
     if payload_len == 0 {
         return 0;

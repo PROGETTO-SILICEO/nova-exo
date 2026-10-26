@@ -2046,6 +2046,44 @@ pub extern "C" fn _start() -> ! {
                         rtl::intr_status() as u32,
                         rtl::RX_OVERFLOWS,
                     ];
+                    // Stato dei sensi e del sé per il canale di lettura a
+                    // distanza (18/10/2026): sola LETTURA di ciò che è già
+                    // calcolato — la probe HDA e la temperatura NON si rifanno
+                    // qui (niente I/O nel percorso della telemetria).
+                    let dg = intero::diagnostica();
+                    // Quali canali sono guasti (bit i = indice di registrazione):
+                    // serve a sapere quale organo è cieco, non solo quanti.
+                    let mut guasti_mask: u32 = 0;
+                    for i in 0..sensi.len() {
+                        if let Some(c) = sensi.get(i) {
+                            if c.stato == sensi::Stato::Guasto {
+                                guasti_mask |= 1u32 << i;
+                            }
+                        }
+                    }
+                    let sen = net::StatoSensi {
+                        n: sensi.len() as u32,
+                        riflessi: sensi.conta_via(sensi::Via::Riflesso) as u32,
+                        guasti: sensi.conta_guasti() as u32,
+                        guasti_mask,
+                        tatto: tessuto.tatto.h[0],
+                        chemio: tessuto.chemio.h[0],
+                        metabol: tessuto.metabol.h[0],
+                        integrat: tessuto.integrat.h[0],
+                        udito: tessuto.udito.h[0],
+                        mic: if hda::present() { hda::energy() } else { 0.0 },
+                        adc: hda::nodi().0,
+                        pin: hda::nodi().1,
+                        gesto: cfc::touchpad_attivo(),
+                        hda_vend: hda::vendor_device().0,
+                        hda_dev: hda::vendor_device().1,
+                        temp_c: dg.temp.unwrap_or(-1.0),
+                        via: dg.via,
+                        mem_omeo,
+                        ventola: attuatori.acceso("ventola"),
+                        stream_on: hda::stream_on(),
+                        lpib: hda::lpib(),
+                    };
                     let n = net::build_state_frame(
                         buf,
                         rtl::EXO_MAC,
@@ -2060,6 +2098,7 @@ pub extern "C" fn _start() -> ! {
                         diag,
                         unsafe { rx::LAST_SIG },
                         rtl::NET_EPOCH,
+                        &sen,
                     );
                     if n > 0 {
                         rtl::tx_raw(&buf[..n]);

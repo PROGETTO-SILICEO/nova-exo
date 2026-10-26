@@ -16,12 +16,16 @@ use hda_path::{
 };
 
 fn pin(id: u8, input_cap: bool, mic: bool) -> Sorgente {
-    Sorgente { id, tipo: WID_PIN, input_cap, mic }
+    Sorgente { id, tipo: WID_PIN, input_cap, mic, internal: false }
+}
+/// Pin mic INTERNO (Port connectivity = Internal).
+fn pin_int(id: u8, mic: bool) -> Sorgente {
+    Sorgente { id, tipo: WID_PIN, input_cap: true, mic, internal: true }
 }
 
-fn mixer(id: u8) -> Sorgente { Sorgente { id, tipo: WID_MIXER, input_cap: false, mic: false } }
-fn selector(id: u8) -> Sorgente { Sorgente { id, tipo: WID_SELECTOR, input_cap: false, mic: false } }
-fn adc(id: u8) -> Sorgente { Sorgente { id, tipo: WID_AUD_IN, input_cap: false, mic: false } }
+fn mixer(id: u8) -> Sorgente { Sorgente { id, tipo: WID_MIXER, input_cap: false, mic: false, internal: false } }
+fn selector(id: u8) -> Sorgente { Sorgente { id, tipo: WID_SELECTOR, input_cap: false, mic: false, internal: false } }
+fn adc(id: u8) -> Sorgente { Sorgente { id, tipo: WID_AUD_IN, input_cap: false, mic: false, internal: false } }
 
 #[test]
 fn la_connection_list_impacchetta_quattro_nodi() {
@@ -65,6 +69,21 @@ fn il_pin_preferisce_il_jack_mic() {
         pin(0x1b, true, true),
     ];
     assert_eq!(scegli_pin(&cands), Some(2), "deve preferire il jack mic (0x1b)");
+}
+
+#[test]
+fn il_pin_preferisce_il_mic_interno_al_jack() {
+    // 18/10/2026: se ci sono DUE mic, vince quello INTERNO (bits 31:30 = 1):
+    // il jack esterno spesso non ha nulla inserito -> silenzio.
+    // Ordine volutamente sfavorevole: il jack viene prima.
+    let cands = [
+        pin(0x19, true, true),   // jack mic esterno (vuoto)
+        pin_int(0x1b, true),     // mic interno
+    ];
+    assert_eq!(scegli_pin(&cands), Some(1), "deve scegliere il mic interno (0x1b)");
+    // Se il mic interno non c'e', resta il jack.
+    let cands = [pin(0x19, true, true), pin(0x18, true, false)];
+    assert_eq!(scegli_pin(&cands), Some(0));
 }
 
 #[test]

@@ -64,6 +64,9 @@ pub struct Sorgente {
     pub tipo: u8,
     pub input_cap: bool,
     pub mic: bool,
+    /// Port connectivity = Internal (config default bits 31:30 = 1).
+    /// Su un laptop il mic *interno* va preferito al jack esterno (spesso vuoto).
+    pub internal: bool,
 }
 
 /// Nodo all'indice `idx` (0..3) di una parola della connection list HDA
@@ -98,16 +101,24 @@ pub fn scegli_instradatore(cands: &[Sorgente]) -> Option<u8> {
 /// o, se l'ADC punta dritto, la sorgente dell'ADC): preferisce il jack mic,
 /// altrimenti il primo pin capace di ingresso. `None` = nessun pin d'ingresso.
 pub fn scegli_pin(cands: &[Sorgente]) -> Option<u8> {
+    // Preferenza: mic INTERNO > mic (jack) > primo ingresso.
+    // PERCHÉ (18/10/2026): il mic interno si distingue col campo Port
+    // connectivity della config default (bits 31:30 = 1 = Internal). Prima si
+    // prendeva il PRIMO mic: sul Lenovo usciva il jack esterno (vuoto) -> silenzio.
     let mut primo: Option<u8> = None;
+    let mut mic_jack: Option<u8> = None;
     for (i, s) in cands.iter().enumerate() {
         if s.tipo == WID_PIN && s.input_cap {
-            if s.mic {
+            if s.mic && s.internal {
                 return Some(i as u8);
+            }
+            if s.mic && mic_jack.is_none() {
+                mic_jack = Some(i as u8);
             }
             if primo.is_none() {
                 primo = Some(i as u8);
             }
         }
     }
-    primo
+    mic_jack.or(primo)
 }

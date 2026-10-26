@@ -430,12 +430,17 @@ fn leggi_sorgenti(c: u8, node: u8, out: &mut [Sorgente]) -> usize {
         let tipo = ((cap >> 20) & 0xF) as u8;
         let mut input_cap = false;
         let mut mic = false;
+        let mut internal = false;
         if tipo == hda_path::WID_PIN {
             input_cap = codec_cmd(c, id, VERB_GET_PARAM, PAR_PIN_CAP) & hda_path::PINCAP_INPUT != 0;
             let cfg = codec_cmd(c, id, VERB_GET_CONFIG_DEFAULT, 0);
+            // Default device = bits 23:20; Port connectivity = bits 31:30
+            // (0 ext, 1 interno, 2 fisso, 3 n/a) — verificato 18/10 sulla
+            // tabella di hda_auto_parser (Linux).
             mic = ((cfg >> 20) & 0xF) as u8 == hda_path::JACK_MIC_IN;
+            internal = ((cfg >> 30) & 0x3) == 1;
         }
-        out[i] = Sorgente { id, tipo, input_cap, mic };
+        out[i] = Sorgente { id, tipo, input_cap, mic, internal };
     }
     n
 }
@@ -522,19 +527,29 @@ pub fn stream_init() -> bool {
         }
     }
 
-    // Registri dello stream: BDL, lunghezza ciclica, LVI, formato
-    wr32(SD0 + SD_BDPL, bdl_phys as u32);
-    wr32(SD0 + SD_BDPU, (bdl_phys >> 32) as u32);
-    wr32(SD0 + SD_CBL, BUF_BYTES as u32);
-    wr16(SD0 + SD_LVI, (CHUNKS - 1) as u16);
-    wr16(SD0 + SD_FIFOW, 4);
-    wr16(SD0 + SD_FMT, FMT_16BIT_2CH_48K);
-
-    // Reset dello stream (SRST) poi pronto a girare
+    // ── ORDINE CORRETTO (18/10/2026) ─────────────────────────────────────
+    // Spec Intel HDA (3.3.38 CBL / 3.3.42 BDPL): i registri dello stream si
+    // scrivono DOPO lo Stream Reset e con RUN=0. Il kernel Linux fa
+    // `snd_hdac_stream_reset()` PRIMA di `snd_hdac_stream_setup()`.
+    // Prima si configurava e POI si resettava: sul metallo il controller
+    // partiva senza BDL valido -> LPIB fermo a 0 (QEMU tollerava l'ordine).
+    // 1. Reset dello stream (SRST 1 -> 0)
     wr32(SD0 + SD_CTL, 0x01);
     delay(50_000);
     wr32(SD0 + SD_CTL, 0x00);
     delay(50_000);
+
+    // 2. Stream tag con RUN=0 (il tag si programma prima di far partire)
+    wr32(SD0 + SD_CTL, STREAM_TAG << 20);
+
+    // 3. Registri dello stream: BDL, lunghezza ciclica, LVI, formato.
+    //    SDnFIFOS (0x0E) e' READ-ONLY secondo la spec: non si scrive
+    //    (prima c'era `wr16(SD0 + SD_FIFOW, 4)`, ignorato dal metallo).
+    wr32(SD0 + SD_BDPL, bdl_phys as u32);
+    wr32(SD0 + SD_BDPU, (bdl_phys >> 32) as u32);
+    wr32(SD0 + SD_CBL, BUF_BYTES as u32);
+    wr16(SD0 + SD_LVI, (CHUNKS - 1) as u16);
+    wr16(SD0 + SD_FMT, FMT_16BIT_2CH_48K);
 
     // ── SCEGLI IL CODEC COL MICROFONO + scoperte la CATENA di cattura ──
     // Il Lenovo ha DUE codec (HDMI + Realtek): il primo (HDMI) NON ha ingressi.
@@ -575,7 +590,26 @@ pub fn stream_init() -> bool {
     codec_cmd(codec, adc, VERB_SET_STREAM_FORMAT, FMT_16BIT_2CH_48K);
     codec_cmd(codec, adc, VERB_SET_CONV_STREAMID, ((STREAM_TAG as u16) << 4) | 0);
     codec_cmd(codec, adc, VERB_SET_AMP_GAIN_MUTE, 0x707F); // input amp, L+R, gain max
-    codec_cmd(codec, pin, VERB_SET_PIN_CTL, 0x0020);      // AC_PINCTL_IN_EN
+    // PIN in INGRESSO **con VREF** (bias del microfono). PERCHÉ (18/10/2026):
+    // un mic a condensatore senza tensione di riferimento non produce segnale
+    // -> MIC=0 pur con tutto il resto giusto. 0x0020 = IN ma VREF=Hi-Z (muto!).
+    // Il kernel Linux usa VREF_80% (0x24). Si sceglie il VREF migliore che il
+    // pin dichiara di supportare (Pin Capabilities bits 8..12: HIZ/50/GRD/80/100).
+    let pc = codec_cmd(codec, pin, VERB_GET_PARAM, PAR_PIN_CAP);
+    let vref: u16 = if pc & (1 << 12) != 0 {
+        5 // 100%
+    } else if pc & (1 << 11) != 0 {
+        4 // 80% (default del kernel Linux)
+    } else if pc & (1 << 9) != 0 {
+        1 // 50%
+    } else {
+        0 // Hi-Z (nessun bias supportato)
+    };
+    codec_cmd(codec, pin, VERB_SET_PIN_CTL, 0x0020 | vref); // IN_EN + VREF
+    wstr("HDA: pin="); wh16(pin as u16);
+    wstr(" pincap=0x"); wh32(pc);
+    wstr(" vref="); wh16(vref);
+    crate::serial_putc(b'\n');
 
     // RUN: tag nei bit 20-23 + bit1 (run). Il controller avvisa il codec
     // (intel_hda_notify_codecs) e la cattura parte.
